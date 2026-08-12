@@ -13,7 +13,7 @@
                     </div>
                     <div>
                         <div class="text-muted small">Total Expenses</div>
-                        <div class="fs-5 fw-bold">${{ number_format($totalExpenses, 2) }}</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($totalExpenses, 2) }}</div>
                         <div class="text-muted" style="font-size: .7rem;">{{ number_format($recordCount) }} record{{ $recordCount === 1 ? '' : 's' }}</div>
                     </div>
                 </div>
@@ -27,7 +27,7 @@
                     </div>
                     <div>
                         <div class="text-muted small">With Hire</div>
-                        <div class="fs-5 fw-bold">${{ number_format($withHireTotal, 2) }}</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($withHireTotal, 2) }}</div>
                     </div>
                 </div>
             </div>
@@ -40,7 +40,7 @@
                     </div>
                     <div>
                         <div class="text-muted small">Without Hire</div>
-                        <div class="fs-5 fw-bold">${{ number_format($withoutHireTotal, 2) }}</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($withoutHireTotal, 2) }}</div>
                         <div class="text-muted" style="font-size: .7rem;">Logged directly by driver</div>
                     </div>
                 </div>
@@ -122,7 +122,7 @@
                     <div class="card border-0">
                         <div class="card-body py-2 px-3">
                             <div class="text-muted" style="font-size: .68rem;">{{ $categories[$category] ?? $category }}</div>
-                            <div class="fw-semibold" style="font-size: .85rem;">${{ number_format($amount, 2) }}</div>
+                            <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($amount, 2) }}</div>
                         </div>
                     </div>
                 </div>
@@ -158,12 +158,12 @@
                                     <td class="text-muted">{{ $row['count'] }}</td>
                                     <td class="text-muted">
                                         @if ($row['without_hire_total'] > 0)
-                                            ${{ number_format($row['without_hire_total'], 2) }}
+                                            Rs. {{ number_format($row['without_hire_total'], 2) }}
                                         @else
                                             &mdash;
                                         @endif
                                     </td>
-                                    <td class="fw-semibold" style="font-size: .82rem;">${{ number_format($row['total'], 2) }}</td>
+                                    <td class="fw-semibold" style="font-size: .82rem;">Rs. {{ number_format($row['total'], 2) }}</td>
                                 </tr>
                             @empty
                                 <tr>
@@ -200,7 +200,7 @@
                                     </td>
                                     <td class="text-muted" style="font-size: .8rem;">{{ $row['driver']->name ?? '—' }}</td>
                                     <td class="text-muted">{{ $row['count'] }}</td>
-                                    <td class="fw-semibold" style="font-size: .82rem;">${{ number_format($row['total'], 2) }}</td>
+                                    <td class="fw-semibold" style="font-size: .82rem;">Rs. {{ number_format($row['total'], 2) }}</td>
                                 </tr>
                             @empty
                                 <tr>
@@ -242,7 +242,7 @@
                             <td>
                                 <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ $categories[$expense->category] ?? $expense->category }}</span>
                             </td>
-                            <td class="fw-semibold" style="font-size: .82rem;">${{ number_format($expense->amount, 2) }}</td>
+                            <td class="fw-semibold" style="font-size: .82rem;">Rs. {{ number_format($expense->amount, 2) }}</td>
                             <td class="text-muted" style="font-size: .8rem;">{{ $expense->created_at->format('M j, Y') }}</td>
                             <td class="text-end">
                                 @if ($expense->receipt_url)
@@ -281,7 +281,7 @@
                     { key: 'without_hire', label: 'Without Hire', color: '#eb6834' },
                 ];
 
-                const money = (value, decimals = 0) => '$' + Number(value).toLocaleString(undefined, {
+                const money = (value, decimals = 0) => 'Rs. ' + Number(value).toLocaleString(undefined, {
                     minimumFractionDigits: decimals,
                     maximumFractionDigits: decimals,
                 });

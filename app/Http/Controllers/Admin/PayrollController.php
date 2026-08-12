@@ -134,7 +134,7 @@ class PayrollController extends Controller implements HasMiddleware
                     'amount' => $deficit,
                 ]);
 
-                $carryoverNote = ' This payroll had a shortfall of $'.number_format($deficit, 2)
+                $carryoverNote = ' This payroll had a shortfall of Rs. '.number_format($deficit, 2)
                     .', which was carried forward as a deduction on '.$target->format('F Y').'\'s salary.';
             }
         });

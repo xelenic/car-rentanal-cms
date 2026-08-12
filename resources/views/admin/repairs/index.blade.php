@@ -26,7 +26,7 @@
                     </div>
                     <div>
                         <div class="text-muted small">Total Cost{{ ($selectedVehicleId || $selectedType || $selectedYear) ? ' (filtered)' : '' }}</div>
-                        <div class="fs-5 fw-bold">${{ number_format($totalCost, 2) }}</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($totalCost, 2) }}</div>
                     </div>
                 </div>
             </div>
@@ -110,7 +110,7 @@
                             <td>
                                 <span class="badge rounded-pill bg-{{ $typeColor }}-subtle text-{{ $typeColor }}-emphasis">{{ $record->type_label }}</span>
                             </td>
-                            <td class="fw-semibold" style="font-size: .82rem;">${{ number_format($record->cost, 2) }}</td>
+                            <td class="fw-semibold" style="font-size: .82rem;">Rs. {{ number_format($record->cost, 2) }}</td>
                             <td class="text-muted">{{ $record->mileage !== null ? number_format($record->mileage).' km' : '—' }}</td>
                             <td class="text-muted" style="max-width: 220px;">
                                 <span class="d-inline-block text-truncate" style="max-width: 220px;">{{ $record->description ?: '—' }}</span>

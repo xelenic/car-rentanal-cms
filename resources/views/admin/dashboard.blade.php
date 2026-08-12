@@ -77,7 +77,7 @@
                             </div>
                             <div class="d-flex align-items-baseline justify-content-between flex-wrap gap-1">
                                 <div class="fs-5 fw-bold {{ $card['value'] < 0 ? 'text-danger' : '' }}">
-                                    {{ $card['value'] < 0 ? '-' : '' }}${{ number_format(abs($card['value']), 2) }}
+                                    {{ $card['value'] < 0 ? '-' : '' }}Rs. {{ number_format(abs($card['value']), 2) }}
                                 </div>
                                 <div class="{{ $card['delta']['class'] }}" style="font-size: .75rem; font-weight: 600;">
                                     <i class="bi bi-{{ $card['delta']['icon'] }}"></i>
@@ -102,7 +102,7 @@
             <div class="d-flex flex-column gap-2">
                 <div class="d-flex align-items-center justify-content-between">
                     <span style="font-size: .85rem;">Total Our Hire Value</span>
-                    <span class="fw-semibold" style="font-size: .85rem;">${{ number_format($profitBreakdown['our_hire_value_total'], 2) }}</span>
+                    <span class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($profitBreakdown['our_hire_value_total'], 2) }}</span>
                 </div>
 
                 <div class="border-top pt-2">
@@ -111,50 +111,50 @@
                         @if ($amount > 0)
                             <div class="d-flex align-items-center justify-content-between ps-2 mb-1">
                                 <span class="text-muted" style="font-size: .8rem;">{{ \App\Models\HireExpense::CATEGORIES[$category] ?? ucfirst($category) }}</span>
-                                <span class="text-danger" style="font-size: .8rem;">-${{ number_format($amount, 2) }}</span>
+                                <span class="text-danger" style="font-size: .8rem;">-Rs. {{ number_format($amount, 2) }}</span>
                             </div>
                         @endif
                     @endforeach
                     <div class="d-flex align-items-center justify-content-between ps-2">
                         <span class="text-muted fw-semibold" style="font-size: .8rem;">Total Expenses</span>
-                        <span class="text-danger fw-semibold" style="font-size: .8rem;">-${{ number_format($profitBreakdown['expenses_total'], 2) }}</span>
+                        <span class="text-danger fw-semibold" style="font-size: .8rem;">-Rs. {{ number_format($profitBreakdown['expenses_total'], 2) }}</span>
                     </div>
                 </div>
 
                 <div class="d-flex align-items-center justify-content-between border-top pt-2">
                     <span class="fw-semibold" style="font-size: .85rem;">Net Before Salary</span>
-                    <span class="fw-semibold" style="font-size: .85rem;">${{ number_format($profitBreakdown['net_before_salary'], 2) }}</span>
+                    <span class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($profitBreakdown['net_before_salary'], 2) }}</span>
                 </div>
 
                 <div class="d-flex align-items-center justify-content-between">
                     <span style="font-size: .85rem;">Less: Driver Salary ({{ $profitBreakdown['salary_percentage'] }}%)</span>
-                    <span class="text-danger" style="font-size: .85rem;">-${{ number_format($profitBreakdown['salary_total'], 2) }}</span>
+                    <span class="text-danger" style="font-size: .85rem;">-Rs. {{ number_format($profitBreakdown['salary_total'], 2) }}</span>
                 </div>
 
                 <div class="d-flex align-items-center justify-content-between">
                     <span style="font-size: .85rem;">Less: Leasing Installments</span>
-                    <span class="text-danger" style="font-size: .85rem;">-${{ number_format($profitBreakdown['leasing_installment_total'], 2) }}</span>
+                    <span class="text-danger" style="font-size: .85rem;">-Rs. {{ number_format($profitBreakdown['leasing_installment_total'], 2) }}</span>
                 </div>
 
                 <div class="d-flex align-items-center justify-content-between">
                     <span style="font-size: .85rem;">Less: Vehicle Repair Cost</span>
-                    <span class="text-danger" style="font-size: .85rem;">-${{ number_format($profitBreakdown['repair_cost_total'], 2) }}</span>
+                    <span class="text-danger" style="font-size: .85rem;">-Rs. {{ number_format($profitBreakdown['repair_cost_total'], 2) }}</span>
                 </div>
 
                 <div class="d-flex align-items-center justify-content-between border-top pt-2 mt-1">
                     <span class="fw-bold">Total Profit</span>
                     <span class="fw-bold {{ $profitBreakdown['profit_total'] < 0 ? 'text-danger' : 'text-success' }}" style="font-size: 1.1rem;">
-                        {{ $profitBreakdown['profit_total'] < 0 ? '-' : '' }}${{ number_format(abs($profitBreakdown['profit_total']), 2) }}
+                        {{ $profitBreakdown['profit_total'] < 0 ? '-' : '' }}Rs. {{ number_format(abs($profitBreakdown['profit_total']), 2) }}
                     </span>
                 </div>
 
                 <div class="text-muted mt-2" style="font-size: .72rem;">
-                    Our Hire Value (${{ number_format($profitBreakdown['our_hire_value_total'], 2) }})
-                    − Expenses (${{ number_format($profitBreakdown['expenses_total'], 2) }})
-                    − Driver Salary (${{ number_format($profitBreakdown['salary_total'], 2) }})
-                    − Leasing Installments (${{ number_format($profitBreakdown['leasing_installment_total'], 2) }})
-                    − Vehicle Repair Cost (${{ number_format($profitBreakdown['repair_cost_total'], 2) }})
-                    = {{ $profitBreakdown['profit_total'] < 0 ? '-' : '' }}${{ number_format(abs($profitBreakdown['profit_total']), 2) }}.
+                    Our Hire Value (Rs. {{ number_format($profitBreakdown['our_hire_value_total'], 2) }})
+                    − Expenses (Rs. {{ number_format($profitBreakdown['expenses_total'], 2) }})
+                    − Driver Salary (Rs. {{ number_format($profitBreakdown['salary_total'], 2) }})
+                    − Leasing Installments (Rs. {{ number_format($profitBreakdown['leasing_installment_total'], 2) }})
+                    − Vehicle Repair Cost (Rs. {{ number_format($profitBreakdown['repair_cost_total'], 2) }})
+                    = {{ $profitBreakdown['profit_total'] < 0 ? '-' : '' }}Rs. {{ number_format(abs($profitBreakdown['profit_total']), 2) }}.
                 </div>
             </div>
             <x-slot:footer>
@@ -164,12 +164,12 @@
 
         @php
             $smallCards = [
-                ['label' => 'Repair Cost', 'value' => '$' . number_format($secondary['repair_cost_total'], 2), 'icon' => 'tools'],
-                ['label' => 'Avg. Day Hire Rate', 'value' => '$' . number_format($secondary['avg_day_hire_rate'], 2), 'icon' => 'speedometer2'],
-                ['label' => 'Salary Advanced', 'value' => '$' . number_format($secondary['salary_advanced_total'], 2), 'icon' => 'cash'],
+                ['label' => 'Repair Cost', 'value' => 'Rs. ' . number_format($secondary['repair_cost_total'], 2), 'icon' => 'tools'],
+                ['label' => 'Avg. Day Hire Rate', 'value' => 'Rs. ' . number_format($secondary['avg_day_hire_rate'], 2), 'icon' => 'speedometer2'],
+                ['label' => 'Salary Advanced', 'value' => 'Rs. ' . number_format($secondary['salary_advanced_total'], 2), 'icon' => 'cash'],
                 ['label' => 'Credit Hires', 'value' => number_format($secondary['credit_hires_count']), 'icon' => 'credit-card'],
                 ['label' => 'Cash Hires', 'value' => number_format($secondary['cash_hires_count']), 'icon' => 'wallet'],
-                ['label' => 'Pending Deposit', 'value' => '$' . number_format($secondary['pending_deposit_total'], 2), 'icon' => 'hourglass-split'],
+                ['label' => 'Pending Deposit', 'value' => 'Rs. ' . number_format($secondary['pending_deposit_total'], 2), 'icon' => 'hourglass-split'],
             ];
         @endphp
 
@@ -224,7 +224,7 @@
                         { key: 'profit_total', label: 'Profit', color: '#e87ba4' },
                     ];
 
-                    const money = (value, decimals = 0) => '$' + Number(value).toLocaleString(undefined, {
+                    const money = (value, decimals = 0) => 'Rs. ' + Number(value).toLocaleString(undefined, {
                         minimumFractionDigits: decimals,
                         maximumFractionDigits: decimals,
                     });

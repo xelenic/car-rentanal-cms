@@ -21,7 +21,7 @@
                     </div>
                     <div>
                         <div class="text-muted small">Total Full Value &middot; {{ $periodLabel }}</div>
-                        <div class="fs-5 fw-bold">${{ number_format($summary['hire_full_value_total'], 2) }}</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['hire_full_value_total'], 2) }}</div>
                     </div>
                 </div>
             </div>
@@ -34,7 +34,7 @@
                     </div>
                     <div>
                         <div class="text-muted small">Total Our Hire Value &middot; {{ $periodLabel }}</div>
-                        <div class="fs-5 fw-bold">${{ number_format($summary['our_hire_value_total'], 2) }}</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['our_hire_value_total'], 2) }}</div>
                     </div>
                 </div>
             </div>
@@ -115,10 +115,10 @@
                             <td class="text-muted" style="max-width: 260px;">
                                 <span class="d-inline-block text-truncate" style="max-width: 260px;">{{ $vehicle->description ?: '—' }}</span>
                             </td>
-                            <td class="text-muted">${{ number_format($vehicleHireTotals['hire_full_value_total'], 2) }}</td>
-                            <td class="text-muted">${{ number_format($vehicleHireTotals['our_hire_value_total'], 2) }}</td>
+                            <td class="text-muted">Rs. {{ number_format($vehicleHireTotals['hire_full_value_total'], 2) }}</td>
+                            <td class="text-muted">Rs. {{ number_format($vehicleHireTotals['our_hire_value_total'], 2) }}</td>
                             <td>
-                                <div class="text-muted" style="font-size: .8rem;">${{ number_format($vehicleMaintenanceTotal, 2) }}</div>
+                                <div class="text-muted" style="font-size: .8rem;">Rs. {{ number_format($vehicleMaintenanceTotal, 2) }}</div>
                                 <button type="button" class="btn btn-link btn-sm p-0" style="font-size: .75rem;" data-bs-toggle="modal" data-bs-target="#modal-repairs-{{ $vehicle->id }}">
                                     <i class="bi bi-tools me-1"></i>View Repairs
                                     @if ($vehicleMaintenanceRecords->isNotEmpty())
@@ -191,7 +191,7 @@
             @else
                 <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
                     <span class="text-muted small">{{ $vehicleMaintenanceRecords->count() }} record{{ $vehicleMaintenanceRecords->count() === 1 ? '' : 's' }}</span>
-                    <span class="fw-semibold">Total: ${{ number_format($vehicleMaintenanceTotal, 2) }}</span>
+                    <span class="fw-semibold">Total: Rs. {{ number_format($vehicleMaintenanceTotal, 2) }}</span>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
@@ -219,7 +219,7 @@
                                     <td>
                                         <span class="badge rounded-pill bg-{{ $typeColor }}-subtle text-{{ $typeColor }}-emphasis">{{ $record->type_label }}</span>
                                     </td>
-                                    <td class="fw-semibold" style="font-size: .82rem;">${{ number_format($record->cost, 2) }}</td>
+                                    <td class="fw-semibold" style="font-size: .82rem;">Rs. {{ number_format($record->cost, 2) }}</td>
                                     <td class="text-muted" style="font-size: .82rem;">{{ $record->mileage !== null ? number_format($record->mileage).' km' : '—' }}</td>
                                     <td class="text-muted" style="font-size: .82rem; max-width: 180px;">
                                         <span class="d-inline-block text-truncate" style="max-width: 180px;">{{ $record->description ?: '—' }}</span>

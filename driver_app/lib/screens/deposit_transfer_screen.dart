@@ -133,7 +133,7 @@ class _DepositTransferScreenState extends State<DepositTransferScreen> {
                   style: const TextStyle(color: AppColors.textPrimary),
                   decoration: const InputDecoration(
                     labelText: 'Deposited Amount',
-                    prefixText: '\$ ',
+                    prefixText: 'Rs. ',
                   ),
                 ),
                 const SizedBox(height: 14),

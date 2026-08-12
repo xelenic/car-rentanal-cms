@@ -184,7 +184,7 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
                   style: const TextStyle(color: AppColors.textPrimary),
                   decoration: const InputDecoration(
                     labelText: 'Amount',
-                    prefixText: '\$ ',
+                    prefixText: 'Rs. ',
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -233,7 +233,7 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
               ),
               const Spacer(),
               Text(
-                'Total: \$${_total.toStringAsFixed(2)}',
+                'Total: Rs. ${_total.toStringAsFixed(2)}',
                 style: const TextStyle(
                   color: AppColors.textSecondary,
                   fontWeight: FontWeight.w600,
@@ -372,7 +372,7 @@ class _HistoryTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '\$${expense.amount.toStringAsFixed(2)}',
+                  'Rs. ${expense.amount.toStringAsFixed(2)}',
                   style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w700,

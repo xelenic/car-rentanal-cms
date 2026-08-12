@@ -116,7 +116,7 @@ class _SalaryAdvanceScreenState extends State<SalaryAdvanceScreen> {
                   style: const TextStyle(color: AppColors.textPrimary),
                   decoration: const InputDecoration(
                     labelText: 'Amount',
-                    prefixText: '\$ ',
+                    prefixText: 'Rs. ',
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -225,7 +225,7 @@ class _AdvanceTile extends StatelessWidget {
           Row(
             children: [
               Text(
-                '\$${advance.amount.toStringAsFixed(2)}',
+                'Rs. ${advance.amount.toStringAsFixed(2)}',
                 style: const TextStyle(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w700,

@@ -81,7 +81,7 @@
             <td class="info-label">Hires this month</td>
             <td class="info-value">{{ $payroll->hire_count }}</td>
             <td class="info-label">Our Hire Value</td>
-            <td class="info-value">${{ number_format($payroll->our_hire_value_total, 2) }}</td>
+            <td class="info-value">Rs. {{ number_format($payroll->our_hire_value_total, 2) }}</td>
         </tr>
     </table>
 
@@ -89,11 +89,11 @@
     <table class="rows">
         <tr>
             <td>Total Expenses (Fuel, Highway, Foods, Room, Parking)</td>
-            <td class="amount negative">-${{ number_format($payroll->expenses_total, 2) }}</td>
+            <td class="amount negative">-Rs. {{ number_format($payroll->expenses_total, 2) }}</td>
         </tr>
         <tr>
             <td>20% Driver Salary</td>
-            <td class="amount">${{ number_format($payroll->salary, 2) }}</td>
+            <td class="amount">Rs. {{ number_format($payroll->salary, 2) }}</td>
         </tr>
     </table>
 
@@ -101,30 +101,30 @@
     <table class="rows">
         <tr>
             <td>Salary Advance Deduction</td>
-            <td class="amount negative">-${{ number_format($payroll->advance_deduction_total, 2) }}</td>
+            <td class="amount negative">-Rs. {{ number_format($payroll->advance_deduction_total, 2) }}</td>
         </tr>
         @if ((float) $payroll->carryover_deduction_total > 0)
             <tr>
                 <td>Carried Over from Previous Month</td>
-                <td class="amount negative">-${{ number_format($payroll->carryover_deduction_total, 2) }}</td>
+                <td class="amount negative">-Rs. {{ number_format($payroll->carryover_deduction_total, 2) }}</td>
             </tr>
         @endif
         @if ((float) $payroll->arrears_deduction_total > 0)
             <tr>
                 <td>Arrears Loan Deduction</td>
-                <td class="amount negative">-${{ number_format($payroll->arrears_deduction_total, 2) }}</td>
+                <td class="amount negative">-Rs. {{ number_format($payroll->arrears_deduction_total, 2) }}</td>
             </tr>
         @endif
         @if ((float) $payroll->deposit_balance > 0)
             <tr>
                 <td>Deposit Balance</td>
-                <td class="amount negative">-${{ number_format($payroll->deposit_balance, 2) }}</td>
+                <td class="amount negative">-Rs. {{ number_format($payroll->deposit_balance, 2) }}</td>
             </tr>
         @endif
         @if ((float) $payroll->arrears_loan_offset > 0)
             <tr>
                 <td>Converted to Arrears Loan (Full Amount)</td>
-                <td class="amount positive">+${{ number_format($payroll->arrears_loan_offset, 2) }}</td>
+                <td class="amount positive">+Rs. {{ number_format($payroll->arrears_loan_offset, 2) }}</td>
             </tr>
         @endif
         @if ((float) $payroll->manual_adjustment !== 0.0)
@@ -136,14 +136,14 @@
                     @endif
                 </td>
                 <td class="amount {{ (float) $payroll->manual_adjustment < 0 ? 'negative' : 'positive' }}">
-                    {{ (float) $payroll->manual_adjustment < 0 ? '-' : '+' }}${{ number_format(abs($payroll->manual_adjustment), 2) }}
+                    {{ (float) $payroll->manual_adjustment < 0 ? '-' : '+' }}Rs. {{ number_format(abs($payroll->manual_adjustment), 2) }}
                 </td>
             </tr>
         @endif
         <tr class="total-row">
             <td>Final Amount</td>
             <td class="amount {{ (float) $payroll->final_amount < 0 ? 'negative' : 'positive' }}">
-                {{ (float) $payroll->final_amount < 0 ? '-' : '' }}${{ number_format(abs($payroll->final_amount), 2) }}
+                {{ (float) $payroll->final_amount < 0 ? '-' : '' }}Rs. {{ number_format(abs($payroll->final_amount), 2) }}
             </td>
         </tr>
     </table>

@@ -137,7 +137,7 @@
                                     };
                                 @endphp
                                 <span class="badge rounded-pill bg-{{ $statusColor }}-subtle text-{{ $statusColor }}-emphasis">{{ $hire->status_label }}</span>
-                                <div class="text-muted mt-1" style="font-size: .72rem;">${{ number_format($hire->hire_full_value, 2) }}</div>
+                                <div class="text-muted mt-1" style="font-size: .72rem;">Rs. {{ number_format($hire->hire_full_value, 2) }}</div>
                             </div>
                         </div>
                     @endforeach

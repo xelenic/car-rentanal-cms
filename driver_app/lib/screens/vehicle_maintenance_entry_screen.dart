@@ -209,7 +209,7 @@ class _VehicleMaintenanceEntryScreenState extends State<VehicleMaintenanceEntryS
                         controller: _costController,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         style: const TextStyle(color: AppColors.textPrimary),
-                        decoration: const InputDecoration(labelText: 'Cost', prefixText: '\$ '),
+                        decoration: const InputDecoration(labelText: 'Cost', prefixText: 'Rs. '),
                       ),
                       const SizedBox(height: 14),
                       TextField(
@@ -380,7 +380,7 @@ class _HistoryTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '\$${record.cost.toStringAsFixed(2)}',
+                  'Rs. ${record.cost.toStringAsFixed(2)}',
                   style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w700,

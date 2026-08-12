@@ -88,8 +88,8 @@
                                 <span class="text-muted" style="font-size: .72rem;">{{ $hire->vehicle?->model ?? '—' }}</span>
                             </td>
                             <td class="text-muted" style="font-size: .78rem;">
-                                <div>${{ number_format($hire->hire_full_value, 2) }}</div>
-                                <div style="font-size: .72rem;">Commission: ${{ number_format($hire->commission, 2) }}</div>
+                                <div>Rs. {{ number_format($hire->hire_full_value, 2) }}</div>
+                                <div style="font-size: .72rem;">Commission: Rs. {{ number_format($hire->commission, 2) }}</div>
                             </td>
                             <td>
                                 <span class="badge rounded-pill bg-light text-dark border">{{ \App\Models\Hire::PAYMENT_TYPES[$hire->payment_type] ?? $hire->payment_type }}</span>
@@ -110,7 +110,7 @@
                             </td>
                             <td style="font-size: .78rem;">
                                 @if ($hire->expenses->isNotEmpty())
-                                    <div class="fw-semibold">${{ number_format($hire->expenses->sum('amount'), 2) }}</div>
+                                    <div class="fw-semibold">Rs. {{ number_format($hire->expenses->sum('amount'), 2) }}</div>
                                     <button type="button" class="btn btn-link btn-sm p-0" style="font-size: .72rem;" data-bs-toggle="modal" data-bs-target="#modal-expenses-{{ $hire->id }}">
                                         {{ $hire->expenses->count() }} entr{{ $hire->expenses->count() === 1 ? 'y' : 'ies' }}
                                     </button>
@@ -164,7 +164,7 @@
             <div class="row g-2 mb-3">
                 <div class="col-6">
                     <div class="text-muted small">Total Expenses</div>
-                    <div class="fw-semibold" style="font-size: .85rem;">${{ number_format($hire->expenses->sum('amount'), 2) }}</div>
+                    <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($hire->expenses->sum('amount'), 2) }}</div>
                 </div>
                 <div class="col-6">
                     <div class="text-muted small">Entries</div>
@@ -191,7 +191,7 @@
                                 </div>
                             @endif
                             <div class="flex-grow-1">
-                                <div class="fw-semibold" style="font-size: .82rem;">{{ $expense->category_label }} — ${{ number_format($expense->amount, 2) }}</div>
+                                <div class="fw-semibold" style="font-size: .82rem;">{{ $expense->category_label }} — Rs. {{ number_format($expense->amount, 2) }}</div>
                                 <div class="text-muted" style="font-size: .72rem;">{{ $expense->created_at?->format('M j, Y g:i A') }}</div>
                             </div>
                         </div>

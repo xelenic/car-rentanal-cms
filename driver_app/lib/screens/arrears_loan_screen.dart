@@ -133,7 +133,7 @@ class _ArrearsLoanCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '\$${loan.amount.toStringAsFixed(2)}',
+                      'Rs. ${loan.amount.toStringAsFixed(2)}',
                       style: const TextStyle(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w800,
@@ -184,7 +184,7 @@ class _ArrearsLoanCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '\$${d.amount.toStringAsFixed(2)}',
+                    'Rs. ${d.amount.toStringAsFixed(2)}',
                     style: const TextStyle(
                       color: AppColors.textPrimary,
                       fontSize: 13,

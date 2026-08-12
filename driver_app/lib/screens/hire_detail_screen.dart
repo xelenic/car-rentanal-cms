@@ -260,7 +260,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
               _InfoRow(label: 'Vehicle', value: hire.vehicle ?? '—'),
               _InfoRow(
                 label: 'Total Value',
-                value: '\$${hire.hireFullValue.toStringAsFixed(2)}',
+                value: 'Rs. ${hire.hireFullValue.toStringAsFixed(2)}',
               ),
               _InfoRow(label: 'Payment Method', value: hire.paymentTypeLabel),
             ],

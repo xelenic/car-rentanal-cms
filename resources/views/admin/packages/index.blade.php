@@ -45,7 +45,7 @@
                                 </div>
                             </td>
                             <td class="text-muted">{{ $package->hours }} {{ \Illuminate\Support\Str::plural('hour', $package->hours) }}</td>
-                            <td class="text-muted">${{ number_format($package->price, 2) }}</td>
+                            <td class="text-muted">Rs. {{ number_format($package->price, 2) }}</td>
                             <td class="text-muted" style="max-width: 280px;">
                                 <span class="d-inline-block text-truncate" style="max-width: 280px;" title="{{ $package->itineraries->pluck('location.name')->join(' → ') }}">
                                     {{ $package->itineraries->pluck('location.name')->join(' → ') }}

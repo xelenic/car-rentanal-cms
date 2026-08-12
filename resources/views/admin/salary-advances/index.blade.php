@@ -46,7 +46,7 @@
                                     <div class="fw-semibold" style="font-size: .8rem;">{{ $advance->driver->name }}</div>
                                 </div>
                             </td>
-                            <td class="fw-semibold" style="font-size: .85rem;">${{ number_format($advance->amount, 2) }}</td>
+                            <td class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($advance->amount, 2) }}</td>
                             <td class="text-muted" style="max-width: 220px;">
                                 <span class="d-inline-block text-truncate" style="max-width: 220px; font-size: .78rem;">{{ $advance->reason ?: '—' }}</span>
                             </td>
@@ -120,7 +120,7 @@
                         <input type="hidden" name="status" value="rejected">
                         <div class="mb-2">
                             <div class="text-muted small">Amount</div>
-                            <div class="fw-semibold">${{ number_format($advance->amount, 2) }}</div>
+                            <div class="fw-semibold">Rs. {{ number_format($advance->amount, 2) }}</div>
                         </div>
                         <label for="reject-note-{{ $advance->id }}" class="form-label">Reason for rejection (optional)</label>
                         <textarea id="reject-note-{{ $advance->id }}" name="admin_note" class="form-control" rows="3" placeholder="Let the driver know why this was rejected..."></textarea>
@@ -139,7 +139,7 @@
 
                         <div class="mb-3">
                             <div class="text-muted small">Requested amount</div>
-                            <div class="fw-semibold fs-5">${{ number_format($advance->amount, 2) }}</div>
+                            <div class="fw-semibold fs-5">Rs. {{ number_format($advance->amount, 2) }}</div>
                         </div>
 
                         <label class="form-label">How should this be deducted?</label>
@@ -189,7 +189,7 @@
             <x-modal id="modal-schedule-{{ $advance->id }}" title="Deduction Schedule — {{ $advance->driver->name }}">
                 <div class="mb-2">
                     <div class="text-muted small">{{ $advance->deduction_type_label }}</div>
-                    <div class="fw-semibold">${{ number_format($advance->amount, 2) }} total</div>
+                    <div class="fw-semibold">Rs. {{ number_format($advance->amount, 2) }} total</div>
                 </div>
                 <table class="table table-sm mb-0">
                     <thead>
@@ -209,7 +209,7 @@
                             @endphp
                             <tr>
                                 <td>{{ \Carbon\Carbon::createFromDate($deduction->year, $deduction->month, 1)->format('F Y') }}</td>
-                                <td class="text-end">${{ number_format($deduction->amount, 2) }}</td>
+                                <td class="text-end">Rs. {{ number_format($deduction->amount, 2) }}</td>
                                 <td>
                                     @if ($isPaid)
                                         <span class="badge rounded-pill bg-success-subtle text-success-emphasis">Paid</span>
@@ -258,20 +258,20 @@
                     }
 
                     if (months <= 0) {
-                        preview.textContent = 'Remaining balance: $' + remaining.toFixed(2) + '. Enter how many months to split it over.';
+                        preview.textContent = 'Remaining balance: Rs. ' + remaining.toFixed(2) + '. Enter how many months to split it over.';
                         return;
                     }
 
                     var perMonth = Math.floor((remaining / months) * 100) / 100;
                     var last = Math.round((remaining - perMonth * (months - 1)) * 100) / 100;
 
-                    var text = 'Remaining balance: $' + remaining.toFixed(2) + ' → ';
+                    var text = 'Remaining balance: Rs. ' + remaining.toFixed(2) + ' → ';
                     if (months === 1) {
-                        text += '$' + last.toFixed(2) + ' next month.';
+                        text += 'Rs. ' + last.toFixed(2) + ' next month.';
                     } else if (perMonth === last) {
-                        text += '$' + perMonth.toFixed(2) + '/month for ' + months + ' upcoming months.';
+                        text += 'Rs. ' + perMonth.toFixed(2) + '/month for ' + months + ' upcoming months.';
                     } else {
-                        text += '$' + perMonth.toFixed(2) + '/month for ' + (months - 1) + ' months, then $' + last.toFixed(2) + ' in the final month.';
+                        text += 'Rs. ' + perMonth.toFixed(2) + '/month for ' + (months - 1) + ' months, then Rs. ' + last.toFixed(2) + ' in the final month.';
                     }
                     preview.textContent = text;
                 }

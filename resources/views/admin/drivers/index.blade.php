@@ -21,7 +21,7 @@
                     </div>
                     <div>
                         <div class="text-muted small">Total Our Hire Value &middot; {{ $periodLabel }}</div>
-                        <div class="fs-5 fw-bold">${{ number_format($summary['our_hire_value_total'], 2) }}</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['our_hire_value_total'], 2) }}</div>
                     </div>
                 </div>
             </div>
@@ -34,7 +34,7 @@
                     </div>
                     <div>
                         <div class="text-muted small">Total Full Value &middot; {{ $periodLabel }}</div>
-                        <div class="fs-5 fw-bold">${{ number_format($summary['hire_full_value_total'], 2) }}</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['hire_full_value_total'], 2) }}</div>
                     </div>
                 </div>
             </div>
@@ -47,7 +47,7 @@
                     </div>
                     <div>
                         <div class="text-muted small">Total Expenses &middot; {{ $periodLabel }}</div>
-                        <div class="fs-5 fw-bold">${{ number_format($summary['expenses_total'], 2) }}</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['expenses_total'], 2) }}</div>
                     </div>
                 </div>
             </div>
@@ -60,19 +60,19 @@
                     </div>
                     <div>
                         <div class="text-muted small">Total Driver Salary &middot; {{ $periodLabel }}</div>
-                        <div class="fs-5 fw-bold">${{ number_format($summary['salary'], 2) }}</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['salary'], 2) }}</div>
                         @if ($summary['advance_deduction_total'] > 0 || $summary['carryover_deduction_total'] > 0 || $summary['arrears_deduction_total'] > 0)
                             <div class="text-danger" style="font-size: .7rem;">
                                 @if ($summary['advance_deduction_total'] > 0)
-                                    -${{ number_format($summary['advance_deduction_total'], 2) }} advance
+                                    -Rs. {{ number_format($summary['advance_deduction_total'], 2) }} advance
                                 @endif
                                 @if ($summary['carryover_deduction_total'] > 0)
-                                    -${{ number_format($summary['carryover_deduction_total'], 2) }} carried over
+                                    -Rs. {{ number_format($summary['carryover_deduction_total'], 2) }} carried over
                                 @endif
                                 @if ($summary['arrears_deduction_total'] > 0)
-                                    -${{ number_format($summary['arrears_deduction_total'], 2) }} arrears
+                                    -Rs. {{ number_format($summary['arrears_deduction_total'], 2) }} arrears
                                 @endif
-                                &middot; ${{ number_format($summary['net_salary_payable'], 2) }} net payable
+                                &middot; Rs. {{ number_format($summary['net_salary_payable'], 2) }} net payable
                             </div>
                         @endif
                     </div>
@@ -87,7 +87,7 @@
                     </div>
                     <div>
                         <div class="text-muted small">My Profit &middot; {{ $periodLabel }}</div>
-                        <div class="fs-5 fw-bold">${{ number_format($summary['profit'], 2) }}</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['profit'], 2) }}</div>
                     </div>
                 </div>
             </div>
@@ -169,17 +169,17 @@
                                 @endphp
                                 @php $displayAmount = $payroll->final_amount ?? $salary['net_salary_payable']; @endphp
                                 <button type="button" class="btn btn-link btn-sm p-0 fw-semibold text-decoration-none {{ (float) $displayAmount < 0 ? 'text-danger' : '' }}" style="font-size: .82rem;" data-bs-toggle="modal" data-bs-target="#modal-salary-{{ $driver->id }}">
-                                    {{ (float) $displayAmount < 0 ? '-' : '' }}${{ number_format(abs($displayAmount), 2) }}
+                                    {{ (float) $displayAmount < 0 ? '-' : '' }}Rs. {{ number_format(abs($displayAmount), 2) }}
                                 </button>
                                 <div class="text-muted" style="font-size: .72rem;">{{ $salary['hire_count'] }} hire{{ $salary['hire_count'] === 1 ? '' : 's' }}</div>
                                 @if ($salary['advance_deduction_total'] > 0)
-                                    <div class="text-danger" style="font-size: .7rem;">-${{ number_format($salary['advance_deduction_total'], 2) }} advance</div>
+                                    <div class="text-danger" style="font-size: .7rem;">-Rs. {{ number_format($salary['advance_deduction_total'], 2) }} advance</div>
                                 @endif
                                 @if ($salary['carryover_deduction_total'] > 0)
-                                    <div class="text-danger" style="font-size: .7rem;">-${{ number_format($salary['carryover_deduction_total'], 2) }} carried over</div>
+                                    <div class="text-danger" style="font-size: .7rem;">-Rs. {{ number_format($salary['carryover_deduction_total'], 2) }} carried over</div>
                                 @endif
                                 @if ($salary['arrears_deduction_total'] > 0)
-                                    <div class="text-danger" style="font-size: .7rem;">-${{ number_format($salary['arrears_deduction_total'], 2) }} arrears</div>
+                                    <div class="text-danger" style="font-size: .7rem;">-Rs. {{ number_format($salary['arrears_deduction_total'], 2) }} arrears</div>
                                 @endif
                                 @if ($payroll?->status === 'paid' && (float) $payroll->final_amount < 0)
                                     <span class="badge rounded-pill bg-danger-subtle text-danger-emphasis mt-1">Carried to next month</span>
@@ -252,11 +252,11 @@
             <div class="row g-2 mb-3">
                 <div class="col-4">
                     <div class="text-muted small">Our Hire Value Total</div>
-                    <div class="fw-semibold" style="font-size: .85rem;">${{ number_format($salary['our_hire_value_total'], 2) }}</div>
+                    <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($salary['our_hire_value_total'], 2) }}</div>
                 </div>
                 <div class="col-4">
                     <div class="text-muted small">Hire Full Value Total</div>
-                    <div class="fw-semibold" style="font-size: .85rem;">${{ number_format($salary['hire_full_value_total'], 2) }}</div>
+                    <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($salary['hire_full_value_total'], 2) }}</div>
                 </div>
                 <div class="col-4">
                     <div class="text-muted small">Hires in {{ $periodLabel }}</div>
@@ -274,7 +274,7 @@
                     @foreach ($salary['expenses_by_category'] as $category => $amount)
                         <div class="d-flex align-items-center justify-content-between border rounded p-2">
                             <span style="font-size: .8rem;">{{ \App\Models\HireExpense::CATEGORIES[$category] ?? $category }}</span>
-                            <span class="text-danger fw-semibold" style="font-size: .8rem;">-${{ number_format($amount, 2) }}</span>
+                            <span class="text-danger fw-semibold" style="font-size: .8rem;">-Rs. {{ number_format($amount, 2) }}</span>
                         </div>
                     @endforeach
                 </div>
@@ -282,38 +282,38 @@
                 <div class="border-top pt-3">
                     <div class="d-flex align-items-center justify-content-between mb-2">
                         <span class="text-muted" style="font-size: .82rem;">Total Expenses</span>
-                        <span class="fw-semibold text-danger" style="font-size: .85rem;">-${{ number_format($salary['expenses_total'], 2) }}</span>
+                        <span class="fw-semibold text-danger" style="font-size: .85rem;">-Rs. {{ number_format($salary['expenses_total'], 2) }}</span>
                     </div>
                     <div class="d-flex align-items-center justify-content-between mb-2">
                         <span class="text-muted" style="font-size: .82rem;">Net Before Salary</span>
-                        <span class="fw-semibold" style="font-size: .85rem;">${{ number_format($salary['net_before_salary'], 2) }}</span>
+                        <span class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($salary['net_before_salary'], 2) }}</span>
                     </div>
                     <div class="d-flex align-items-center justify-content-between mb-2">
                         <span class="fw-semibold" style="font-size: .9rem;">{{ $salary['salary_percentage'] }}% Driver Salary</span>
-                        <span class="fw-bold text-success" style="font-size: 1.1rem;">${{ number_format($salary['salary'], 2) }}</span>
+                        <span class="fw-bold text-success" style="font-size: 1.1rem;">Rs. {{ number_format($salary['salary'], 2) }}</span>
                     </div>
                     @if ($salary['advance_deduction_total'] > 0)
                         <div class="d-flex align-items-center justify-content-between mb-2">
                             <span class="text-muted" style="font-size: .82rem;">Salary Advance Deduction</span>
-                            <span class="fw-semibold text-danger" style="font-size: .85rem;">-${{ number_format($salary['advance_deduction_total'], 2) }}</span>
+                            <span class="fw-semibold text-danger" style="font-size: .85rem;">-Rs. {{ number_format($salary['advance_deduction_total'], 2) }}</span>
                         </div>
                     @endif
                     @if ($salary['carryover_deduction_total'] > 0)
                         <div class="d-flex align-items-center justify-content-between mb-2">
                             <span class="text-muted" style="font-size: .82rem;">Carried Over from Previous Month</span>
-                            <span class="fw-semibold text-danger" style="font-size: .85rem;">-${{ number_format($salary['carryover_deduction_total'], 2) }}</span>
+                            <span class="fw-semibold text-danger" style="font-size: .85rem;">-Rs. {{ number_format($salary['carryover_deduction_total'], 2) }}</span>
                         </div>
                     @endif
                     @if ($salary['arrears_deduction_total'] > 0)
                         <div class="d-flex align-items-center justify-content-between mb-2">
                             <span class="text-muted" style="font-size: .82rem;">Arrears Loan Deduction</span>
-                            <span class="fw-semibold text-danger" style="font-size: .85rem;">-${{ number_format($salary['arrears_deduction_total'], 2) }}</span>
+                            <span class="fw-semibold text-danger" style="font-size: .85rem;">-Rs. {{ number_format($salary['arrears_deduction_total'], 2) }}</span>
                         </div>
                     @endif
                     @if ($salary['advance_deduction_total'] > 0 || $salary['carryover_deduction_total'] > 0 || $salary['arrears_deduction_total'] > 0)
                         <div class="d-flex align-items-center justify-content-between border-top pt-2">
                             <span class="fw-semibold" style="font-size: .9rem;">Net Salary (without Deposit Deduction)</span>
-                            <span class="fw-bold text-success" style="font-size: 1.1rem;">${{ number_format($salary['net_salary_payable'], 2) }}</span>
+                            <span class="fw-bold text-success" style="font-size: 1.1rem;">Rs. {{ number_format($salary['net_salary_payable'], 2) }}</span>
                         </div>
                     @endif
                 </div>
@@ -324,47 +324,47 @@
                     <div class="fw-semibold mb-2" style="font-size: .9rem;">Deposit</div>
                     <div class="d-flex align-items-center justify-content-between mb-2">
                         <span class="text-muted" style="font-size: .82rem;">Total Hire Value</span>
-                        <span class="fw-semibold" style="font-size: .85rem;">${{ number_format($salary['hire_full_value_total'], 2) }}</span>
+                        <span class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($salary['hire_full_value_total'], 2) }}</span>
                     </div>
                     <div class="d-flex align-items-center justify-content-between mb-2">
                         <span class="text-muted" style="font-size: .82rem;">Cash Payments</span>
-                        <span class="fw-semibold" style="font-size: .85rem;">${{ number_format($salary['hire_full_value_by_payment_type']['cash'] ?? 0, 2) }}</span>
+                        <span class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($salary['hire_full_value_by_payment_type']['cash'] ?? 0, 2) }}</span>
                     </div>
                     <div class="d-flex align-items-center justify-content-between mb-2">
                         <span class="text-muted" style="font-size: .82rem;">Credit Payments</span>
-                        <span class="fw-semibold" style="font-size: .85rem;">${{ number_format($salary['hire_full_value_by_payment_type']['credit'] ?? 0, 2) }}</span>
+                        <span class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($salary['hire_full_value_by_payment_type']['credit'] ?? 0, 2) }}</span>
                     </div>
                     <div class="d-flex align-items-center justify-content-between mb-2 border-top pt-2">
                         <span class="text-muted" style="font-size: .82rem;">Deposit Amount</span>
-                        <span class="fw-semibold" style="font-size: .85rem;">${{ number_format($salary['deposit_amount'], 2) }}</span>
+                        <span class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($salary['deposit_amount'], 2) }}</span>
                     </div>
                     @if ($transferredTotal > 0)
                         <div class="d-flex align-items-center justify-content-between mb-2">
                             <span class="text-muted" style="font-size: .82rem;">Already Transferred</span>
-                            <span class="fw-semibold text-danger" style="font-size: .85rem;">-${{ number_format($transferredTotal, 2) }}</span>
+                            <span class="fw-semibold text-danger" style="font-size: .85rem;">-Rs. {{ number_format($transferredTotal, 2) }}</span>
                         </div>
                     @endif
                     <div class="d-flex align-items-center justify-content-between border-top pt-2">
                         <span class="fw-semibold" style="font-size: .9rem;">Balance</span>
-                        <span class="fw-bold text-success" style="font-size: 1.1rem;">${{ number_format($balanceDisplay, 2) }}</span>
+                        <span class="fw-bold text-success" style="font-size: 1.1rem;">Rs. {{ number_format($balanceDisplay, 2) }}</span>
                     </div>
 
                     <div class="d-flex align-items-center justify-content-between mt-3 pt-3 border-top">
                         <span class="fw-semibold" style="font-size: .9rem;">Net Payable Salary</span>
                         <span class="fw-bold {{ $finalNetPayable < 0 ? 'text-danger' : 'text-success' }}" style="font-size: 1.1rem;">
-                            {{ $finalNetPayable < 0 ? '-' : '' }}${{ number_format(abs($finalNetPayable), 2) }}
+                            {{ $finalNetPayable < 0 ? '-' : '' }}Rs. {{ number_format(abs($finalNetPayable), 2) }}
                         </span>
                     </div>
                     <div class="text-muted mt-1" style="font-size: .75rem;">
-                        Net Salary (without Deposit Deduction) (${{ number_format($netPayableBase, 2) }}) - Deposit Balance (${{ number_format($balanceDisplay, 2) }})
-                        = {{ $finalNetPayable < 0 ? '-' : '' }}${{ number_format(abs($finalNetPayable), 2) }}.
+                        Net Salary (without Deposit Deduction) (Rs. {{ number_format($netPayableBase, 2) }}) - Deposit Balance (Rs. {{ number_format($balanceDisplay, 2) }})
+                        = {{ $finalNetPayable < 0 ? '-' : '' }}Rs. {{ number_format(abs($finalNetPayable), 2) }}.
                     </div>
 
                     @if ($arrearsLoans->isNotEmpty())
                         <div class="mt-2">
                             @foreach ($arrearsLoans as $loan)
                                 <button type="button" class="btn btn-link btn-sm p-0 d-block" style="font-size: .72rem;" data-bs-toggle="modal" data-bs-target="#modal-arrears-schedule-{{ $loan->id }}">
-                                    <i class="bi bi-receipt me-1"></i>Arrears Loan: ${{ number_format($loan->amount, 2) }} &middot; {{ $loan->deduction_type_label }}
+                                    <i class="bi bi-receipt me-1"></i>Arrears Loan: Rs. {{ number_format($loan->amount, 2) }} &middot; {{ $loan->deduction_type_label }}
                                 </button>
                             @endforeach
                         </div>
@@ -414,7 +414,7 @@
                                     </div>
                                 </div>
                                 <div class="payroll-final-preview mt-2 fw-semibold" style="font-size: .85rem;">
-                                    Final Payable: ${{ number_format($finalNetPayable + $arrearsLoanTotal, 2) }}
+                                    Final Payable: Rs. {{ number_format($finalNetPayable + $arrearsLoanTotal, 2) }}
                                 </div>
                                 <div class="payroll-final-negative-note text-muted d-none mt-1" style="font-size: .75rem;">
                                     <i class="bi bi-info-circle me-1"></i>A negative amount can't be paid — the shortfall will be carried forward as a deduction on next month's salary.
@@ -429,34 +429,34 @@
                     <div class="d-flex flex-column gap-1 mb-2">
                         <div class="d-flex align-items-center justify-content-between">
                             <span class="text-muted" style="font-size: .8rem;">Salary</span>
-                            <span style="font-size: .8rem;">${{ number_format($payroll->salary, 2) }}</span>
+                            <span style="font-size: .8rem;">Rs. {{ number_format($payroll->salary, 2) }}</span>
                         </div>
                         <div class="d-flex align-items-center justify-content-between">
                             <span class="text-muted" style="font-size: .8rem;">Advance Deduction</span>
-                            <span style="font-size: .8rem;">-${{ number_format($payroll->advance_deduction_total, 2) }}</span>
+                            <span style="font-size: .8rem;">-Rs. {{ number_format($payroll->advance_deduction_total, 2) }}</span>
                         </div>
                         @if ((float) $payroll->carryover_deduction_total > 0)
                             <div class="d-flex align-items-center justify-content-between">
                                 <span class="text-muted" style="font-size: .8rem;">Carried Over from Previous Month</span>
-                                <span style="font-size: .8rem;">-${{ number_format($payroll->carryover_deduction_total, 2) }}</span>
+                                <span style="font-size: .8rem;">-Rs. {{ number_format($payroll->carryover_deduction_total, 2) }}</span>
                             </div>
                         @endif
                         @if ((float) $payroll->arrears_deduction_total > 0)
                             <div class="d-flex align-items-center justify-content-between">
                                 <span class="text-muted" style="font-size: .8rem;">Arrears Loan Deduction</span>
-                                <span style="font-size: .8rem;">-${{ number_format($payroll->arrears_deduction_total, 2) }}</span>
+                                <span style="font-size: .8rem;">-Rs. {{ number_format($payroll->arrears_deduction_total, 2) }}</span>
                             </div>
                         @endif
                         @if ((float) $payroll->deposit_balance > 0)
                             <div class="d-flex align-items-center justify-content-between">
                                 <span class="text-muted" style="font-size: .8rem;">Deposit Balance</span>
-                                <span style="font-size: .8rem;">-${{ number_format($payroll->deposit_balance, 2) }}</span>
+                                <span style="font-size: .8rem;">-Rs. {{ number_format($payroll->deposit_balance, 2) }}</span>
                             </div>
                         @endif
                         @if ((float) $payroll->arrears_loan_offset > 0)
                             <div class="d-flex align-items-center justify-content-between">
                                 <span class="text-muted" style="font-size: .8rem;">Converted to Arrears Loan (Full Amount)</span>
-                                <span class="text-success" style="font-size: .8rem;">+${{ number_format($payroll->arrears_loan_offset, 2) }}</span>
+                                <span class="text-success" style="font-size: .8rem;">+Rs. {{ number_format($payroll->arrears_loan_offset, 2) }}</span>
                             </div>
                         @endif
                         @if ((float) $payroll->manual_adjustment !== 0.0)
@@ -468,14 +468,14 @@
                                     @endif
                                 </span>
                                 <span style="font-size: .8rem;" class="{{ (float) $payroll->manual_adjustment < 0 ? 'text-danger' : 'text-success' }}">
-                                    {{ (float) $payroll->manual_adjustment < 0 ? '-' : '+' }}${{ number_format(abs($payroll->manual_adjustment), 2) }}
+                                    {{ (float) $payroll->manual_adjustment < 0 ? '-' : '+' }}Rs. {{ number_format(abs($payroll->manual_adjustment), 2) }}
                                 </span>
                             </div>
                         @endif
                         <div class="d-flex align-items-center justify-content-between border-top pt-2 mt-1">
                             <span class="fw-semibold" style="font-size: .9rem;">Final Amount</span>
                             <span class="fw-bold {{ (float) $payroll->final_amount < 0 ? 'text-danger' : 'text-success' }}" style="font-size: 1.1rem;">
-                                {{ (float) $payroll->final_amount < 0 ? '-' : '' }}${{ number_format(abs($payroll->final_amount), 2) }}
+                                {{ (float) $payroll->final_amount < 0 ? '-' : '' }}Rs. {{ number_format(abs($payroll->final_amount), 2) }}
                             </span>
                         </div>
                     </div>
@@ -492,7 +492,7 @@
                             @endphp
                             <div class="alert alert-danger py-2 px-3 mt-2 mb-0" style="font-size: .78rem;">
                                 <i class="bi bi-arrow-return-right me-1"></i>
-                                This payroll had a shortfall of <strong>${{ number_format(abs($payroll->final_amount), 2) }}</strong> —
+                                This payroll had a shortfall of <strong>Rs. {{ number_format(abs($payroll->final_amount), 2) }}</strong> —
                                 carried forward as a deduction on {{ $carryTarget->format('F Y') }}'s salary.
                             </div>
                         @endif
@@ -556,7 +556,7 @@
                                             @endphp
                                             <span class="badge rounded-pill bg-{{ $hireStatusColor }}-subtle text-{{ $hireStatusColor }}-emphasis" style="font-size: .68rem;">{{ $hire->status_label }}</span>
                                         </td>
-                                        <td class="text-end" style="font-size: .78rem;">${{ number_format($hire->our_hire_value, 2) }}</td>
+                                        <td class="text-end" style="font-size: .78rem;">Rs. {{ number_format($hire->our_hire_value, 2) }}</td>
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -588,7 +588,7 @@
 
                         <div class="mb-3">
                             <div class="text-muted small">Deficit</div>
-                            <div class="fw-semibold fs-5 text-danger">-${{ number_format(abs($unresolvedDeficit), 2) }}</div>
+                            <div class="fw-semibold fs-5 text-danger">-Rs. {{ number_format(abs($unresolvedDeficit), 2) }}</div>
                         </div>
 
                         <label class="form-label">How should this be recovered?</label>
@@ -624,7 +624,7 @@
                 <x-modal id="modal-arrears-schedule-{{ $loan->id }}" title="Arrears Loan Schedule — {{ $driver->name }}">
                     <div class="mb-2">
                         <div class="text-muted small">{{ $loan->deduction_type_label }}</div>
-                        <div class="fw-semibold">${{ number_format($loan->amount, 2) }} total</div>
+                        <div class="fw-semibold">Rs. {{ number_format($loan->amount, 2) }} total</div>
                     </div>
                     <table class="table table-sm mb-0">
                         <thead>
@@ -637,7 +637,7 @@
                             @foreach ($loan->deductions as $deduction)
                                 <tr>
                                     <td>{{ \Carbon\Carbon::createFromDate($deduction->year, $deduction->month, 1)->format('F Y') }}</td>
-                                    <td class="text-end">${{ number_format($deduction->amount, 2) }}</td>
+                                    <td class="text-end">Rs. {{ number_format($deduction->amount, 2) }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -689,7 +689,7 @@
                     var adjustment = parseFloat(input.value) || 0;
                     var final = Math.round((base + adjustment) * 100) / 100;
                     var sign = final < 0 ? '-' : '';
-                    preview.textContent = 'Final Payable: ' + sign + '$' + Math.abs(final).toFixed(2);
+                    preview.textContent = 'Final Payable: ' + sign + 'Rs. ' + Math.abs(final).toFixed(2);
                     preview.classList.toggle('text-danger', final < 0);
                     var note = wrapper.querySelector('.payroll-final-negative-note');
                     if (note) {
@@ -736,11 +736,11 @@
 
                     var text;
                     if (months === 1) {
-                        text = '$' + last.toFixed(2) + ' next month.';
+                        text = 'Rs. ' + last.toFixed(2) + ' next month.';
                     } else if (perMonth === last) {
-                        text = '$' + perMonth.toFixed(2) + '/month for ' + months + ' upcoming months.';
+                        text = 'Rs. ' + perMonth.toFixed(2) + '/month for ' + months + ' upcoming months.';
                     } else {
-                        text = '$' + perMonth.toFixed(2) + '/month for ' + (months - 1) + ' months, then $' + last.toFixed(2) + ' in the final month.';
+                        text = 'Rs. ' + perMonth.toFixed(2) + '/month for ' + (months - 1) + ' months, then Rs. ' + last.toFixed(2) + ' in the final month.';
                     }
                     preview.textContent = text;
                 }

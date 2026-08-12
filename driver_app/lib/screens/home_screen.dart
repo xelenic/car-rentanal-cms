@@ -301,7 +301,7 @@ class _DashboardSummaryCard extends StatelessWidget {
                   Expanded(
                     child: _StatFigure(
                       label: 'Your Payment',
-                      value: salary != null ? '\$${salary!.amountDue.toStringAsFixed(2)}' : '—',
+                      value: salary != null ? 'Rs. ${salary!.amountDue.toStringAsFixed(2)}' : '—',
                       emphasize: true,
                       subtitle: salary != null && salary!.isPaid ? 'Paid' : null,
                     ),
@@ -310,7 +310,7 @@ class _DashboardSummaryCard extends StatelessWidget {
                   Expanded(
                     child: _StatFigure(
                       label: 'Total Expenses',
-                      value: salary != null ? '\$${salary!.expensesTotal.toStringAsFixed(2)}' : '—',
+                      value: salary != null ? 'Rs. ${salary!.expensesTotal.toStringAsFixed(2)}' : '—',
                     ),
                   ),
                 ],
@@ -324,7 +324,7 @@ class _DashboardSummaryCard extends StatelessWidget {
                   Expanded(
                     child: _StatFigure(
                       label: 'Total Hire Value',
-                      value: salary != null ? '\$${salary!.hireFullValueTotal.toStringAsFixed(2)}' : '—',
+                      value: salary != null ? 'Rs. ${salary!.hireFullValueTotal.toStringAsFixed(2)}' : '—',
                       emphasize: true,
                     ),
                   ),
@@ -332,14 +332,14 @@ class _DashboardSummaryCard extends StatelessWidget {
                   Expanded(
                     child: _StatFigure(
                       label: 'Cash Payments',
-                      value: salary != null ? '\$${salary!.cashHireFullValue.toStringAsFixed(2)}' : '—',
+                      value: salary != null ? 'Rs. ${salary!.cashHireFullValue.toStringAsFixed(2)}' : '—',
                     ),
                   ),
                   _StatDivider(),
                   Expanded(
                     child: _StatFigure(
                       label: 'Credit Payments',
-                      value: salary != null ? '\$${salary!.creditHireFullValue.toStringAsFixed(2)}' : '—',
+                      value: salary != null ? 'Rs. ${salary!.creditHireFullValue.toStringAsFixed(2)}' : '—',
                     ),
                   ),
                 ],
@@ -681,7 +681,7 @@ class _TransferHistoryTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '\$${transfer.amount.toStringAsFixed(2)}',
+                  'Rs. ${transfer.amount.toStringAsFixed(2)}',
                   style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w700,
@@ -748,7 +748,7 @@ class _DepositRow extends StatelessWidget {
           ),
         ),
         Text(
-          '$sign\$${value.abs().toStringAsFixed(2)}',
+          '${sign}Rs. ${value.abs().toStringAsFixed(2)}',
           style: TextStyle(
             color: color,
             fontSize: highlight ? 18 : 13,

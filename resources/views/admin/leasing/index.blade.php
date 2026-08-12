@@ -34,7 +34,7 @@
                     </div>
                     <div>
                         <div class="text-muted small">Total Loan Amount</div>
-                        <div class="fs-5 fw-bold">${{ number_format($summary['loan_amount_total'], 2) }}</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['loan_amount_total'], 2) }}</div>
                     </div>
                 </div>
             </div>
@@ -47,7 +47,7 @@
                     </div>
                     <div>
                         <div class="text-muted small">Monthly Installments</div>
-                        <div class="fs-5 fw-bold">${{ number_format($summary['monthly_installment_total'], 2) }}</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['monthly_installment_total'], 2) }}</div>
                         <div class="text-muted" style="font-size: .7rem;">Active records only</div>
                     </div>
                 </div>
@@ -61,7 +61,7 @@
                     </div>
                     <div>
                         <div class="text-muted small">Balance Remaining</div>
-                        <div class="fs-5 fw-bold">${{ number_format($summary['balance_remaining_total'], 2) }}</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['balance_remaining_total'], 2) }}</div>
                         <div class="text-muted" style="font-size: .7rem;">Active records only</div>
                     </div>
                 </div>
@@ -147,10 +147,10 @@
                                     <div class="text-muted" style="font-size: .72rem;">{{ $leasing->agreement_number }}</div>
                                 @endif
                             </td>
-                            <td class="text-muted">${{ number_format($leasing->loan_amount, 2) }}</td>
-                            <td class="text-muted">${{ number_format($leasing->monthly_installment, 2) }}</td>
+                            <td class="text-muted">Rs. {{ number_format($leasing->loan_amount, 2) }}</td>
+                            <td class="text-muted">Rs. {{ number_format($leasing->monthly_installment, 2) }}</td>
                             <td>
-                                <div class="fw-semibold" style="font-size: .82rem;">${{ number_format($leasing->balance_remaining, 2) }}</div>
+                                <div class="fw-semibold" style="font-size: .82rem;">Rs. {{ number_format($leasing->balance_remaining, 2) }}</div>
                                 <div class="progress" style="height: 4px; width: 90px;">
                                     <div class="progress-bar bg-{{ $statusColor }}" style="width: {{ $leasing->progress_percent }}%"></div>
                                 </div>
@@ -270,7 +270,7 @@
 
             <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
                 <span class="text-muted small">{{ $leasing->settlements->count() }} settlement{{ $leasing->settlements->count() === 1 ? '' : 's' }}</span>
-                <span class="fw-semibold">Total Settled: ${{ number_format($totalSettled, 2) }}</span>
+                <span class="fw-semibold">Total Settled: Rs. {{ number_format($totalSettled, 2) }}</span>
             </div>
 
             @if ($leasing->settlements->isEmpty())
@@ -294,7 +294,7 @@
                             @foreach ($leasing->settlements as $settlement)
                                 <tr>
                                     <td class="fw-semibold" style="font-size: .82rem;">{{ $settlement->month_label }}</td>
-                                    <td style="font-size: .82rem;">${{ number_format($settlement->amount, 2) }}</td>
+                                    <td style="font-size: .82rem;">Rs. {{ number_format($settlement->amount, 2) }}</td>
                                     <td class="text-muted" style="font-size: .78rem;">{{ $settlement->notes ?: '—' }}</td>
                                     <td class="text-muted" style="font-size: .75rem;">{{ $settlement->created_at->format('M j, Y') }}</td>
                                     <td class="text-end">

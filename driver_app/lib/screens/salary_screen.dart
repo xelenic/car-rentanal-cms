@@ -211,7 +211,7 @@ class _SalaryContent extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                '\$${salary.amountDue.toStringAsFixed(2)}',
+                'Rs. ${salary.amountDue.toStringAsFixed(2)}',
                 style: const TextStyle(
                   color: AppColors.onNeon,
                   fontWeight: FontWeight.w900,
@@ -227,21 +227,21 @@ class _SalaryContent extends StatelessWidget {
               if (salary.isPaid) ...[
                 const SizedBox(height: 2),
                 Text(
-                  'Paid \$${salary.paidAmount.toStringAsFixed(2)}${paidDateLabel != null ? ' on $paidDateLabel' : ''}',
+                  'Paid Rs. ${salary.paidAmount.toStringAsFixed(2)}${paidDateLabel != null ? ' on $paidDateLabel' : ''}',
                   style: const TextStyle(color: AppColors.onNeon, fontSize: 12),
                 ),
               ] else if (salary.paidAmount > 0) ...[
                 const SizedBox(height: 2),
                 Text(
-                  '\$${salary.paidAmount.toStringAsFixed(2)} already paid'
+                  'Rs. ${salary.paidAmount.toStringAsFixed(2)} already paid'
                   '${paidDateLabel != null ? ' on $paidDateLabel' : ''} · '
-                  '\$${salary.amountDue.toStringAsFixed(2)} new from more hires',
+                  'Rs. ${salary.amountDue.toStringAsFixed(2)} new from more hires',
                   style: const TextStyle(color: AppColors.onNeon, fontSize: 12),
                 ),
               ] else if (salary.advanceDeductionTotal > 0) ...[
                 const SizedBox(height: 2),
                 Text(
-                  '\$${salary.salary.toStringAsFixed(2)} salary − \$${salary.advanceDeductionTotal.toStringAsFixed(2)} advance deduction',
+                  'Rs. ${salary.salary.toStringAsFixed(2)} salary − Rs. ${salary.advanceDeductionTotal.toStringAsFixed(2)} advance deduction',
                   style: const TextStyle(color: AppColors.onNeon, fontSize: 12),
                 ),
               ],
@@ -447,22 +447,22 @@ class _DepositCard extends StatelessWidget {
                 ),
               ),
               Text(
-                '${displayNetPayable < 0 ? '-' : ''}\$${displayNetPayable.abs().toStringAsFixed(2)}',
+                '${displayNetPayable < 0 ? '-' : ''}Rs. ${displayNetPayable.abs().toStringAsFixed(2)}',
                 style: TextStyle(color: finalColor, fontWeight: FontWeight.w800, fontSize: 17),
               ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
-            'Net Salary (without Deposit Deduction) (\$${salary.netSalaryPayable.toStringAsFixed(2)}) '
-            '- Deposit Balance (\$${deposit.balance.toStringAsFixed(2)}) '
-            '= ${finalNetPayable < 0 ? '-' : ''}\$${finalNetPayable.abs().toStringAsFixed(2)}.',
+            'Net Salary (without Deposit Deduction) (Rs. ${salary.netSalaryPayable.toStringAsFixed(2)}) '
+            '- Deposit Balance (Rs. ${deposit.balance.toStringAsFixed(2)}) '
+            '= ${finalNetPayable < 0 ? '-' : ''}Rs. ${finalNetPayable.abs().toStringAsFixed(2)}.',
             style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
           ),
           if (deposit.isSettledByLoan) ...[
             const SizedBox(height: 4),
             Text(
-              'Covered by an Arrears Loan of \$${deposit.arrearsLoanTotal.toStringAsFixed(2)} — '
+              'Covered by an Arrears Loan of Rs. ${deposit.arrearsLoanTotal.toStringAsFixed(2)} — '
               'settled, nothing further owed for this shortfall.',
               style: const TextStyle(color: AppColors.neon, fontSize: 11, fontWeight: FontWeight.w600),
             ),
@@ -495,7 +495,7 @@ class _ArrearsLoanTile extends StatelessWidget {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'Arrears Loan: \$${loan.amount.toStringAsFixed(2)} · ${loan.deductionTypeLabel}',
+                'Arrears Loan: Rs. ${loan.amount.toStringAsFixed(2)} · ${loan.deductionTypeLabel}',
                 style: const TextStyle(color: AppColors.neon, fontSize: 12, fontWeight: FontWeight.w600),
               ),
             ),
@@ -525,7 +525,7 @@ class _ArrearsLoanTile extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                '\$${loan.amount.toStringAsFixed(2)} total',
+                'Rs. ${loan.amount.toStringAsFixed(2)} total',
                 style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 16),
               ),
               const SizedBox(height: 14),
@@ -541,7 +541,7 @@ class _ArrearsLoanTile extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '\$${d.amount.toStringAsFixed(2)}',
+                        'Rs. ${d.amount.toStringAsFixed(2)}',
                         style: const TextStyle(
                           color: AppColors.textPrimary,
                           fontSize: 13,
@@ -593,7 +593,7 @@ class _BreakdownRow extends StatelessWidget {
           ),
         ),
         Text(
-          '$sign\$${value.abs().toStringAsFixed(2)}',
+          '${sign}Rs. ${value.abs().toStringAsFixed(2)}',
           style: TextStyle(
             color: color,
             fontSize: highlight ? 16 : (muted ? 12 : 13),
