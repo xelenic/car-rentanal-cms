@@ -44,6 +44,54 @@
             overflow-y: auto;
         }
 
+        /* Mobile app-style layout: below the lg breakpoint the sidebar
+           becomes an off-canvas drawer (hidden by default, slides in over
+           the content) instead of a permanent column, so the content area
+           gets the full screen width like a native app would. */
+        .sidebar-toggle-btn {
+            display: none;
+            border: 1px solid var(--border-color);
+            background: #fff;
+            border-radius: .5rem;
+            width: 34px;
+            height: 34px;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            color: var(--text-dark);
+            flex-shrink: 0;
+        }
+
+        .sidebar-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, .45);
+            z-index: 1040;
+            opacity: 0;
+            transition: opacity .2s ease;
+        }
+
+        @media (max-width: 991.98px) {
+            .sidebar-toggle-btn { display: inline-flex; }
+
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                z-index: 1045;
+                transform: translateX(-100%);
+                transition: transform .25s ease;
+                box-shadow: 0 0 30px rgba(15, 23, 42, .12);
+            }
+
+            .sidebar.show { transform: translateX(0); }
+
+            body.sidebar-open { overflow: hidden; }
+            body.sidebar-open .sidebar-backdrop { display: block; }
+            body.sidebar-open .sidebar-backdrop.show { opacity: 1; }
+        }
+
         .sidebar-brand {
             display: flex;
             align-items: center;
@@ -100,6 +148,27 @@
             background: var(--primary-light);
             color: var(--primary);
             font-weight: 600;
+        }
+
+        /* Collapsible sidebar groups (e.g. Vehicle > Vehicles/Repairs/Leasing) */
+        .nav-link-parent { cursor: pointer; }
+        .nav-link-chevron { font-size: .7rem !important; width: auto !important; margin-left: auto; transition: transform .15s ease; }
+        .nav-link-parent[aria-expanded="true"] .nav-link-chevron { transform: rotate(180deg); }
+        .nav-link-parent.active-group { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+
+        .sidebar-subnav { list-style: none; margin: 0; padding: .1rem 0 .25rem; }
+        .sidebar-subnav .nav-link { position: relative; padding-left: 2.35rem; font-size: .78rem; }
+        .sidebar-subnav .nav-link::before {
+            content: '';
+            position: absolute;
+            left: 1.55rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: currentColor;
+            opacity: .55;
         }
 
         .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -187,6 +256,13 @@
         }
 
         .content { padding: .85rem 1.25rem 1.5rem; }
+
+        @media (max-width: 575.98px) {
+            .topbar { padding: 0 .85rem; }
+            .topbar-search { display: none; }
+            .page-header { padding: .9rem .85rem 0; }
+            .content { padding: .7rem .85rem 1.25rem; }
+        }
 
         /* Cards */
         .card {
@@ -279,7 +355,8 @@
 </head>
 <body>
     <div class="app-shell">
-        <aside class="sidebar">
+        <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+        <aside class="sidebar" id="sidebar">
             <a href="{{ route('admin.dashboard') }}" class="sidebar-brand">
                 <span class="sidebar-brand-icon"><i class="bi bi-car-front-fill"></i></span>
                 {{ config('app.name', 'Admin') }}
@@ -294,79 +371,128 @@
                 </li>
             </ul>
 
-            @canany(['vehicles.view', 'drivers.view', 'locations.view', 'salary-advances.view'])
+            @canany(['vehicles.view', 'drivers.view', 'salary-advances.view'])
                 <div class="sidebar-section-label">Fleet</div>
                 <ul class="sidebar-nav">
                     @can('vehicles.view')
+                        @php
+                            $vehicleGroupActive = request()->routeIs(['admin.vehicles.*', 'admin.repairs.*', 'admin.leasing.*']);
+                        @endphp
                         <li>
-                            <a class="nav-link {{ request()->routeIs('admin.vehicles.*') ? 'active' : '' }}" href="{{ route('admin.vehicles.index') }}">
-                                <i class="bi bi-car-front"></i> Vehicles
+                            <a class="nav-link nav-link-parent {{ $vehicleGroupActive ? 'active-group' : '' }}" href="#sidebar-vehicle-group"
+                                data-bs-toggle="collapse" role="button" aria-expanded="{{ $vehicleGroupActive ? 'true' : 'false' }}" aria-controls="sidebar-vehicle-group">
+                                <i class="bi bi-car-front"></i> Vehicle
+                                <i class="bi bi-chevron-down nav-link-chevron"></i>
                             </a>
-                        </li>
-                        <li>
-                            <a class="nav-link {{ request()->routeIs('admin.repairs.*') ? 'active' : '' }}" href="{{ route('admin.repairs.index') }}">
-                                <i class="bi bi-tools"></i> Repairs
-                            </a>
-                        </li>
-                        <li>
-                            <a class="nav-link {{ request()->routeIs('admin.leasing.*') ? 'active' : '' }}" href="{{ route('admin.leasing.index') }}">
-                                <i class="bi bi-file-earmark-text"></i> Leasing
-                            </a>
+                            <div class="collapse {{ $vehicleGroupActive ? 'show' : '' }}" id="sidebar-vehicle-group">
+                                <ul class="sidebar-subnav">
+                                    <li>
+                                        <a class="nav-link {{ request()->routeIs('admin.vehicles.*') ? 'active' : '' }}" href="{{ route('admin.vehicles.index') }}">
+                                            <i class="bi bi-car-front"></i> Vehicles
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="nav-link {{ request()->routeIs('admin.repairs.*') ? 'active' : '' }}" href="{{ route('admin.repairs.index') }}">
+                                            <i class="bi bi-tools"></i> Repairs
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="nav-link {{ request()->routeIs('admin.leasing.*') ? 'active' : '' }}" href="{{ route('admin.leasing.index') }}">
+                                            <i class="bi bi-file-earmark-text"></i> Leasing
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
                         </li>
                     @endcan
-                    @can('drivers.view')
+                    @canany(['drivers.view', 'salary-advances.view'])
+                        @php
+                            $driversGroupActive = request()->routeIs(['admin.drivers.*', 'admin.salary-advances.*']);
+                            $pendingAdvanceCount = \App\Models\SalaryAdvanceRequest::where('status', 'pending')->count();
+                        @endphp
                         <li>
-                            <a class="nav-link {{ request()->routeIs('admin.drivers.*') ? 'active' : '' }}" href="{{ route('admin.drivers.index') }}">
+                            <a class="nav-link nav-link-parent {{ $driversGroupActive ? 'active-group' : '' }}" href="#sidebar-drivers-group"
+                                data-bs-toggle="collapse" role="button" aria-expanded="{{ $driversGroupActive ? 'true' : 'false' }}" aria-controls="sidebar-drivers-group">
                                 <i class="bi bi-person-badge"></i> Drivers
-                            </a>
-                        </li>
-                    @endcan
-                    @can('locations.view')
-                        <li>
-                            <a class="nav-link {{ request()->routeIs('admin.locations.*') ? 'active' : '' }}" href="{{ route('admin.locations.index') }}">
-                                <i class="bi bi-geo-alt"></i> Locations
-                            </a>
-                        </li>
-                    @endcan
-                    @can('salary-advances.view')
-                        <li>
-                            <a class="nav-link {{ request()->routeIs('admin.salary-advances.*') ? 'active' : '' }}" href="{{ route('admin.salary-advances.index') }}">
-                                <i class="bi bi-cash-coin"></i> Salary Advances
-                                @php
-                                    $pendingAdvanceCount = \App\Models\SalaryAdvanceRequest::where('status', 'pending')->count();
-                                @endphp
                                 @if ($pendingAdvanceCount > 0)
                                     <span class="badge rounded-pill bg-danger ms-1">{{ $pendingAdvanceCount }}</span>
                                 @endif
+                                <i class="bi bi-chevron-down nav-link-chevron"></i>
                             </a>
+                            <div class="collapse {{ $driversGroupActive ? 'show' : '' }}" id="sidebar-drivers-group">
+                                <ul class="sidebar-subnav">
+                                    @can('drivers.view')
+                                        <li>
+                                            <a class="nav-link {{ request()->routeIs('admin.drivers.*') ? 'active' : '' }}" href="{{ route('admin.drivers.index') }}">
+                                                <i class="bi bi-person-badge"></i> Drivers
+                                            </a>
+                                        </li>
+                                    @endcan
+                                    @can('salary-advances.view')
+                                        <li>
+                                            <a class="nav-link {{ request()->routeIs('admin.salary-advances.*') ? 'active' : '' }}" href="{{ route('admin.salary-advances.index') }}">
+                                                <i class="bi bi-cash-coin"></i> Salary Advances
+                                                @if ($pendingAdvanceCount > 0)
+                                                    <span class="badge rounded-pill bg-danger ms-1">{{ $pendingAdvanceCount }}</span>
+                                                @endif
+                                            </a>
+                                        </li>
+                                    @endcan
+                                </ul>
+                            </div>
                         </li>
-                    @endcan
+                    @endcanany
                 </ul>
             @endcanany
 
-            @canany(['packages.view', 'customers.view', 'hires.view'])
+            @canany(['hires.view', 'locations.view', 'packages.view', 'customers.view'])
                 <div class="sidebar-section-label">Offerings</div>
                 <ul class="sidebar-nav">
-                    @can('customers.view')
+                    @canany(['hires.view', 'locations.view', 'packages.view', 'customers.view'])
+                        @php
+                            $hiresGroupActive = request()->routeIs(['admin.hires.*', 'admin.locations.*', 'admin.packages.*', 'admin.customers.*']);
+                        @endphp
                         <li>
-                            <a class="nav-link {{ request()->routeIs('admin.customers.*') ? 'active' : '' }}" href="{{ route('admin.customers.index') }}">
-                                <i class="bi bi-person-lines-fill"></i> Customers
-                            </a>
-                        </li>
-                    @endcan
-                    @can('packages.view')
-                        <li>
-                            <a class="nav-link {{ request()->routeIs('admin.packages.*') ? 'active' : '' }}" href="{{ route('admin.packages.index') }}">
-                                <i class="bi bi-box-seam"></i> Packages
-                            </a>
-                        </li>
-                    @endcan
-                    @can('hires.view')
-                        <li>
-                            <a class="nav-link {{ request()->routeIs('admin.hires.*') ? 'active' : '' }}" href="{{ route('admin.hires.index') }}">
+                            <a class="nav-link nav-link-parent {{ $hiresGroupActive ? 'active-group' : '' }}" href="#sidebar-hires-group"
+                                data-bs-toggle="collapse" role="button" aria-expanded="{{ $hiresGroupActive ? 'true' : 'false' }}" aria-controls="sidebar-hires-group">
                                 <i class="bi bi-journal-check"></i> Hires
+                                <i class="bi bi-chevron-down nav-link-chevron"></i>
                             </a>
+                            <div class="collapse {{ $hiresGroupActive ? 'show' : '' }}" id="sidebar-hires-group">
+                                <ul class="sidebar-subnav">
+                                    @can('hires.view')
+                                        <li>
+                                            <a class="nav-link {{ request()->routeIs('admin.hires.*') ? 'active' : '' }}" href="{{ route('admin.hires.index') }}">
+                                                <i class="bi bi-journal-check"></i> Hires
+                                            </a>
+                                        </li>
+                                    @endcan
+                                    @can('locations.view')
+                                        <li>
+                                            <a class="nav-link {{ request()->routeIs('admin.locations.*') ? 'active' : '' }}" href="{{ route('admin.locations.index') }}">
+                                                <i class="bi bi-geo-alt"></i> Locations
+                                            </a>
+                                        </li>
+                                    @endcan
+                                    @can('packages.view')
+                                        <li>
+                                            <a class="nav-link {{ request()->routeIs('admin.packages.*') ? 'active' : '' }}" href="{{ route('admin.packages.index') }}">
+                                                <i class="bi bi-box-seam"></i> Packages
+                                            </a>
+                                        </li>
+                                    @endcan
+                                    @can('customers.view')
+                                        <li>
+                                            <a class="nav-link {{ request()->routeIs('admin.customers.*') ? 'active' : '' }}" href="{{ route('admin.customers.index') }}">
+                                                <i class="bi bi-person-lines-fill"></i> Customers
+                                            </a>
+                                        </li>
+                                    @endcan
+                                </ul>
+                            </div>
                         </li>
+                    @endcanany
+                    @can('hires.view')
                         <li>
                             <a class="nav-link {{ request()->routeIs('admin.expenses.*') ? 'active' : '' }}" href="{{ route('admin.expenses.index') }}">
                                 <i class="bi bi-receipt"></i> Expenses
@@ -379,36 +505,57 @@
             @canany(['users.view', 'roles.view', 'permissions.view'])
                 <div class="sidebar-section-label">Access Control</div>
                 <ul class="sidebar-nav">
-                    @can('users.view')
+                    @canany(['users.view', 'roles.view', 'permissions.view'])
+                        @php
+                            $usersGroupActive = request()->routeIs(['admin.users.*', 'admin.roles.*', 'admin.permissions.*']);
+                        @endphp
                         <li>
-                            <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">
+                            <a class="nav-link nav-link-parent {{ $usersGroupActive ? 'active-group' : '' }}" href="#sidebar-users-group"
+                                data-bs-toggle="collapse" role="button" aria-expanded="{{ $usersGroupActive ? 'true' : 'false' }}" aria-controls="sidebar-users-group">
                                 <i class="bi bi-people"></i> Users
+                                <i class="bi bi-chevron-down nav-link-chevron"></i>
                             </a>
+                            <div class="collapse {{ $usersGroupActive ? 'show' : '' }}" id="sidebar-users-group">
+                                <ul class="sidebar-subnav">
+                                    @can('users.view')
+                                        <li>
+                                            <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">
+                                                <i class="bi bi-people"></i> Users
+                                            </a>
+                                        </li>
+                                    @endcan
+                                    @can('roles.view')
+                                        <li>
+                                            <a class="nav-link {{ request()->routeIs('admin.roles.*') ? 'active' : '' }}" href="{{ route('admin.roles.index') }}">
+                                                <i class="bi bi-shield-check"></i> Roles
+                                            </a>
+                                        </li>
+                                    @endcan
+                                    @can('permissions.view')
+                                        <li>
+                                            <a class="nav-link {{ request()->routeIs('admin.permissions.*') ? 'active' : '' }}" href="{{ route('admin.permissions.index') }}">
+                                                <i class="bi bi-key"></i> Permissions
+                                            </a>
+                                        </li>
+                                    @endcan
+                                </ul>
+                            </div>
                         </li>
-                    @endcan
-                    @can('roles.view')
-                        <li>
-                            <a class="nav-link {{ request()->routeIs('admin.roles.*') ? 'active' : '' }}" href="{{ route('admin.roles.index') }}">
-                                <i class="bi bi-shield-check"></i> Roles
-                            </a>
-                        </li>
-                    @endcan
-                    @can('permissions.view')
-                        <li>
-                            <a class="nav-link {{ request()->routeIs('admin.permissions.*') ? 'active' : '' }}" href="{{ route('admin.permissions.index') }}">
-                                <i class="bi bi-key"></i> Permissions
-                            </a>
-                        </li>
-                    @endcan
+                    @endcanany
                 </ul>
             @endcanany
         </aside>
 
         <div class="main">
             <header class="topbar">
-                <div class="topbar-search">
-                    <i class="bi bi-search"></i>
-                    <input type="search" placeholder="Search..." disabled>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="sidebar-toggle-btn" id="sidebar-toggle" aria-label="Open menu">
+                        <i class="bi bi-list"></i>
+                    </button>
+                    <div class="topbar-search">
+                        <i class="bi bi-search"></i>
+                        <input type="search" placeholder="Search..." disabled>
+                    </div>
                 </div>
 
                 <div class="dropdown">
@@ -491,6 +638,43 @@
                 }
             }
         });
+    </script>
+    <script>
+        // Mobile off-canvas sidebar: hamburger opens it, the backdrop or
+        // picking a nav link closes it — a native-app-style drawer rather
+        // than a permanent column eating screen width on small devices.
+        (function () {
+            var sidebar = document.getElementById('sidebar');
+            var backdrop = document.getElementById('sidebar-backdrop');
+            var toggleBtn = document.getElementById('sidebar-toggle');
+            if (!sidebar || !backdrop || !toggleBtn) return;
+
+            function openSidebar() {
+                sidebar.classList.add('show');
+                backdrop.classList.add('show');
+                document.body.classList.add('sidebar-open');
+            }
+
+            function closeSidebar() {
+                sidebar.classList.remove('show');
+                backdrop.classList.remove('show');
+                document.body.classList.remove('sidebar-open');
+            }
+
+            toggleBtn.addEventListener('click', function () {
+                sidebar.classList.contains('show') ? closeSidebar() : openSidebar();
+            });
+            backdrop.addEventListener('click', closeSidebar);
+            // Excludes .nav-link-parent — that one just expands/collapses a
+            // group (e.g. Vehicle > Vehicles/Repairs/Leasing) rather than
+            // navigating anywhere, so it shouldn't close the drawer.
+            sidebar.querySelectorAll('.nav-link:not(.nav-link-parent)').forEach(function (link) {
+                link.addEventListener('click', closeSidebar);
+            });
+            window.addEventListener('resize', function () {
+                if (window.innerWidth >= 992) closeSidebar();
+            });
+        })();
     </script>
     @stack('scripts')
 </body>

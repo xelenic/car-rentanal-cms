@@ -200,12 +200,24 @@
                         No hire activity yet — the trend will fill in once there's data to chart.
                     </div>
                 @else
-                    <div style="position: relative; height: 340px;">
+                    <div class="dashboard-chart-container">
                         <canvas id="dashboardTrendChart"></canvas>
                     </div>
                 @endif
             </div>
         </div>
+
+        @push('styles')
+            <style>
+                .dashboard-chart-container { position: relative; height: 340px; }
+                /* The 5-series legend wraps onto more lines at narrow
+                   widths — give it the extra room so it doesn't crush the
+                   plot area down to a sliver. */
+                @media (max-width: 575.98px) {
+                    .dashboard-chart-container { height: 420px; }
+                }
+            </style>
+        @endpush
 
         @push('scripts')
             <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -229,6 +241,14 @@
                         maximumFractionDigits: decimals,
                     });
 
+                    // Below this width there isn't room for a 80px label
+                    // gutter without crushing the plot itself — the legend
+                    // and tooltip already carry the values, so the direct
+                    // end-of-line labels are dropped rather than overlapping
+                    // unreadably (still "selective" per the dataviz method,
+                    // just selecting none of them at this size).
+                    const isNarrow = canvas.parentElement.clientWidth < 480;
+
                     // Direct end-of-line labels — mandatory at this series count (4)
                     // per the dataviz method. Text stays in neutral ink (never the
                     // series color); the line itself, right beside the label,
@@ -236,6 +256,8 @@
                     const endLabelsPlugin = {
                         id: 'endLabels',
                         afterDatasetsDraw(chart) {
+                            if (isNarrow) return;
+
                             const { ctx } = chart;
                             const items = [];
 
@@ -287,7 +309,7 @@
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
-                            layout: { padding: { right: 80 } },
+                            layout: { padding: { right: isNarrow ? 12 : 80 } },
                             interaction: { mode: 'index', intersect: false },
                             plugins: {
                                 legend: {
@@ -296,11 +318,11 @@
                                     labels: {
                                         usePointStyle: true,
                                         pointStyle: 'line',
-                                        boxWidth: 24,
+                                        boxWidth: isNarrow ? 16 : 24,
                                         boxHeight: 2,
                                         color: '#52514e',
-                                        font: { size: 12, weight: '600' },
-                                        padding: 16,
+                                        font: { size: isNarrow ? 11 : 12, weight: '600' },
+                                        padding: isNarrow ? 10 : 16,
                                     },
                                 },
                                 tooltip: {
