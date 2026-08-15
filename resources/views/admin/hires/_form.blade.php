@@ -30,6 +30,26 @@
     }
     $dayLocationGroups = array_map(fn ($group) => array_values($group) ?: [''], $dayLocationGroups);
     $dayLocationGroups = $dayLocationGroups ?: [['']];
+
+    // Custom location names typed against a "+ Add new location" selection,
+    // only ever present on a validation-failure repost — a saved hire's
+    // locations are always already-resolved ids by the time it's re-edited.
+    $stayLocationNames = $isActive ? array_values(old('stay_location_names', [])) : [];
+    $dayLocationNameGroups = $isActive ? old('day_location_names', []) : [];
+
+    // Shared option list for every location <select> in this form — keeps
+    // the "+ Add new location" escape hatch consistent everywhere locations
+    // are picked (see resolveLocationId() in HireController).
+    $locationSelectOptions = function ($selectedId) use ($locations) {
+        $html = '<option value="">Select location</option>';
+        foreach ($locations as $loc) {
+            $selected = (string) $selectedId === (string) $loc->id ? ' selected' : '';
+            $html .= '<option value="'.$loc->id.'"'.$selected.'>'.e($loc->name).'</option>';
+        }
+        $html .= '<option value="new"'.($selectedId === 'new' ? ' selected' : '').'>+ Add new location</option>';
+
+        return $html;
+    };
 @endphp
 
 <input type="hidden" name="form_id" value="{{ $idPrefix }}">
@@ -48,30 +68,33 @@
 </div>
 
 <div data-hire-form="{{ $idPrefix }}">
+    @if ($formErrors->has('new_location_name'))
+        <div class="alert alert-danger py-2 px-3 small mb-2">{{ $formErrors->first('new_location_name') }}</div>
+    @endif
     {{-- Drop and Pickup --}}
     <div class="border rounded-3 p-2 mb-2" data-tour-section="drop_pickup">
         <div class="fw-semibold mb-2" style="font-size: .8rem;">Drop and Pickup Locations</div>
         <div class="row g-2">
             <div class="col-md-6">
                 <label class="form-label">From Location</label>
-                <select name="from_location_id" class="form-select @if ($formErrors->has('from_location_id')) is-invalid @endif">
-                    <option value="">Select location</option>
-                    @foreach ($locations as $loc)
-                        <option value="{{ $loc->id }}" {{ (string) $fromLocationId === (string) $loc->id ? 'selected' : '' }}>{{ $loc->name }}</option>
-                    @endforeach
+                <select name="from_location_id" class="form-select location-select @if ($formErrors->has('from_location_id')) is-invalid @endif">
+                    {!! $locationSelectOptions($fromLocationId) !!}
                 </select>
+                <input type="text" name="new_from_location_name" class="form-control form-control-sm new-location-input mt-2"
+                    value="{{ $isActive ? old('new_from_location_name') : '' }}" placeholder="Type the new location's name"
+                    style="display: {{ (string) $fromLocationId === 'new' ? 'block' : 'none' }};">
                 @if ($formErrors->has('from_location_id'))
                     <div class="invalid-feedback">{{ $formErrors->first('from_location_id') }}</div>
                 @endif
             </div>
             <div class="col-md-6">
                 <label class="form-label">To Location</label>
-                <select name="to_location_id" class="form-select @if ($formErrors->has('to_location_id')) is-invalid @endif">
-                    <option value="">Select location</option>
-                    @foreach ($locations as $loc)
-                        <option value="{{ $loc->id }}" {{ (string) $toLocationId === (string) $loc->id ? 'selected' : '' }}>{{ $loc->name }}</option>
-                    @endforeach
+                <select name="to_location_id" class="form-select location-select @if ($formErrors->has('to_location_id')) is-invalid @endif">
+                    {!! $locationSelectOptions($toLocationId) !!}
                 </select>
+                <input type="text" name="new_to_location_name" class="form-control form-control-sm new-location-input mt-2"
+                    value="{{ $isActive ? old('new_to_location_name') : '' }}" placeholder="Type the new location's name"
+                    style="display: {{ (string) $toLocationId === 'new' ? 'block' : 'none' }};">
                 @if ($formErrors->has('to_location_id'))
                     <div class="invalid-feedback">{{ $formErrors->first('to_location_id') }}</div>
                 @endif
@@ -96,14 +119,17 @@
                         </button>
                     </div>
                     <div class="stay-day-locations" data-day-key="{{ $dayIndex }}">
-                        @foreach ($dayLocationIds as $locId)
+                        @foreach ($dayLocationIds as $locIndex => $locId)
+                            @php $dayLocName = $dayLocationNameGroups[$dayIndex][$locIndex] ?? ''; @endphp
                             <div class="stay-location-row d-flex gap-2 align-items-center mb-2">
-                                <select name="day_locations[{{ $dayIndex }}][]" class="form-select form-select-sm">
-                                    <option value="">Select location</option>
-                                    @foreach ($locations as $loc)
-                                        <option value="{{ $loc->id }}" {{ (string) $locId === (string) $loc->id ? 'selected' : '' }}>{{ $loc->name }}</option>
-                                    @endforeach
-                                </select>
+                                <div class="flex-grow-1">
+                                    <select name="day_locations[{{ $dayIndex }}][]" class="form-select form-select-sm location-select">
+                                        {!! $locationSelectOptions($locId) !!}
+                                    </select>
+                                    <input type="text" name="day_location_names[{{ $dayIndex }}][]" class="form-control form-control-sm new-location-input mt-1"
+                                        value="{{ $dayLocName }}" placeholder="Type the new location's name"
+                                        style="display: {{ (string) $locId === 'new' ? 'block' : 'none' }};">
+                                </div>
                                 <button type="button" class="btn btn-sm btn-light border btn-icon text-danger remove-stay-location-row" {{ count($dayLocationIds) <= 1 ? 'style=display:none' : '' }}>
                                     <i class="bi bi-x-lg"></i>
                                 </button>
@@ -127,21 +153,21 @@
         <div class="row g-2 mb-2">
             <div class="col-md-6">
                 <label class="form-label">From</label>
-                <select name="from_location_id" class="form-select @if ($formErrors->has('from_location_id')) is-invalid @endif">
-                    <option value="">Select location</option>
-                    @foreach ($locations as $loc)
-                        <option value="{{ $loc->id }}" {{ (string) $fromLocationId === (string) $loc->id ? 'selected' : '' }}>{{ $loc->name }}</option>
-                    @endforeach
+                <select name="from_location_id" class="form-select location-select @if ($formErrors->has('from_location_id')) is-invalid @endif">
+                    {!! $locationSelectOptions($fromLocationId) !!}
                 </select>
+                <input type="text" name="new_from_location_name" class="form-control form-control-sm new-location-input mt-2"
+                    value="{{ $isActive ? old('new_from_location_name') : '' }}" placeholder="Type the new location's name"
+                    style="display: {{ (string) $fromLocationId === 'new' ? 'block' : 'none' }};">
             </div>
             <div class="col-md-6">
                 <label class="form-label">To</label>
-                <select name="to_location_id" class="form-select @if ($formErrors->has('to_location_id')) is-invalid @endif">
-                    <option value="">Select location</option>
-                    @foreach ($locations as $loc)
-                        <option value="{{ $loc->id }}" {{ (string) $toLocationId === (string) $loc->id ? 'selected' : '' }}>{{ $loc->name }}</option>
-                    @endforeach
+                <select name="to_location_id" class="form-select location-select @if ($formErrors->has('to_location_id')) is-invalid @endif">
+                    {!! $locationSelectOptions($toLocationId) !!}
                 </select>
+                <input type="text" name="new_to_location_name" class="form-control form-control-sm new-location-input mt-2"
+                    value="{{ $isActive ? old('new_to_location_name') : '' }}" placeholder="Type the new location's name"
+                    style="display: {{ (string) $toLocationId === 'new' ? 'block' : 'none' }};">
             </div>
         </div>
         <div class="fw-semibold mb-2" style="font-size: .8rem;">Stay Locations</div>
@@ -149,14 +175,16 @@
             <div class="text-danger small mb-2">{{ $formErrors->first('stay_locations') }}</div>
         @endif
         <div id="stay-rows-{{ $idPrefix }}-day">
-            @foreach ($stayLocationIds as $locId)
+            @foreach ($stayLocationIds as $locIndex => $locId)
                 <div class="stay-location-row d-flex gap-2 align-items-center mb-2">
-                    <select name="stay_locations[]" class="form-select form-select-sm">
-                        <option value="">Select location</option>
-                        @foreach ($locations as $loc)
-                            <option value="{{ $loc->id }}" {{ (string) $locId === (string) $loc->id ? 'selected' : '' }}>{{ $loc->name }}</option>
-                        @endforeach
-                    </select>
+                    <div class="flex-grow-1">
+                        <select name="stay_locations[]" class="form-select form-select-sm location-select">
+                            {!! $locationSelectOptions($locId) !!}
+                        </select>
+                        <input type="text" name="stay_location_names[]" class="form-control form-control-sm new-location-input mt-1"
+                            value="{{ $stayLocationNames[$locIndex] ?? '' }}" placeholder="Type the new location's name"
+                            style="display: {{ (string) $locId === 'new' ? 'block' : 'none' }};">
+                    </div>
                     <button type="button" class="btn btn-sm btn-light border btn-icon text-danger remove-stay-location-row" {{ count($stayLocationIds) <= 1 ? 'style=display:none' : '' }}>
                         <i class="bi bi-x-lg"></i>
                     </button>

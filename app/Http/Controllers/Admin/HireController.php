@@ -16,6 +16,7 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class HireController extends Controller implements HasMiddleware
@@ -64,6 +65,7 @@ class HireController extends Controller implements HasMiddleware
 
         $hire = DB::transaction(function () use ($data) {
             $data['customer_id'] = $this->resolveCustomerId($data);
+            $data = $this->resolveLocationFields($data);
             $hire = Hire::create($this->hireAttributes($data));
             $this->syncLocations($hire, $data);
 
@@ -79,6 +81,7 @@ class HireController extends Controller implements HasMiddleware
 
         DB::transaction(function () use ($data, $hire) {
             $data['customer_id'] = $this->resolveCustomerId($data);
+            $data = $this->resolveLocationFields($data);
             $hire->update($this->hireAttributes($data));
             $this->syncLocations($hire, $data);
         });
@@ -115,14 +118,31 @@ class HireController extends Controller implements HasMiddleware
             $rules['customer_id'] = ['required', 'integer', 'exists:customers,id'];
         }
 
+        // A location field's value is either an existing location's id, or
+        // the literal "new" — meaning the admin typed a custom location name
+        // that doesn't exist yet (see resolveLocationId(), which creates it).
+        $locationRule = function (string $attribute, mixed $value, \Closure $fail): void {
+            if ($value === 'new') {
+                return;
+            }
+
+            if (! is_numeric($value) || ! Location::whereKey($value)->exists()) {
+                $fail('The selected location is invalid.');
+            }
+        };
+
         if (in_array($tourType, ['drop_pickup', 'day_tour'], true)) {
-            $rules['from_location_id'] = ['required', 'integer', 'exists:locations,id'];
-            $rules['to_location_id'] = ['required', 'integer', 'exists:locations,id'];
+            $rules['from_location_id'] = ['required', $locationRule];
+            $rules['new_from_location_name'] = ['nullable', 'string', 'max:255'];
+            $rules['to_location_id'] = ['required', $locationRule];
+            $rules['new_to_location_name'] = ['nullable', 'string', 'max:255'];
         }
 
         if ($tourType === 'day_tour') {
             $rules['stay_locations'] = ['required', 'array', 'min:1'];
-            $rules['stay_locations.*'] = ['required', 'integer', 'exists:locations,id'];
+            $rules['stay_locations.*'] = ['required', $locationRule];
+            $rules['stay_location_names'] = ['nullable', 'array'];
+            $rules['stay_location_names.*'] = ['nullable', 'string', 'max:255'];
         }
 
         // Multi-day tours: one group of locations per day — a day can hold
@@ -130,7 +150,10 @@ class HireController extends Controller implements HasMiddleware
         if ($tourType === 'multi_day') {
             $rules['day_locations'] = ['required', 'array', 'min:1'];
             $rules['day_locations.*'] = ['required', 'array', 'min:1'];
-            $rules['day_locations.*.*'] = ['required', 'integer', 'exists:locations,id'];
+            $rules['day_locations.*.*'] = ['required', $locationRule];
+            $rules['day_location_names'] = ['nullable', 'array'];
+            $rules['day_location_names.*'] = ['nullable', 'array'];
+            $rules['day_location_names.*.*'] = ['nullable', 'string', 'max:255'];
         }
 
         if ($tourType === 'package') {
@@ -154,6 +177,77 @@ class HireController extends Controller implements HasMiddleware
         }
 
         return (int) $data['customer_id'];
+    }
+
+    /**
+     * Turns any "new" location selections into real Location records
+     * (created on the fly, by name only — coordinates can be pinned later
+     * from the Locations page) and swaps their ids back into $data so
+     * hireAttributes()/syncLocations() never need to know a location was
+     * just typed in rather than picked from the list.
+     */
+    private function resolveLocationFields(array $data): array
+    {
+        if (in_array($data['tour_type'], ['drop_pickup', 'day_tour'], true)) {
+            $data['from_location_id'] = $this->resolveLocationId(
+                $data['from_location_id'] ?? null,
+                $data['new_from_location_name'] ?? null,
+            );
+            $data['to_location_id'] = $this->resolveLocationId(
+                $data['to_location_id'] ?? null,
+                $data['new_to_location_name'] ?? null,
+            );
+        }
+
+        if ($data['tour_type'] === 'day_tour') {
+            $names = $data['stay_location_names'] ?? [];
+
+            $data['stay_locations'] = collect($data['stay_locations'] ?? [])
+                ->values()
+                ->map(fn ($value, $index) => $this->resolveLocationId($value, $names[$index] ?? null))
+                ->all();
+        }
+
+        if ($data['tour_type'] === 'multi_day') {
+            $nameGroups = $data['day_location_names'] ?? [];
+
+            $data['day_locations'] = collect($data['day_locations'] ?? [])
+                ->map(function ($dayLocationIds, $dayIndex) use ($nameGroups) {
+                    $dayNames = $nameGroups[$dayIndex] ?? [];
+
+                    return collect($dayLocationIds)
+                        ->values()
+                        ->map(fn ($value, $index) => $this->resolveLocationId($value, $dayNames[$index] ?? null))
+                        ->all();
+                })
+                ->all();
+        }
+
+        return $data;
+    }
+
+    /**
+     * $value is either an existing location's id or the literal "new". For
+     * "new", $name is what the admin typed — reuses an existing location of
+     * that exact name if one exists, otherwise creates it (name only; no
+     * coordinates yet) so it's immediately available in the Locations list
+     * for everything else, exactly as the user asked.
+     */
+    private function resolveLocationId(mixed $value, ?string $name): ?int
+    {
+        if ($value === 'new') {
+            $name = trim((string) $name);
+
+            if ($name === '') {
+                throw ValidationException::withMessages([
+                    'new_location_name' => ['Enter a name for the new location.'],
+                ]);
+            }
+
+            return Location::firstOrCreate(['name' => $name])->id;
+        }
+
+        return $value !== null && $value !== '' ? (int) $value : null;
     }
 
     private function hireAttributes(array $data): array

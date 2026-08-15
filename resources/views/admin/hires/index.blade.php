@@ -298,7 +298,7 @@
         function buildLocationSelect(name) {
             const select = document.createElement('select');
             select.name = name;
-            select.className = 'form-select form-select-sm';
+            select.className = 'form-select form-select-sm location-select';
 
             const emptyOpt = document.createElement('option');
             emptyOpt.value = '';
@@ -312,7 +312,35 @@
                 select.appendChild(opt);
             });
 
+            const newOpt = document.createElement('option');
+            newOpt.value = 'new';
+            newOpt.textContent = '+ Add new location';
+            select.appendChild(newOpt);
+
             return select;
+        }
+
+        // A location <select> plus its "type the new location's name"
+        // companion input, hidden until "+ Add new location" is chosen —
+        // wraps buildLocationSelect() so every dynamically-added location
+        // row gets the same custom-location escape hatch as the ones
+        // rendered server-side.
+        function buildLocationField(name) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flex-grow-1';
+
+            const select = buildLocationSelect(name);
+            wrapper.appendChild(select);
+
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.name = name.replace('_locations', '_location_names');
+            nameInput.className = 'form-control form-control-sm new-location-input mt-1';
+            nameInput.placeholder = "Type the new location's name";
+            nameInput.style.display = 'none';
+            wrapper.appendChild(nameInput);
+
+            return wrapper;
         }
 
         function buildRemoveButton(className) {
@@ -368,12 +396,28 @@
             });
         }
 
+        // A location <select> set to "+ Add new location" reveals its
+        // companion name input right next to it; anything else hides it.
+        function updateLocationNewField(select) {
+            const wrapper = select.parentElement;
+            const input = wrapper ? wrapper.querySelector('.new-location-input') : select.nextElementSibling;
+            if (!input) return;
+
+            const isNew = select.value === 'new';
+            input.style.display = isNew ? 'block' : 'none';
+            input.required = isNew;
+            if (!isNew) input.value = '';
+        }
+
         document.addEventListener('change', function (e) {
             if (e.target.matches('.hire-tour-type')) {
                 updateHireSections(e.target.dataset.target);
             }
             if (e.target.matches('.hire-customer-select')) {
                 updateCustomerFields(e.target.dataset.target);
+            }
+            if (e.target.matches('.location-select')) {
+                updateLocationNewField(e.target);
             }
         });
 
@@ -390,7 +434,7 @@
                 const container = document.getElementById(addBtn.dataset.container);
                 const row = document.createElement('div');
                 row.className = 'stay-location-row d-flex gap-2 align-items-center mb-2';
-                row.appendChild(buildLocationSelect('stay_locations[]'));
+                row.appendChild(buildLocationField('stay_locations[]'));
                 row.appendChild(buildRemoveButton('remove-stay-location-row'));
                 container.appendChild(row);
                 updateStayRemoveVisibility(container);
@@ -406,7 +450,7 @@
 
                 const row = document.createElement('div');
                 row.className = 'stay-location-row d-flex gap-2 align-items-center mb-2';
-                row.appendChild(buildLocationSelect(`day_locations[${dayKey}][]`));
+                row.appendChild(buildLocationField(`day_locations[${dayKey}][]`));
                 row.appendChild(buildRemoveButton('remove-stay-location-row'));
                 dayLocationsEl.appendChild(row);
                 updateDayLocationRemoveVisibility(dayLocationsEl);
@@ -438,7 +482,7 @@
                 dayLocationsEl.dataset.dayKey = dayKey;
                 const row = document.createElement('div');
                 row.className = 'stay-location-row d-flex gap-2 align-items-center mb-2';
-                row.appendChild(buildLocationSelect(`day_locations[${dayKey}][]`));
+                row.appendChild(buildLocationField(`day_locations[${dayKey}][]`));
                 const rowRemoveBtn = buildRemoveButton('remove-stay-location-row');
                 rowRemoveBtn.style.display = 'none';
                 row.appendChild(rowRemoveBtn);

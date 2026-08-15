@@ -58,7 +58,13 @@
                             <td class="text-muted" style="max-width: 260px;">
                                 <span class="d-inline-block text-truncate" style="max-width: 260px;">{{ $location->description ?: '—' }}</span>
                             </td>
-                            <td class="text-muted small">{{ number_format($location->latitude, 5) }}, {{ number_format($location->longitude, 5) }}</td>
+                            <td class="text-muted small">
+                                @if ($location->latitude !== null && $location->longitude !== null)
+                                    {{ number_format($location->latitude, 5) }}, {{ number_format($location->longitude, 5) }}
+                                @else
+                                    <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis">Not pinned yet</span>
+                                @endif
+                            </td>
                             <td class="text-end">
                                 <div class="d-inline-flex gap-1">
                                     <button type="button" class="btn btn-sm btn-light border btn-icon" data-bs-toggle="modal" data-bs-target="#modal-view-{{ $location->id }}">
@@ -118,8 +124,18 @@
             @if ($location->description)
                 <p class="text-muted small mb-2">{{ $location->description }}</p>
             @endif
-            <div id="map-view-{{ $location->id }}" class="location-map-view"></div>
-            <div class="form-text mt-2">{{ number_format($location->latitude, 6) }}, {{ number_format($location->longitude, 6) }}</div>
+            @if ($location->latitude !== null && $location->longitude !== null)
+                <div id="map-view-{{ $location->id }}" class="location-map-view"></div>
+                <div class="form-text mt-2">{{ number_format($location->latitude, 6) }}, {{ number_format($location->longitude, 6) }}</div>
+            @else
+                <div class="text-muted small border rounded-3 p-3 text-center">
+                    <i class="bi bi-geo-alt fs-4 d-block mb-1"></i>
+                    This location hasn't been pinned on the map yet.
+                    @can('locations.update')
+                        Edit it to set its coordinates.
+                    @endcan
+                </div>
+            @endif
         </x-modal>
 
         @can('locations.update')
@@ -212,12 +228,14 @@
         });
 
         @foreach ($locations as $location)
-            document.getElementById('modal-view-{{ $location->id }}')?.addEventListener('shown.bs.modal', function () {
-                initLocationViewMap('view-{{ $location->id }}', {{ $location->latitude }}, {{ $location->longitude }}, @json($location->name));
-            });
+            @if ($location->latitude !== null && $location->longitude !== null)
+                document.getElementById('modal-view-{{ $location->id }}')?.addEventListener('shown.bs.modal', function () {
+                    initLocationViewMap('view-{{ $location->id }}', {{ $location->latitude }}, {{ $location->longitude }}, @json($location->name));
+                });
+            @endif
 
             document.getElementById('modal-edit-{{ $location->id }}')?.addEventListener('shown.bs.modal', function () {
-                initLocationPickerMap('edit-{{ $location->id }}', {{ $location->latitude }}, {{ $location->longitude }});
+                initLocationPickerMap('edit-{{ $location->id }}', {{ $location->latitude === null ? 'null' : $location->latitude }}, {{ $location->longitude === null ? 'null' : $location->longitude }});
             });
         @endforeach
     </script>
