@@ -16,6 +16,10 @@
     <style>
         [data-tour-section] { display: none; }
         .hire-track-map { height: 320px; border-radius: .6rem; border: 1px solid var(--border-color); overflow: hidden; }
+        /* Google's suggestion dropdown defaults to z-index 1000 — below
+           Bootstrap's modal (1055), so it would render behind the New/Edit
+           Hire modal and be unclickable there. */
+        .pac-container { z-index: 1080; }
     </style>
 @endpush
 
@@ -268,9 +272,28 @@
 @endsection
 
 @push('scripts')
-    <script>
-        window.__hireLocationOptions = @json($locations->map(fn ($l) => ['id' => $l->id, 'name' => $l->name])->values());
+    @if ($googleMapsApiKey)
+        <script>
+            // Set by initLocationAutocomplete() (the Google Maps API's load
+            // callback) once google.maps.places is actually available —
+            // attachPlaceAutocomplete() no-ops before that. Every hire row's
+            // edit modal renders its own full set of location inputs, so
+            // instances are only bound lazily, on focus (see the 'focusin'
+            // listener below) — not eagerly for all of them on page load,
+            // which would mean dozens of idle Autocomplete instances across
+            // modals the admin hasn't even opened.
+            window.__placesReady = false;
 
+            function initLocationAutocomplete() {
+                window.__placesReady = true;
+                if (document.activeElement?.matches('.location-place-input')) {
+                    attachPlaceAutocomplete(document.activeElement);
+                }
+            }
+        </script>
+        <script src="https://maps.googleapis.com/maps/api/js?key={{ $googleMapsApiKey }}&libraries=places&callback=initLocationAutocomplete&loading=async" async defer></script>
+    @endif
+    <script>
         function updateHireSections(prefix) {
             const select = document.getElementById(prefix + '-tour_type');
             if (!select) return;
@@ -295,52 +318,73 @@
             });
         }
 
-        function buildLocationSelect(name) {
-            const select = document.createElement('select');
-            select.name = name;
-            select.className = 'form-select form-select-sm location-select';
-
-            const emptyOpt = document.createElement('option');
-            emptyOpt.value = '';
-            emptyOpt.textContent = 'Select location';
-            select.appendChild(emptyOpt);
-
-            window.__hireLocationOptions.forEach((loc) => {
-                const opt = document.createElement('option');
-                opt.value = loc.id;
-                opt.textContent = loc.name;
-                select.appendChild(opt);
-            });
-
-            const newOpt = document.createElement('option');
-            newOpt.value = 'new';
-            newOpt.textContent = '+ Add new location';
-            select.appendChild(newOpt);
-
-            return select;
-        }
-
-        // A location <select> plus its "type the new location's name"
-        // companion input, hidden until "+ Add new location" is chosen —
-        // wraps buildLocationSelect() so every dynamically-added location
-        // row gets the same custom-location escape hatch as the ones
-        // rendered server-side.
+        // A location search field (Google Places suggestions) plus its
+        // hidden lat/lng companions — built for every dynamically-added
+        // stay/day location row, matching the ones rendered server-side.
+        // $name is the text input's own name (e.g. "stay_location_names[]");
+        // the lat/lng inputs derive theirs from it.
         function buildLocationField(name) {
             const wrapper = document.createElement('div');
             wrapper.className = 'flex-grow-1';
 
-            const select = buildLocationSelect(name);
-            wrapper.appendChild(select);
-
             const nameInput = document.createElement('input');
             nameInput.type = 'text';
-            nameInput.name = name.replace('_locations', '_location_names');
-            nameInput.className = 'form-control form-control-sm new-location-input mt-1';
-            nameInput.placeholder = "Type the new location's name";
-            nameInput.style.display = 'none';
+            nameInput.name = name;
+            nameInput.className = 'form-control form-control-sm location-place-input';
+            nameInput.placeholder = 'Search for a location...';
+            nameInput.autocomplete = 'off';
             wrapper.appendChild(nameInput);
 
+            const latInput = document.createElement('input');
+            latInput.type = 'hidden';
+            latInput.name = name.replace('_names', '_lats');
+            latInput.className = 'location-lat-input';
+            wrapper.appendChild(latInput);
+
+            const lngInput = document.createElement('input');
+            lngInput.type = 'hidden';
+            lngInput.name = name.replace('_names', '_lngs');
+            lngInput.className = 'location-lng-input';
+            wrapper.appendChild(lngInput);
+
+            // Not attached here — attachPlaceAutocomplete() binds lazily via
+            // the 'focusin' listener below, the first time this field is
+            // actually focused.
+
             return wrapper;
+        }
+
+        // Wires Google Places suggestions onto a "type the new location's
+        // name" input — picking a suggestion fills the name and captures its
+        // coordinates into the sibling hidden lat/lng inputs (see
+        // resolveLocationId() in HireController, which saves them on
+        // create). No-ops gracefully if the Maps API hasn't loaded (no key
+        // configured, still loading, or blocked) — the input still works as
+        // a plain free-text field either way.
+        function attachPlaceAutocomplete(input) {
+            if (!window.google?.maps?.places || input.dataset.placesBound) return;
+            input.dataset.placesBound = '1';
+
+            const autocomplete = new google.maps.places.Autocomplete(input, {
+                fields: ['name', 'formatted_address', 'geometry'],
+            });
+
+            autocomplete.addListener('place_changed', function () {
+                const place = autocomplete.getPlace();
+                const wrapper = input.parentElement;
+                const latInput = wrapper?.querySelector('.location-lat-input');
+                const lngInput = wrapper?.querySelector('.location-lng-input');
+
+                if (!place || !place.geometry || !place.geometry.location) {
+                    if (latInput) latInput.value = '';
+                    if (lngInput) lngInput.value = '';
+                    return;
+                }
+
+                input.value = place.name || place.formatted_address || input.value;
+                if (latInput) latInput.value = place.geometry.location.lat();
+                if (lngInput) lngInput.value = place.geometry.location.lng();
+            });
         }
 
         function buildRemoveButton(className) {
@@ -396,19 +440,6 @@
             });
         }
 
-        // A location <select> set to "+ Add new location" reveals its
-        // companion name input right next to it; anything else hides it.
-        function updateLocationNewField(select) {
-            const wrapper = select.parentElement;
-            const input = wrapper ? wrapper.querySelector('.new-location-input') : select.nextElementSibling;
-            if (!input) return;
-
-            const isNew = select.value === 'new';
-            input.style.display = isNew ? 'block' : 'none';
-            input.required = isNew;
-            if (!isNew) input.value = '';
-        }
-
         document.addEventListener('change', function (e) {
             if (e.target.matches('.hire-tour-type')) {
                 updateHireSections(e.target.dataset.target);
@@ -416,8 +447,14 @@
             if (e.target.matches('.hire-customer-select')) {
                 updateCustomerFields(e.target.dataset.target);
             }
-            if (e.target.matches('.location-select')) {
-                updateLocationNewField(e.target);
+        });
+
+        // Lazily binds Google Places suggestions to a location field the
+        // first time it's actually focused, rather than to every location
+        // field across every hire row's edit modal on page load.
+        document.addEventListener('focusin', function (e) {
+            if (e.target.matches?.('.location-place-input')) {
+                attachPlaceAutocomplete(e.target);
             }
         });
 
@@ -434,7 +471,7 @@
                 const container = document.getElementById(addBtn.dataset.container);
                 const row = document.createElement('div');
                 row.className = 'stay-location-row d-flex gap-2 align-items-center mb-2';
-                row.appendChild(buildLocationField('stay_locations[]'));
+                row.appendChild(buildLocationField('stay_location_names[]'));
                 row.appendChild(buildRemoveButton('remove-stay-location-row'));
                 container.appendChild(row);
                 updateStayRemoveVisibility(container);
@@ -450,7 +487,7 @@
 
                 const row = document.createElement('div');
                 row.className = 'stay-location-row d-flex gap-2 align-items-center mb-2';
-                row.appendChild(buildLocationField(`day_locations[${dayKey}][]`));
+                row.appendChild(buildLocationField(`day_location_names[${dayKey}][]`));
                 row.appendChild(buildRemoveButton('remove-stay-location-row'));
                 dayLocationsEl.appendChild(row);
                 updateDayLocationRemoveVisibility(dayLocationsEl);
@@ -482,7 +519,7 @@
                 dayLocationsEl.dataset.dayKey = dayKey;
                 const row = document.createElement('div');
                 row.className = 'stay-location-row d-flex gap-2 align-items-center mb-2';
-                row.appendChild(buildLocationField(`day_locations[${dayKey}][]`));
+                row.appendChild(buildLocationField(`day_location_names[${dayKey}][]`));
                 const rowRemoveBtn = buildRemoveButton('remove-stay-location-row');
                 rowRemoveBtn.style.display = 'none';
                 row.appendChild(rowRemoveBtn);
