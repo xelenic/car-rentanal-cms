@@ -42,8 +42,7 @@ class DriverSalaryCalculator
     private static function calculateForQuery(Builder $query, int $year, int $month, ?int $driverId): array
     {
         $hires = $query
-            ->whereYear('created_at', $year)
-            ->whereMonth('created_at', $month)
+            ->inMonth($year, $month)
             ->get(['id', 'our_hire_value', 'hire_full_value', 'payment_type']);
 
         $ourHireValueTotal = round((float) $hires->sum('our_hire_value'), 2);

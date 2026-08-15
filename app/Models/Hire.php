@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 #[Fillable([
@@ -60,6 +62,54 @@ class Hire extends Model
     public function getStatusLabelAttribute(): string
     {
         return self::STATUSES[$this->status] ?? $this->status;
+    }
+
+    /**
+     * A hire scheduled for a future date/time that hasn't started yet —
+     * still "pending" and its start_time (the general "when is this hire
+     * scheduled" field for every tour type, not just packages) is ahead of
+     * now.
+     */
+    public function getIsUpcomingAttribute(): bool
+    {
+        return $this->status === 'pending' && $this->start_time !== null && $this->start_time->isFuture();
+    }
+
+    /**
+     * The month a hire actually belongs to for every monthly report/salary
+     * calculation: its scheduled start_time when one was set, otherwise
+     * when it was recorded (created_at) — a hire scheduled for next month
+     * must not count toward this month's numbers just because it happened
+     * to be booked today. Used by scopeInMonth() and by every "available
+     * year/month" period picker (admin panel and driver app alike).
+     */
+    public function getEffectiveMonthDateAttribute(): ?Carbon
+    {
+        return $this->start_time ?? $this->created_at;
+    }
+
+    /**
+     * Scopes hires to the given calendar year (and, optionally, month) by
+     * their effective month (see getEffectiveMonthDateAttribute()) rather
+     * than raw created_at, so a hire scheduled ahead of time is only
+     * counted in the year/month it's actually scheduled for. $month may be
+     * omitted to filter by year alone.
+     */
+    public function scopeInMonth(Builder $query, int $year, ?int $month = null): Builder
+    {
+        return $query->where(function (Builder $query) use ($year, $month) {
+            $query->where(function (Builder $query) use ($year, $month) {
+                $query->whereNotNull('start_time')->whereYear('start_time', $year);
+                if ($month !== null) {
+                    $query->whereMonth('start_time', $month);
+                }
+            })->orWhere(function (Builder $query) use ($year, $month) {
+                $query->whereNull('start_time')->whereYear('created_at', $year);
+                if ($month !== null) {
+                    $query->whereMonth('created_at', $month);
+                }
+            });
+        });
     }
 
     public function getIsCompletedAttribute(): bool

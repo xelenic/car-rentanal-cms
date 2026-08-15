@@ -38,7 +38,9 @@ class VehicleController extends Controller implements HasMiddleware
             ->paginate(10)
             ->withQueryString();
 
-        $periods = MonthlyPeriods::fromTimestamps(Hire::query()->pluck('created_at'));
+        $periods = MonthlyPeriods::fromTimestamps(
+            Hire::query()->get(['start_time', 'created_at'])->pluck('effective_month_date')
+        );
         $availableYears = $periods['years'];
         $monthsByYear = $periods['months_by_year'];
 
@@ -54,8 +56,7 @@ class VehicleController extends Controller implements HasMiddleware
 
         $hireTotalsByVehicle = Hire::query()
             ->whereIn('vehicle_id', $vehicleIds)
-            ->whereYear('created_at', $selectedYear)
-            ->whereMonth('created_at', $selectedMonth)
+            ->inMonth($selectedYear, $selectedMonth)
             ->get(['vehicle_id', 'hire_full_value', 'our_hire_value'])
             ->groupBy('vehicle_id')
             ->map(fn ($group) => [

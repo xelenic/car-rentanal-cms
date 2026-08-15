@@ -20,8 +20,13 @@ class DriverHireController extends Controller
 
         $hires = $driver->hires()
             ->with(['package', 'vehicle', 'locations.location', 'trackingPoints', 'expenses'])
-            ->when($request->filled('year'), fn ($query) => $query->whereYear('created_at', $request->integer('year')))
-            ->when($request->filled('month'), fn ($query) => $query->whereMonth('created_at', $request->integer('month')))
+            ->when(
+                $request->filled('year'),
+                fn ($query) => $query->inMonth(
+                    $request->integer('year'),
+                    $request->filled('month') ? $request->integer('month') : null,
+                ),
+            )
             ->latest()
             ->paginate(50);
 
@@ -34,7 +39,9 @@ class DriverHireController extends Controller
 
         abort_if(! $driver, 403, 'No driver profile is linked to this account.');
 
-        $periods = MonthlyPeriods::fromTimestamps($driver->hires()->pluck('created_at'));
+        $periods = MonthlyPeriods::fromTimestamps(
+            $driver->hires()->get(['start_time', 'created_at'])->pluck('effective_month_date')
+        );
 
         return response()->json([
             'years' => $periods['years'],

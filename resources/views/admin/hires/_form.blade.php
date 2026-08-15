@@ -4,6 +4,7 @@
 
     $tourType = $isActive ? old('tour_type') : $hire?->tour_type;
     $customerId = $isActive ? old('customer_id') : $hire?->customer_id;
+    $scheduledAt = $isActive ? old('start_time') : $hire?->start_time?->format('Y-m-d\TH:i');
 
     $fromLocationName = $isActive ? old('from_location_name') : $hire?->fromLocation?->location?->name;
     $fromLocationLat = $isActive ? old('from_location_lat') : $hire?->fromLocation?->location?->latitude;
@@ -206,6 +207,21 @@
                     value="{{ $isActive ? old('end_time') : $hire?->end_time?->format('Y-m-d\TH:i') }}">
                 @if ($formErrors->has('end_time'))
                     <div class="invalid-feedback">{{ $formErrors->first('end_time') }}</div>
+                @endif
+            </div>
+        </div>
+    </div>
+
+    {{-- Every other tour type — schedule it ahead of time, optionally. --}}
+    <div class="border rounded-3 p-2 mb-2" data-tour-section-except="package">
+        <div class="fw-semibold mb-2" style="font-size: .8rem;">Schedule</div>
+        <div class="text-muted mb-2" style="font-size: .72rem;">Optional — set this to have the hire show up under Upcoming Hires ahead of time.</div>
+        <div class="row g-2">
+            <div class="col-md-6">
+                <label class="form-label">Scheduled Date &amp; Time</label>
+                <input type="datetime-local" name="start_time" class="form-control @if ($formErrors->has('start_time')) is-invalid @endif" value="{{ $scheduledAt }}">
+                @if ($formErrors->has('start_time'))
+                    <div class="invalid-feedback">{{ $formErrors->first('start_time') }}</div>
                 @endif
             </div>
         </div>

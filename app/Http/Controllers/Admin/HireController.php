@@ -32,6 +32,12 @@ class HireController extends Controller implements HasMiddleware
 
     public function index(Request $request): View
     {
+        $showUpcoming = $request->boolean('upcoming');
+
+        $upcomingScope = fn ($query) => $query->where('status', 'pending')
+            ->whereNotNull('start_time')
+            ->where('start_time', '>=', now());
+
         $hires = Hire::query()
             ->with([
                 'package', 'customer', 'driver', 'vehicle', 'trackingPoints', 'expenses',
@@ -46,13 +52,17 @@ class HireController extends Controller implements HasMiddleware
                         });
                 });
             })
-            ->latest()
+            ->when($showUpcoming, $upcomingScope)
+            // Upcoming hires read soonest-first; otherwise newest-created-first, as before.
+            ->when($showUpcoming, fn ($query) => $query->orderBy('start_time'), fn ($query) => $query->latest())
             ->paginate(10)
             ->withQueryString();
 
         return view('admin.hires.index', [
             'hires' => $hires,
             'search' => $request->string('search')->toString(),
+            'showUpcoming' => $showUpcoming,
+            'upcomingCount' => Hire::query()->tap($upcomingScope)->count(),
             'packages' => Package::orderBy('name')->get(),
             'customers' => Customer::orderBy('name')->get(),
             'drivers' => Driver::orderBy('name')->get(),
@@ -164,6 +174,10 @@ class HireController extends Controller implements HasMiddleware
             $rules['package_id'] = ['required', 'integer', 'exists:packages,id'];
             $rules['start_time'] = ['required', 'date'];
             $rules['end_time'] = ['required', 'date', 'after:start_time'];
+        } else {
+            // Every other tour type can optionally be scheduled ahead of
+            // time too — just a single date/time, no range.
+            $rules['start_time'] = ['nullable', 'date'];
         }
 
         return $request->validate($rules);
@@ -256,7 +270,11 @@ class HireController extends Controller implements HasMiddleware
         return [
             'tour_type' => $data['tour_type'],
             'package_id' => $isPackage ? $data['package_id'] : null,
-            'start_time' => $isPackage ? $data['start_time'] : null,
+            // Packages carry their own required start/end range; every
+            // other tour type can optionally carry just a scheduled
+            // start_time (see the "Scheduled Date & Time" field), which is
+            // what powers the Upcoming Hires filter.
+            'start_time' => $isPackage ? $data['start_time'] : ($data['start_time'] ?? null),
             'end_time' => $isPackage ? $data['end_time'] : null,
             'hire_full_value' => $data['hire_full_value'],
             'our_hire_value' => $data['our_hire_value'],

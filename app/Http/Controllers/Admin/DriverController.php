@@ -48,7 +48,9 @@ class DriverController extends Controller implements HasMiddleware
             ->paginate(10)
             ->withQueryString();
 
-        $periods = MonthlyPeriods::fromTimestamps(Hire::query()->pluck('created_at'));
+        $periods = MonthlyPeriods::fromTimestamps(
+            Hire::query()->get(['start_time', 'created_at'])->pluck('effective_month_date')
+        );
         $availableYears = $periods['years'];
         $monthsByYear = $periods['months_by_year'];
 
@@ -83,8 +85,7 @@ class DriverController extends Controller implements HasMiddleware
 
         $hiresByDriver = Hire::query()
             ->whereIn('driver_id', $driverIds)
-            ->whereYear('created_at', $selectedYear)
-            ->whereMonth('created_at', $selectedMonth)
+            ->inMonth($selectedYear, $selectedMonth)
             ->with(['fromLocation', 'toLocation'])
             ->latest()
             ->get()

@@ -20,18 +20,45 @@
            Bootstrap's modal (1055), so it would render behind the New/Edit
            Hire modal and be unclickable there. */
         .pac-container { z-index: 1080; }
+        .upcoming-hires-card { cursor: pointer; transition: box-shadow .15s ease, transform .15s ease; }
+        .upcoming-hires-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); transform: translateY(-1px); }
+        .upcoming-hires-card.active { border-color: var(--primary); background: var(--primary-light); }
     </style>
 @endpush
 
 @section('content')
+    <a href="{{ $showUpcoming ? route('admin.hires.index', request()->except(['upcoming', 'page'])) : route('admin.hires.index', array_merge(request()->except('page'), ['upcoming' => 1])) }}"
+        class="card border-0 upcoming-hires-card mb-2 {{ $showUpcoming ? 'active' : '' }}" style="max-width: 320px;">
+        <div class="card-body d-flex align-items-center gap-2">
+            <div class="stat-icon" style="background: #fff7ed; color: #ea580c;">
+                <i class="bi bi-calendar-event"></i>
+            </div>
+            <div class="flex-grow-1">
+                <div class="text-muted small">Upcoming Hires</div>
+                <div class="fs-5 fw-bold">{{ $upcomingCount }}</div>
+            </div>
+            @if ($showUpcoming)
+                <span class="badge rounded-pill bg-primary">Showing <i class="bi bi-x-lg ms-1"></i></span>
+            @endif
+        </div>
+    </a>
+
     <div class="card border-0">
-        <div class="card-header">
+        <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
             <form method="GET" style="max-width: 280px;">
+                @if ($showUpcoming)
+                    <input type="hidden" name="upcoming" value="1">
+                @endif
                 <div class="position-relative">
                     <i class="bi bi-search position-absolute" style="left: .65rem; top: 50%; transform: translateY(-50%); color: #a3aab8; font-size: .8rem;"></i>
                     <input type="search" name="search" value="{{ $search }}" class="form-control" style="padding-left: 1.85rem;" placeholder="Search by customer or description...">
                 </div>
             </form>
+            @if ($showUpcoming)
+                <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">
+                    <i class="bi bi-calendar-event me-1"></i> Upcoming only — soonest first
+                </span>
+            @endif
         </div>
 
         <div class="table-responsive">
@@ -40,6 +67,7 @@
                     <tr>
                         <th>Hire</th>
                         <th>Status</th>
+                        <th>Scheduled</th>
                         <th>Tour</th>
                         <th>Driver / Vehicle</th>
                         <th>Value</th>
@@ -74,6 +102,17 @@
                                     };
                                 @endphp
                                 <span class="badge rounded-pill bg-{{ $statusColor }}-subtle text-{{ $statusColor }}-emphasis">{{ $hire->status_label }}</span>
+                            </td>
+                            <td class="text-muted" style="font-size: .78rem;">
+                                @if ($hire->start_time)
+                                    <div>{{ $hire->start_time->format('M j, Y') }}</div>
+                                    <div style="font-size: .72rem;">{{ $hire->start_time->format('g:i A') }}</div>
+                                    @if ($hire->is_upcoming)
+                                        <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis mt-1">Upcoming</span>
+                                    @endif
+                                @else
+                                    <span class="text-muted small">Not scheduled</span>
+                                @endif
                             </td>
                             <td>
                                 <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis mb-1">{{ \App\Models\Hire::TOUR_TYPES[$hire->tour_type] ?? $hire->tour_type }}</span>
@@ -146,9 +185,13 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="text-center text-muted py-4">
+                            <td colspan="10" class="text-center text-muted py-4">
                                 <i class="bi bi-journal-check fs-4 d-block mb-1"></i>
-                                No hires found.
+                                @if ($showUpcoming)
+                                    No upcoming hires scheduled.
+                                @else
+                                    No hires found.
+                                @endif
                             </td>
                         </tr>
                     @endforelse
@@ -301,6 +344,17 @@
 
             document.querySelectorAll(`[data-hire-form="${prefix}"] [data-tour-section]`).forEach((section) => {
                 const isActive = section.dataset.tourSection === value;
+                section.style.display = isActive ? 'block' : 'none';
+                section.querySelectorAll('input, select, textarea').forEach((el) => {
+                    el.disabled = !isActive;
+                });
+            });
+
+            // Sections shown for every tour type except one (e.g. the
+            // Scheduled Date & Time field — packages already have their own
+            // start/end range, everything else can optionally use this).
+            document.querySelectorAll(`[data-hire-form="${prefix}"] [data-tour-section-except]`).forEach((section) => {
+                const isActive = value !== '' && value !== section.dataset.tourSectionExcept;
                 section.style.display = isActive ? 'block' : 'none';
                 section.querySelectorAll('input, select, textarea').forEach((el) => {
                     el.disabled = !isActive;
