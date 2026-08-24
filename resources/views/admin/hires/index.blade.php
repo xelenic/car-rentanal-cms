@@ -250,37 +250,39 @@
 
     @foreach ($hires as $hire)
         <x-modal id="modal-track-{{ $hire->id }}" title="Hire #{{ $hire->id }} — Location Track" size="lg">
-            <div class="row g-2 mb-3">
-                <div class="col-4">
-                    <div class="text-muted small">Status</div>
-                    <div class="fw-semibold" style="font-size: .85rem;">
-                        @if ($hire->is_tracking)
-                            <span class="text-success"><i class="bi bi-record-circle"></i> Active</span>
-                        @elseif ($hire->tracking_started_at)
-                            Stopped
-                        @else
-                            Not started
-                        @endif
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="row g-2 flex-grow-1">
+                    <div class="col-4">
+                        <div class="text-muted small">Status</div>
+                        <div class="fw-semibold track-status" style="font-size: .85rem;">
+                            @if ($hire->is_tracking)
+                                <span class="text-success"><i class="bi bi-record-circle"></i> Active</span>
+                            @elseif ($hire->tracking_started_at)
+                                Stopped
+                            @else
+                                Not started
+                            @endif
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-muted small">Distance</div>
+                        <div class="fw-semibold track-distance" style="font-size: .85rem;">{{ number_format($hire->total_distance_km, 2) }} km</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-muted small">Points Logged</div>
+                        <div class="fw-semibold track-points-count" style="font-size: .85rem;">{{ $hire->trackingPoints->count() }}</div>
                     </div>
                 </div>
-                <div class="col-4">
-                    <div class="text-muted small">Distance</div>
-                    <div class="fw-semibold" style="font-size: .85rem;">{{ number_format($hire->total_distance_km, 2) }} km</div>
-                </div>
-                <div class="col-4">
-                    <div class="text-muted small">Points Logged</div>
-                    <div class="fw-semibold" style="font-size: .85rem;">{{ $hire->trackingPoints->count() }}</div>
-                </div>
+                <span class="badge rounded-pill bg-success-subtle text-success-emphasis track-live-badge ms-2" style="display: none; white-space: nowrap;">
+                    <i class="bi bi-broadcast"></i> Live
+                </span>
             </div>
 
-            @if ($hire->trackingPoints->isEmpty())
-                <div class="text-center text-muted py-5">
-                    <i class="bi bi-geo-alt fs-3 d-block mb-2"></i>
-                    No location data yet. Tracking starts when the driver presses Start in the app.
-                </div>
-            @else
-                <div id="map-track-{{ $hire->id }}" class="hire-track-map"></div>
-            @endif
+            <div class="track-empty-state text-center text-muted py-5" style="{{ $hire->trackingPoints->isEmpty() ? '' : 'display: none;' }}">
+                <i class="bi bi-geo-alt fs-3 d-block mb-2"></i>
+                No location data yet. Tracking starts when the driver presses Start in the app.
+            </div>
+            <div id="map-track-{{ $hire->id }}" class="hire-track-map" style="{{ $hire->trackingPoints->isEmpty() ? 'display: none;' : '' }}"></div>
         </x-modal>
     @endforeach
 
@@ -632,48 +634,127 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script>
         window.__hireTrackMaps = window.__hireTrackMaps || {};
+        window.__hireTrackLayers = window.__hireTrackLayers || {};
+        window.__hireTrackPollers = window.__hireTrackPollers || {};
 
-        function initHireTrackMap(hireId, points) {
-            if (window.__hireTrackMaps[hireId]) {
-                window.__hireTrackMaps[hireId].invalidateSize();
+        // Draws (or redraws) a hire's path from a fresh set of points —
+        // cheap and simple to just clear and redraw for a single trip's
+        // worth of points, rather than diffing. Only fits the map's view on
+        // the very first render, so live updates don't yank the viewport
+        // out from under an admin who's panned/zoomed to look at something.
+        function renderHireTrackPoints(hireId, points) {
+            const container = document.getElementById('map-track-' + hireId);
+            if (!container) return;
+            const emptyState = container.parentElement.querySelector('.track-empty-state');
+
+            if (!points.length) {
+                if (emptyState) emptyState.style.display = '';
+                container.style.display = 'none';
                 return;
             }
 
-            if (!points.length) return;
+            if (emptyState) emptyState.style.display = 'none';
+            container.style.display = '';
 
-            const map = L.map('map-track-' + hireId);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors',
-                maxZoom: 19,
-            }).addTo(map);
+            let map = window.__hireTrackMaps[hireId];
+            const isFirstRender = !map;
+
+            if (isFirstRender) {
+                map = L.map(container);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OpenStreetMap contributors',
+                    maxZoom: 19,
+                }).addTo(map);
+                window.__hireTrackMaps[hireId] = map;
+                window.__hireTrackLayers[hireId] = {};
+            }
+
+            const layers = window.__hireTrackLayers[hireId];
+            ['polyline', 'startMarker', 'latestMarker', 'singleMarker'].forEach((key) => {
+                if (layers[key]) {
+                    map.removeLayer(layers[key]);
+                    layers[key] = null;
+                }
+            });
 
             const latlngs = points.map((p) => [p.lat, p.lng]);
 
             if (latlngs.length === 1) {
-                map.setView(latlngs[0], 15);
-                L.marker(latlngs[0]).addTo(map).bindPopup('Point 1');
+                layers.singleMarker = L.marker(latlngs[0]).addTo(map).bindPopup('Point 1');
+                if (isFirstRender) map.setView(latlngs[0], 15);
             } else {
-                L.polyline(latlngs, { color: '#4f46e5', weight: 4 }).addTo(map);
-                L.circleMarker(latlngs[0], { radius: 7, color: '#059669', fillColor: '#059669', fillOpacity: 1 })
+                layers.polyline = L.polyline(latlngs, { color: '#4f46e5', weight: 4 }).addTo(map);
+                layers.startMarker = L.circleMarker(latlngs[0], { radius: 7, color: '#059669', fillColor: '#059669', fillOpacity: 1 })
                     .addTo(map).bindPopup('Start');
-                L.circleMarker(latlngs[latlngs.length - 1], { radius: 7, color: '#dc2626', fillColor: '#dc2626', fillOpacity: 1 })
+                layers.latestMarker = L.circleMarker(latlngs[latlngs.length - 1], { radius: 7, color: '#dc2626', fillColor: '#dc2626', fillOpacity: 1 })
                     .addTo(map).bindPopup('Latest');
-                map.fitBounds(latlngs, { padding: [24, 24] });
+                if (isFirstRender) map.fitBounds(latlngs, { padding: [24, 24] });
             }
 
-            window.__hireTrackMaps[hireId] = map;
-            setTimeout(() => map.invalidateSize(), 150);
+            if (isFirstRender) setTimeout(() => map.invalidateSize(), 150);
+        }
+
+        function updateHireTrackStats(hireId, data) {
+            const modal = document.getElementById('modal-track-' + hireId);
+            if (!modal) return;
+
+            const statusEl = modal.querySelector('.track-status');
+            if (statusEl) {
+                statusEl.innerHTML = data.is_tracking
+                    ? '<span class="text-success"><i class="bi bi-record-circle"></i> Active</span>'
+                    : (data.status === 'pending' ? 'Not started' : 'Stopped');
+            }
+            const distanceEl = modal.querySelector('.track-distance');
+            if (distanceEl) distanceEl.textContent = Number(data.total_distance_km).toFixed(2) + ' km';
+            const countEl = modal.querySelector('.track-points-count');
+            if (countEl) countEl.textContent = data.points.length;
+            const liveBadge = modal.querySelector('.track-live-badge');
+            if (liveBadge) liveBadge.style.display = data.is_tracking ? '' : 'none';
+        }
+
+        async function pollHireTracking(hireId, url) {
+            try {
+                const res = await fetch(url, { headers: { Accept: 'application/json' } });
+                if (!res.ok) return;
+                const data = await res.json();
+
+                updateHireTrackStats(hireId, data);
+                renderHireTrackPoints(hireId, data.points);
+
+                // Nothing more will ever change for a completed hire —
+                // stop polling it.
+                if (data.status === 'completed' && window.__hireTrackPollers[hireId]) {
+                    clearInterval(window.__hireTrackPollers[hireId]);
+                    delete window.__hireTrackPollers[hireId];
+                }
+            } catch (e) {
+                // Skip this tick — will retry on the next poll.
+            }
         }
 
         @foreach ($hires as $hire)
-            @if ($hire->trackingPoints->isNotEmpty())
-                document.getElementById('modal-track-{{ $hire->id }}')?.addEventListener('shown.bs.modal', function () {
-                    initHireTrackMap(
-                        {{ $hire->id }},
-                        @json($hire->trackingPoints->map(fn ($p) => ['lat' => $p->latitude, 'lng' => $p->longitude])->values())
-                    );
+            (function () {
+                const hireId = {{ $hire->id }};
+                const trackingUrl = @json(route('admin.hires.tracking', $hire));
+                const modalEl = document.getElementById('modal-track-' + hireId);
+                if (!modalEl) return;
+
+                // Renders whatever the page already has instantly, then
+                // starts polling for live updates while the modal is open.
+                modalEl.addEventListener('shown.bs.modal', function () {
+                    renderHireTrackPoints(hireId, @json($hire->trackingPoints->map(fn ($p) => ['lat' => $p->latitude, 'lng' => $p->longitude])->values()));
+
+                    pollHireTracking(hireId, trackingUrl);
+                    window.__hireTrackPollers[hireId] = setInterval(() => pollHireTracking(hireId, trackingUrl), 10000);
                 });
-            @endif
+
+                modalEl.addEventListener('hidden.bs.modal', function () {
+                    if (window.__hireTrackPollers[hireId]) {
+                        clearInterval(window.__hireTrackPollers[hireId]);
+                        delete window.__hireTrackPollers[hireId];
+                    }
+                });
+            })();
         @endforeach
     </script>
 @endpush

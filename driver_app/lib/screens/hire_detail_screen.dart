@@ -10,6 +10,14 @@ import '../theme/app_theme.dart';
 import 'expense_entry_screen.dart';
 import 'placeholder_screen.dart';
 
+/// Shared copy for a hire that can't be started/completed yet because its
+/// scheduled date hasn't arrived — used by both the tracking error banner
+/// and the bottom complete bar so the wording matches everywhere.
+String _scheduledMessage(Hire hire) {
+  final formatted = DateFormat('MMM d, y  h:mm a').format(hire.startTime!.toLocal());
+  return 'Scheduled for $formatted — can\'t start until then.';
+}
+
 class HireDetailScreen extends StatefulWidget {
   final Hire hire;
 
@@ -86,6 +94,11 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
 
   Future<void> _toggleTracking() async {
     if (_hire.isCompleted) return;
+
+    if (!_hire.isTracking && _hire.isScheduledInFuture) {
+      setState(() => _trackingError = _scheduledMessage(_hire));
+      return;
+    }
 
     setState(() {
       _busy = true;
@@ -341,7 +354,12 @@ class _CompleteBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 15),
         ),
         child: Text(
-          hire.status == 'started' ? 'Complete Hire' : 'Start the hire to enable completion',
+          hire.status == 'started'
+              ? 'Complete Hire'
+              : (hire.isScheduledInFuture
+                  ? _scheduledMessage(hire)
+                  : 'Start the hire to enable completion'),
+          textAlign: TextAlign.center,
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
@@ -366,6 +384,7 @@ class _TrackingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isTracking = hire.isTracking;
     final isCompleted = hire.isCompleted;
+    final isLocked = !isTracking && !isCompleted && hire.isScheduledInFuture;
 
     final String statusText;
     if (isCompleted) {
@@ -374,6 +393,8 @@ class _TrackingCard extends StatelessWidget {
       statusText = 'Tracking active';
     } else if (hire.trackingStartedAt != null) {
       statusText = 'Tracking paused';
+    } else if (isLocked) {
+      statusText = 'Scheduled — not startable yet';
     } else {
       statusText = 'Not started';
     }
@@ -416,10 +437,33 @@ class _TrackingCard extends StatelessWidget {
           _PulseStartButton(
             isTracking: isTracking,
             isCompleted: isCompleted,
+            isLocked: isLocked,
             busy: busy,
             distanceKm: hire.totalDistanceKm,
             onTap: onToggle,
           ),
+          if (isLocked) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.textMuted.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.lock_clock_outlined, color: AppColors.textMuted, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _scheduledMessage(hire),
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 20),
           Row(
             children: [
@@ -458,6 +502,7 @@ class _TrackingCard extends StatelessWidget {
 class _PulseStartButton extends StatefulWidget {
   final bool isTracking;
   final bool isCompleted;
+  final bool isLocked;
   final bool busy;
   final double distanceKm;
   final VoidCallback onTap;
@@ -465,6 +510,7 @@ class _PulseStartButton extends StatefulWidget {
   const _PulseStartButton({
     required this.isTracking,
     required this.isCompleted,
+    required this.isLocked,
     required this.busy,
     required this.distanceKm,
     required this.onTap,
@@ -489,7 +535,7 @@ class _PulseStartButtonState extends State<_PulseStartButton> with TickerProvide
       vsync: this,
       duration: const Duration(milliseconds: 1600),
     );
-    if (!widget.isCompleted) _breathController.repeat(reverse: true);
+    if (!widget.isCompleted && !widget.isLocked) _breathController.repeat(reverse: true);
     if (widget.isTracking) _rippleController.repeat();
   }
 
@@ -497,10 +543,11 @@ class _PulseStartButtonState extends State<_PulseStartButton> with TickerProvide
   void didUpdateWidget(covariant _PulseStartButton oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (widget.isCompleted && _breathController.isAnimating) {
+    final shouldBreathe = !widget.isCompleted && !widget.isLocked;
+    if (!shouldBreathe && _breathController.isAnimating) {
       _breathController.stop();
       _breathController.value = 0;
-    } else if (!widget.isCompleted && !_breathController.isAnimating) {
+    } else if (shouldBreathe && !_breathController.isAnimating) {
       _breathController.repeat(reverse: true);
     }
 
@@ -522,8 +569,10 @@ class _PulseStartButtonState extends State<_PulseStartButton> with TickerProvide
   @override
   Widget build(BuildContext context) {
     const size = 188.0;
-    final color = widget.isCompleted ? AppColors.neon : AppColors.danger;
-    final canTap = !widget.isCompleted && !widget.busy;
+    final color = widget.isCompleted
+        ? AppColors.neon
+        : (widget.isLocked ? AppColors.textMuted : AppColors.danger);
+    final canTap = !widget.isCompleted && !widget.isLocked && !widget.busy;
 
     return Center(
       child: GestureDetector(
@@ -589,7 +638,24 @@ class _PulseStartButtonState extends State<_PulseStartButton> with TickerProvide
                           height: 32,
                           child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
                         )
-                      : Column(
+                      : widget.isLocked
+                          ? const Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.lock_outline, color: Colors.white, size: 40),
+                                SizedBox(height: 10),
+                                Text(
+                                  'LOCKED',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(

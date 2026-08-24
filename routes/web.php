@@ -55,6 +55,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::resource('packages', PackageController::class)->except(['show', 'create', 'edit']);
     Route::resource('customers', CustomerController::class)->except(['show', 'create', 'edit']);
     Route::resource('hires', HireController::class)->except(['show', 'create', 'edit']);
+    Route::get('hires/{hire}/tracking', [HireController::class, 'tracking'])->name('hires.tracking');
     Route::get('expenses', [ExpenseController::class, 'index'])->name('expenses.index');
     Route::get('salary-advances', [SalaryAdvanceController::class, 'index'])->name('salary-advances.index');
     Route::put('salary-advances/{salaryAdvance}', [SalaryAdvanceController::class, 'update'])->name('salary-advances.update');

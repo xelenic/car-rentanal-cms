@@ -58,7 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
           gradient: RadialGradient(
             center: Alignment(-0.8, -0.9),
             radius: 1.4,
-            colors: [Color(0xFF16261F), AppColors.background],
+            colors: [Color(0xFFD6EEFC), AppColors.background],
             stops: [0.0, 0.6],
           ),
         ),

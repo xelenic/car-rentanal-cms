@@ -32,15 +32,25 @@ class ApiClient {
 
   /// Base URL of the Car Rental CMS API.
   ///
-  /// - Android emulator: 10.0.2.2 aliases the host machine's localhost.
-  /// - iOS simulator / desktop: 127.0.0.1 reaches the host directly.
-  /// - Physical device: replace with your computer's LAN IP,
+  /// Exported/production builds bake in the real server via
+  /// --dart-define=API_BASE_URL=https://xnatureland1.xelenic.com/api (see
+  /// the export build command) — that always wins when present. Without
+  /// it (plain `flutter run` during development) this falls back to local
+  /// dev defaults:
+  /// - Android emulator: 10.0.2.2 aliases the host machine's localhost —
+  ///   the emulator is its own machine, so plain "localhost" here would
+  ///   mean the emulator itself, not the host running the Laravel server.
+  /// - Web / iOS simulator / desktop: localhost reaches the host directly.
+  /// - Physical device during dev: replace with your computer's LAN IP,
   ///   e.g. http://192.168.1.20:8000/api
   static String get baseUrl {
+    const override = String.fromEnvironment('API_BASE_URL');
+    if (override.isNotEmpty) return override;
+
     if (!kIsWeb && Platform.isAndroid) {
       return 'http://10.0.2.2:8000/api';
     }
-    return 'http://127.0.0.1:8000/api';
+    return 'http://localhost:8000/api';
   }
 
   final _storage = const FlutterSecureStorage();

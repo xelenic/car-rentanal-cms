@@ -10,6 +10,7 @@ use App\Models\HireLocation;
 use App\Models\Location;
 use App\Models\Package;
 use App\Models\Vehicle;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -23,7 +24,7 @@ class HireController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('permission:hires.view', only: ['index', 'show']),
+            new Middleware('permission:hires.view', only: ['index', 'show', 'tracking']),
             new Middleware('permission:hires.create', only: ['store']),
             new Middleware('permission:hires.update', only: ['update']),
             new Middleware('permission:hires.delete', only: ['destroy']),
@@ -106,6 +107,24 @@ class HireController extends Controller implements HasMiddleware
         $hire->delete();
 
         return redirect()->route('admin.hires.index')->with('status', "Hire #{$hire->id} was deleted.");
+    }
+
+    /**
+     * Polled by the "Location Track" modal (see hires/index.blade.php) so
+     * it can update live while a driver is out on an active hire, instead
+     * of only ever showing whatever was on the page at the last full load.
+     */
+    public function tracking(Hire $hire): JsonResponse
+    {
+        $hire->load('trackingPoints');
+
+        return response()->json([
+            'status' => $hire->status,
+            'status_label' => $hire->status_label,
+            'is_tracking' => $hire->is_tracking,
+            'total_distance_km' => $hire->total_distance_km,
+            'points' => $hire->trackingPoints->map(fn ($p) => ['lat' => $p->latitude, 'lng' => $p->longitude])->values(),
+        ]);
     }
 
     private function validated(Request $request): array

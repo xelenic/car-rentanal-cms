@@ -118,6 +118,12 @@ class Hire {
 
   bool get isCompleted => status == 'completed';
 
+  /// A hire scheduled ahead of time (see the admin panel's "Schedule"
+  /// field) whose date hasn't arrived yet — tracking can't be started or
+  /// completed until then (enforced server-side too, see
+  /// HireTrackingController::assertScheduleReached()).
+  bool get isScheduledInFuture => startTime != null && startTime!.isAfter(DateTime.now());
+
   /// A short, human-readable summary of the route/tour for this hire,
   /// tailored to whichever tour type it is.
   String get routeSummary {

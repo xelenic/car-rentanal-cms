@@ -14,6 +14,7 @@ class HireTrackingController extends Controller
     {
         $this->authorizeDriver($request, $hire);
         $this->assertNotCompleted($hire);
+        $this->assertScheduleReached($hire);
 
         $hire->update([
             'status' => 'started',
@@ -38,6 +39,7 @@ class HireTrackingController extends Controller
     {
         $this->authorizeDriver($request, $hire);
         $this->assertNotCompleted($hire);
+        $this->assertScheduleReached($hire);
 
         $hire->update([
             'status' => 'completed',
@@ -82,6 +84,19 @@ class HireTrackingController extends Controller
     {
         if ($hire->is_completed) {
             abort(422, 'This hire has already been completed and cannot be started again.');
+        }
+    }
+
+    /**
+     * A hire with a future scheduled start_time (see the admin panel's
+     * "Schedule" field on the Hire form) can't be started or completed
+     * ahead of that date — mirrors the driver app's own client-side check,
+     * enforced here too since a client-side-only guard can be bypassed.
+     */
+    private function assertScheduleReached(Hire $hire): void
+    {
+        if ($hire->start_time !== null && $hire->start_time->isFuture()) {
+            abort(422, 'This hire is scheduled for '.$hire->start_time->format('M j, Y \a\t g:i A').'. It can\'t be started before then.');
         }
     }
 

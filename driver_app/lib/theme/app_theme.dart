@@ -1,36 +1,36 @@
 import 'package:flutter/material.dart';
 
-/// Dark, neon-green accented palette for the driver app.
+/// Light, sky-blue accented palette for the driver app.
 class AppColors {
   AppColors._();
 
-  static const background = Color(0xFF0C0E12);
-  static const surface = Color(0xFF16191F);
-  static const surfaceElevated = Color(0xFF1E222A);
-  static const border = Color(0xFF272C35);
+  static const background = Color(0xFFF4FAFF);
+  static const surface = Color(0xFFFFFFFF);
+  static const surfaceElevated = Color(0xFFEAF6FF);
+  static const border = Color(0xFFDCEEFB);
 
-  static const neon = Color(0xFF3DFF9A);
-  static const neonDeep = Color(0xFF00C853);
-  static const onNeon = Color(0xFF06210F);
+  static const neon = Color(0xFF0EA5E9);
+  static const neonDeep = Color(0xFF0284C7);
+  static const onNeon = Color(0xFFFFFFFF);
 
-  static const textPrimary = Color(0xFFF3F5F7);
-  static const textSecondary = Color(0xFF9AA1AC);
-  static const textMuted = Color(0xFF676E79);
+  static const textPrimary = Color(0xFF0F2A43);
+  static const textSecondary = Color(0xFF5B7A93);
+  static const textMuted = Color(0xFF94AEC2);
 
-  static const danger = Color(0xFFFF6B7A);
-  static const warning = Color(0xFFFFC259);
-  static const info = Color(0xFF5EC8FF);
+  static const danger = Color(0xFFE11D48);
+  static const warning = Color(0xFFD97706);
+  static const info = Color(0xFF0D9488);
 }
 
 ThemeData buildDriverAppTheme() {
   final base = ThemeData(
     useMaterial3: true,
-    brightness: Brightness.dark,
+    brightness: Brightness.light,
   );
 
   return base.copyWith(
     scaffoldBackgroundColor: AppColors.background,
-    colorScheme: const ColorScheme.dark(
+    colorScheme: const ColorScheme.light(
       primary: AppColors.neon,
       onPrimary: AppColors.onNeon,
       secondary: AppColors.neonDeep,
@@ -94,25 +94,25 @@ ThemeData buildDriverAppTheme() {
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: AppColors.surface,
       surfaceTintColor: Colors.transparent,
-      indicatorColor: AppColors.neon.withValues(alpha: 0.16),
+      indicatorColor: AppColors.neon.withValues(alpha: 0.14),
       height: 68,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return TextStyle(
           fontSize: 11,
           fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-          color: selected ? AppColors.neon : AppColors.textSecondary,
+          color: selected ? AppColors.neonDeep : AppColors.textSecondary,
         );
       }),
       iconTheme: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return IconThemeData(
-          color: selected ? AppColors.neon : AppColors.textSecondary,
+          color: selected ? AppColors.neonDeep : AppColors.textSecondary,
         );
       }),
     ),
     tabBarTheme: const TabBarThemeData(
-      labelColor: AppColors.neon,
+      labelColor: AppColors.neonDeep,
       unselectedLabelColor: AppColors.textSecondary,
       indicatorColor: AppColors.neon,
       dividerColor: AppColors.border,
