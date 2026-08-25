@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\AuthController as AdminAuthController;
+use App\Http\Controllers\Api\Admin\HireController as AdminHireController;
+use App\Http\Controllers\Api\Admin\PlaceController as AdminPlaceController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DriverArrearsLoanController;
 use App\Http\Controllers\Api\DriverDepositTransferController;
@@ -13,6 +16,7 @@ use App\Http\Controllers\Api\VehicleMaintenanceController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', [AuthController::class, 'login']);
+Route::post('/admin/auth/login', [AdminAuthController::class, 'login']);
 
 Route::get('/hire-expenses/{hireExpense}/receipt', [HireExpenseController::class, 'receipt'])
     ->name('hire-expenses.receipt');
@@ -48,4 +52,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/driver/hires/{hire}/expenses', [HireExpenseController::class, 'index']);
     Route::post('/driver/hires/{hire}/expenses', [HireExpenseController::class, 'store']);
+
+    Route::post('/admin/auth/logout', [AdminAuthController::class, 'logout']);
+    Route::get('/admin/me', [AdminAuthController::class, 'me']);
+    Route::get('/admin/hires', [AdminHireController::class, 'index']);
+    Route::get('/admin/hires/reference-data', [AdminHireController::class, 'referenceData']);
+    Route::get('/admin/hires/{hire}', [AdminHireController::class, 'show']);
+    Route::post('/admin/hires', [AdminHireController::class, 'store']);
+
+    Route::get('/admin/places/autocomplete', [AdminPlaceController::class, 'autocomplete']);
+    Route::get('/admin/places/details', [AdminPlaceController::class, 'details']);
 });
