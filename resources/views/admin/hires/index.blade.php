@@ -23,6 +23,24 @@
         .upcoming-hires-card { cursor: pointer; transition: box-shadow .15s ease, transform .15s ease; }
         .upcoming-hires-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); transform: translateY(-1px); }
         .upcoming-hires-card.active { border-color: var(--primary); background: var(--primary-light); }
+        .upcoming-hires-card .card-body { padding: .65rem .85rem; }
+
+        /* Compact table — this page packs a lot of columns (schedule,
+           payment status, tracking, expenses...) so each row easily gets
+           tall from wrapped text. Keep every line on one row (letting the
+           table scroll horizontally instead, which .table-responsive
+           already supports) and tighten padding/type so rows stay short. */
+        #hires-table .table { font-size: .74rem; }
+        #hires-table .table thead th { padding: .4rem .65rem; font-size: .6rem; }
+        #hires-table .table tbody td { padding: .38rem .65rem; white-space: nowrap; }
+        #hires-table .table tbody td .badge { font-size: .62rem; }
+        #hires-table .table tbody td .btn { font-size: .66rem; padding: .18rem .5rem; }
+        #hires-table .table tbody td > div { white-space: nowrap; }
+
+        @media (max-width: 575.98px) {
+            #hires-table .table { font-size: .7rem; }
+            #hires-table .table tbody td { padding: .3rem .5rem; }
+        }
     </style>
 @endpush
 
@@ -43,7 +61,7 @@
         </div>
     </a>
 
-    <div class="card border-0">
+    <div class="card border-0" id="hires-table">
         <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
             <form method="GET" style="max-width: 280px;">
                 @if ($showUpcoming)
@@ -116,7 +134,7 @@
                             </td>
                             <td>
                                 <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis mb-1">{{ \App\Models\Hire::TOUR_TYPES[$hire->tour_type] ?? $hire->tour_type }}</span>
-                                <div class="text-muted" style="font-size: .72rem; max-width: 220px;">
+                                <div class="text-muted" style="font-size: .72rem; max-width: 220px; overflow: hidden; text-overflow: ellipsis;">
                                     @if ($hire->tour_type === 'package')
                                         {{ $hire->package?->name ?? '—' }}
                                     @elseif ($hire->tour_type === 'multi_day')
@@ -134,8 +152,28 @@
                                 <div>Rs. {{ number_format($hire->hire_full_value, 2) }}</div>
                                 <div style="font-size: .72rem;">Commission: Rs. {{ number_format($hire->commission, 2) }}</div>
                             </td>
-                            <td>
+                            <td style="font-size: .78rem;">
                                 <span class="badge rounded-pill bg-light text-dark border">{{ \App\Models\Hire::PAYMENT_TYPES[$hire->payment_type] ?? $hire->payment_type }}</span>
+                                @if ($hire->payment_type === 'credit')
+                                    <div class="mt-1">
+                                        @if ($hire->payment_status === 'paid')
+                                            <span class="badge rounded-pill bg-success-subtle text-success-emphasis">
+                                                <i class="bi bi-check-circle-fill"></i> Fully Paid
+                                            </span>
+                                        @else
+                                            @if ($hire->payment_status === 'partial')
+                                                <div class="text-muted mb-1" style="font-size: .68rem;">
+                                                    Rs. {{ number_format($hire->balance_remaining, 2) }} left
+                                                </div>
+                                            @endif
+                                            @can('hires.update')
+                                                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modal-claim-payment-{{ $hire->id }}">
+                                                    <i class="bi bi-cash-coin"></i> Claim Payment
+                                                </button>
+                                            @endcan
+                                        @endif
+                                    </div>
+                                @endif
                             </td>
                             <td style="font-size: .78rem;">
                                 @if ($hire->is_tracking)
@@ -285,6 +323,84 @@
             <div id="map-track-{{ $hire->id }}" class="hire-track-map" style="{{ $hire->trackingPoints->isEmpty() ? 'display: none;' : '' }}"></div>
         </x-modal>
     @endforeach
+
+    @can('hires.update')
+        @foreach ($hires as $hire)
+            @if ($hire->payment_type === 'credit')
+                <x-modal id="modal-claim-payment-{{ $hire->id }}" title="Hire #{{ $hire->id }} — Claim Payment">
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <div class="text-muted small">Full Value</div>
+                            <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($hire->hire_full_value, 2) }}</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-muted small">Paid</div>
+                            <div class="fw-semibold text-success" style="font-size: .85rem;">Rs. {{ number_format($hire->paid_amount, 2) }}</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-muted small">Remaining</div>
+                            <div class="fw-semibold {{ $hire->balance_remaining > 0 ? 'text-danger' : '' }}" style="font-size: .85rem;">Rs. {{ number_format($hire->balance_remaining, 2) }}</div>
+                        </div>
+                    </div>
+
+                    @if ($hire->payment_status === 'paid')
+                        <div class="alert alert-success d-flex align-items-center gap-2 py-2 mb-3">
+                            <i class="bi bi-check-circle-fill"></i> This hire has been fully paid.
+                        </div>
+                    @else
+                        <form method="POST" action="{{ route('admin.hires.payments.store', $hire) }}" class="mb-2"
+                            onsubmit="return confirm('Mark this hire as fully paid — Rs. {{ number_format($hire->balance_remaining, 2) }}?');">
+                            @csrf
+                            <input type="hidden" name="amount" value="{{ $hire->balance_remaining }}">
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="bi bi-check-circle me-1"></i> Mark Full Payment (Rs. {{ number_format($hire->balance_remaining, 2) }})
+                            </button>
+                        </form>
+
+                        <div class="text-center text-muted small my-2">or</div>
+
+                        <form method="POST" action="{{ route('admin.hires.payments.store', $hire) }}" class="border rounded-3 p-2 mb-3">
+                            @csrf
+                            <label class="form-label">Partial Payment</label>
+                            <div class="input-group input-group-sm mb-2">
+                                <span class="input-group-text">Rs.</span>
+                                <input type="number" name="amount" min="0.01" max="{{ $hire->balance_remaining }}" step="0.01"
+                                    class="form-control" placeholder="e.g. 5000.00" required>
+                            </div>
+                            <input type="text" name="notes" class="form-control form-control-sm mb-2" placeholder="Notes (optional)" maxlength="255">
+                            <button type="submit" class="btn btn-outline-primary btn-sm w-100">Record Partial Payment</button>
+                        </form>
+                    @endif
+
+                    @if ($hire->payments->isNotEmpty())
+                        <div class="fw-semibold mb-2" style="font-size: .8rem;">Payment History</div>
+                        <div class="d-flex flex-column gap-2">
+                            @foreach ($hire->payments as $payment)
+                                <div class="d-flex align-items-center justify-content-between border rounded p-2">
+                                    <div>
+                                        <div class="fw-semibold" style="font-size: .8rem;">Rs. {{ number_format($payment->amount, 2) }}</div>
+                                        <div class="text-muted" style="font-size: .7rem;">
+                                            {{ $payment->paid_at->format('M j, Y') }}
+                                            @if ($payment->notes)
+                                                — {{ $payment->notes }}
+                                            @endif
+                                        </div>
+                                    </div>
+                                    <form method="POST" action="{{ route('admin.hires.payments.destroy', [$hire, $payment]) }}" onsubmit="return confirm('Remove this payment record?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-light border btn-icon text-danger">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </x-modal>
+            @endif
+        @endforeach
+    @endcan
 
     @can('hires.create')
         <x-modal id="modal-create" title="New Hire" size="xl">

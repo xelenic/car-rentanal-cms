@@ -58,25 +58,26 @@
             ];
         @endphp
 
-        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-5 g-2 mb-2">
+        <div class="row row-cols-2 row-cols-md-2 row-cols-xl-5 g-2 mb-2">
             @foreach ($cards as $card)
                 <div class="col">
                     <div class="card border-0 h-100 {{ isset($card['modal']) ? 'profit-card-clickable' : '' }}"
                         @if (isset($card['modal'])) role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#{{ $card['modal'] }}" @endif>
-                        <div class="card-body">
+                        <div class="card-body dashboard-stat-card-body">
                             <div class="d-flex align-items-center gap-2 mb-2">
-                                <div class="stat-icon" style="background: {{ $card['bg'] }}; color: {{ $card['fg'] }};">
+                                <div class="stat-icon dashboard-stat-icon" style="background: {{ $card['bg'] }}; color: {{ $card['fg'] }};">
                                     <i class="bi bi-{{ $card['icon'] }}"></i>
                                 </div>
                                 <div class="text-muted small">
-                                    {{ $card['label'] }} &middot; {{ $periodLabel }}
+                                    {{ $card['label'] }}
+                                    <span class="d-none d-sm-inline">&middot; {{ $periodLabel }}</span>
                                     @isset($card['modal'])
                                         <i class="bi bi-info-circle ms-1" title="Click for the full calculation"></i>
                                     @endisset
                                 </div>
                             </div>
                             <div class="d-flex align-items-baseline justify-content-between flex-wrap gap-1">
-                                <div class="fs-5 fw-bold {{ $card['value'] < 0 ? 'text-danger' : '' }}">
+                                <div class="fs-5 dashboard-stat-value fw-bold {{ $card['value'] < 0 ? 'text-danger' : '' }}">
                                     {{ $card['value'] < 0 ? '-' : '' }}Rs. {{ number_format(abs($card['value']), 2) }}
                                 </div>
                                 <div class="{{ $card['delta']['class'] }}" style="font-size: .75rem; font-weight: 600;">
@@ -95,6 +96,17 @@
             <style>
                 .profit-card-clickable { cursor: pointer; transition: box-shadow .15s ease, transform .15s ease; }
                 .profit-card-clickable:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); transform: translateY(-1px); }
+
+                /* Compact stat cards — on mobile these already sit two per
+                   row; tighten padding/type so the whole stack (5 main +
+                   6 secondary cards) doesn't take forever to scroll past
+                   before reaching the chart. */
+                @media (max-width: 767.98px) {
+                    .dashboard-stat-card-body { padding: .7rem .8rem; }
+                    .dashboard-stat-icon { width: 30px; height: 30px; font-size: .85rem; }
+                    .dashboard-stat-value { font-size: 1rem; }
+                    .dashboard-secondary-card-body.card-body { padding: .5rem .65rem; }
+                }
             </style>
         @endpush
 
@@ -177,7 +189,7 @@
             @foreach ($smallCards as $card)
                 <div class="col">
                     <div class="card border-0 h-100">
-                        <div class="card-body d-flex align-items-center gap-2 py-2 px-3">
+                        <div class="card-body dashboard-secondary-card-body d-flex align-items-center gap-2 py-2 px-3">
                             <i class="bi bi-{{ $card['icon'] }} text-muted"></i>
                             <div>
                                 <div class="text-muted" style="font-size: .68rem;">{{ $card['label'] }}</div>

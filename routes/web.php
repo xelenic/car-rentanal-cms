@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DriverController;
 use App\Http\Controllers\Admin\ExpenseController;
 use App\Http\Controllers\Admin\HireController;
+use App\Http\Controllers\Admin\HirePaymentController;
 use App\Http\Controllers\Admin\LocationController;
 use App\Http\Controllers\Admin\PackageController;
 use App\Http\Controllers\Admin\PayrollController;
@@ -56,6 +57,8 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::resource('customers', CustomerController::class)->except(['show', 'create', 'edit']);
     Route::resource('hires', HireController::class)->except(['show', 'create', 'edit']);
     Route::get('hires/{hire}/tracking', [HireController::class, 'tracking'])->name('hires.tracking');
+    Route::post('hires/{hire}/payments', [HirePaymentController::class, 'store'])->name('hires.payments.store');
+    Route::delete('hires/{hire}/payments/{payment}', [HirePaymentController::class, 'destroy'])->name('hires.payments.destroy');
     Route::get('expenses', [ExpenseController::class, 'index'])->name('expenses.index');
     Route::get('salary-advances', [SalaryAdvanceController::class, 'index'])->name('salary-advances.index');
     Route::put('salary-advances/{salaryAdvance}', [SalaryAdvanceController::class, 'update'])->name('salary-advances.update');

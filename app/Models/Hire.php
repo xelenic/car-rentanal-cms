@@ -226,4 +226,40 @@ class Hire extends Model
 
         return round((float) $expenses->where('category', 'fuel')->sum('amount'), 2);
     }
+
+    /**
+     * "Claim Payment" records against this hire — mainly meaningful for
+     * payment_type "credit" (cash is assumed collected on the spot), but
+     * not restricted to it in case that's ever useful.
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(HirePayment::class)->orderByDesc('paid_at')->latest('id');
+    }
+
+    public function getPaidAmountAttribute(): float
+    {
+        $payments = $this->relationLoaded('payments') ? $this->payments : $this->payments()->get();
+
+        return round((float) $payments->sum('amount'), 2);
+    }
+
+    public function getBalanceRemainingAttribute(): float
+    {
+        return round(max($this->hire_full_value - $this->paid_amount, 0), 2);
+    }
+
+    /**
+     * "unpaid" (nothing claimed yet), "partial" (some but not all claimed),
+     * or "paid" (fully claimed) — drives the Hires page's Claim Payment
+     * button vs. "Fully Paid" badge.
+     */
+    public function getPaymentStatusAttribute(): string
+    {
+        if ($this->paid_amount <= 0) {
+            return 'unpaid';
+        }
+
+        return $this->balance_remaining <= 0 ? 'paid' : 'partial';
+    }
 }
