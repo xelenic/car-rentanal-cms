@@ -12,7 +12,6 @@
 @endsection
 
 @push('styles')
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <style>
         [data-tour-section] { display: none; }
         .hire-track-map { height: 320px; border-radius: .6rem; border: 1px solid var(--border-color); overflow: hidden; }
@@ -305,6 +304,7 @@
                     <div class="col-4">
                         <div class="text-muted small">Distance</div>
                         <div class="fw-semibold track-distance" style="font-size: .85rem;">{{ number_format($hire->total_distance_km, 2) }} km</div>
+                        <div class="track-distance-note text-muted" style="font-size: .62rem;">Straight-line estimate — calculating road distance…</div>
                     </div>
                     <div class="col-4">
                         <div class="text-muted small">Points Logged</div>
@@ -747,18 +747,79 @@
             });
         @endforeach
     </script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script>
         window.__hireTrackMaps = window.__hireTrackMaps || {};
         window.__hireTrackLayers = window.__hireTrackLayers || {};
         window.__hireTrackPollers = window.__hireTrackPollers || {};
 
-        // Draws (or redraws) a hire's path from a fresh set of points —
-        // cheap and simple to just clear and redraw for a single trip's
-        // worth of points, rather than diffing. Only fits the map's view on
+        // Google's Directions API accepts at most 25 waypoints (including
+        // origin/destination) per request. A trip tracked once a minute
+        // over several hours can easily produce far more raw points than
+        // that, so evenly sample down to the cap — always keeping the
+        // first and last point — rather than truncating the trip.
+        function decimateTrackPoints(points, max) {
+            if (points.length <= max) return points;
+            const step = (points.length - 1) / (max - 1);
+            const picked = [points[0]];
+            for (let i = 1; i < max - 1; i++) {
+                picked.push(points[Math.round(i * step)]);
+            }
+            picked.push(points[points.length - 1]);
+            return picked;
+        }
+
+        // Identifies "this exact set of points" cheaply, so a poll tick
+        // that hasn't actually picked up a new GPS point (the driver app
+        // only posts once a minute) can skip re-requesting the road route
+        // entirely instead of re-billing the Directions API every 10s.
+        function trackPointsSignature(points) {
+            if (!points.length) return '';
+            const last = points[points.length - 1];
+            return points.length + ':' + last.lat + ',' + last.lng;
+        }
+
+        // reason: 'pending' (still waiting on Directions) | 'failed' (no
+        // driving route found) | 'single' (only one point — nothing to
+        // route between yet).
+        function updateHireTrackDistance(hireId, roadKm, fallbackKm, reason) {
+            const modal = document.getElementById('modal-track-' + hireId);
+            if (!modal) return;
+            const distanceEl = modal.querySelector('.track-distance');
+            const noteEl = modal.querySelector('.track-distance-note');
+            if (!distanceEl) return;
+
+            if (roadKm !== null) {
+                distanceEl.textContent = roadKm.toFixed(2) + ' km';
+                if (noteEl) noteEl.textContent = 'Road distance (Google Maps)';
+                return;
+            }
+
+            if (reason === 'single') {
+                distanceEl.textContent = '0.00 km';
+                if (noteEl) noteEl.textContent = 'Only one point recorded so far';
+                return;
+            }
+
+            const shown = fallbackKm === null || fallbackKm === undefined ? null : Number(fallbackKm);
+            distanceEl.textContent = shown !== null ? shown.toFixed(2) + ' km' : '—';
+            if (noteEl) {
+                noteEl.textContent = reason === 'failed'
+                    ? 'Straight-line estimate — no road route found for this path'
+                    : 'Straight-line estimate — calculating road distance…';
+            }
+        }
+
+        // Draws (or redraws) a hire's path from a fresh set of points, and
+        // resolves the actual road-following route (and its real driving
+        // distance) via the Google Directions API. A plain straight-line
+        // polyline between the raw GPS points is drawn immediately so
+        // there's always something on the map, then replaced by the
+        // road-snapped route once Directions responds — or left in place,
+        // as an honestly-labeled estimate, if no driving route can be
+        // found between the recorded points. Only fits the map's view on
         // the very first render, so live updates don't yank the viewport
         // out from under an admin who's panned/zoomed to look at something.
-        function renderHireTrackPoints(hireId, points) {
+        function renderHireTrackPoints(hireId, points, fallbackKm) {
             const container = document.getElementById('map-track-' + hireId);
             if (!container) return;
             const emptyState = container.parentElement.querySelector('.track-empty-state');
@@ -772,42 +833,115 @@
             if (emptyState) emptyState.style.display = 'none';
             container.style.display = '';
 
+            if (!window.__placesReady || !window.google?.maps) {
+                // Either still loading (typical: a few hundred ms behind
+                // the async script tag) or there's no Google Maps API key
+                // configured at all, in which case __placesReady will
+                // never become true — give up after ~5s rather than
+                // retrying forever.
+                window.__hireTrackWaits = window.__hireTrackWaits || {};
+                const attempt = (window.__hireTrackWaits[hireId] || 0) + 1;
+                window.__hireTrackWaits[hireId] = attempt;
+
+                if (attempt > 12) {
+                    container.innerHTML = '<div class="text-center text-muted py-5">Google Maps isn\'t available right now.</div>';
+                    return;
+                }
+
+                container.innerHTML = '<div class="text-center text-muted py-5">Loading map…</div>';
+                setTimeout(() => renderHireTrackPoints(hireId, points, fallbackKm), 400);
+                return;
+            }
+            delete (window.__hireTrackWaits || {})[hireId];
+
             let map = window.__hireTrackMaps[hireId];
             const isFirstRender = !map;
 
             if (isFirstRender) {
-                map = L.map(container);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; OpenStreetMap contributors',
-                    maxZoom: 19,
-                }).addTo(map);
+                container.innerHTML = '';
+                map = new google.maps.Map(container, {
+                    center: points[0],
+                    zoom: 14,
+                    streetViewControl: false,
+                    mapTypeControl: false,
+                    fullscreenControl: false,
+                });
                 window.__hireTrackMaps[hireId] = map;
-                window.__hireTrackLayers[hireId] = {};
+                window.__hireTrackLayers[hireId] = {
+                    directionsRenderer: new google.maps.DirectionsRenderer({
+                        map,
+                        suppressMarkers: true, // custom Start/Latest markers below carry the meaning instead
+                        preserveViewport: true, // we control fitBounds ourselves, only on first render
+                        polylineOptions: { strokeColor: '#4f46e5', strokeWeight: 4 },
+                    }),
+                };
             }
 
             const layers = window.__hireTrackLayers[hireId];
+
+            const signature = trackPointsSignature(points);
+            if (!isFirstRender && layers.lastSignature === signature) return;
+            layers.lastSignature = signature;
+
             ['polyline', 'startMarker', 'latestMarker', 'singleMarker'].forEach((key) => {
                 if (layers[key]) {
-                    map.removeLayer(layers[key]);
+                    layers[key].setMap(null);
                     layers[key] = null;
                 }
             });
 
-            const latlngs = points.map((p) => [p.lat, p.lng]);
-
-            if (latlngs.length === 1) {
-                layers.singleMarker = L.marker(latlngs[0]).addTo(map).bindPopup('Point 1');
-                if (isFirstRender) map.setView(latlngs[0], 15);
-            } else {
-                layers.polyline = L.polyline(latlngs, { color: '#4f46e5', weight: 4 }).addTo(map);
-                layers.startMarker = L.circleMarker(latlngs[0], { radius: 7, color: '#059669', fillColor: '#059669', fillOpacity: 1 })
-                    .addTo(map).bindPopup('Start');
-                layers.latestMarker = L.circleMarker(latlngs[latlngs.length - 1], { radius: 7, color: '#dc2626', fillColor: '#dc2626', fillOpacity: 1 })
-                    .addTo(map).bindPopup('Latest');
-                if (isFirstRender) map.fitBounds(latlngs, { padding: [24, 24] });
+            if (points.length === 1) {
+                layers.singleMarker = new google.maps.Marker({ position: points[0], map, title: 'Point 1' });
+                if (isFirstRender) map.setCenter(points[0]);
+                updateHireTrackDistance(hireId, null, fallbackKm, 'single');
+                return;
             }
 
-            if (isFirstRender) setTimeout(() => map.invalidateSize(), 150);
+            const bounds = new google.maps.LatLngBounds();
+            points.forEach((p) => bounds.extend(p));
+
+            const markerIcon = (color) => ({
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 7,
+                fillColor: color,
+                fillOpacity: 1,
+                strokeColor: '#fff',
+                strokeWeight: 2,
+            });
+            layers.startMarker = new google.maps.Marker({ position: points[0], map, title: 'Start', icon: markerIcon('#059669') });
+            layers.latestMarker = new google.maps.Marker({ position: points[points.length - 1], map, title: 'Latest', icon: markerIcon('#dc2626') });
+
+            // Straight-line placeholder — visible until (and unless) the
+            // road-snapped route below takes over.
+            layers.polyline = new google.maps.Polyline({
+                path: points, map, strokeColor: '#94a3b8', strokeWeight: 3, strokeOpacity: .6,
+            });
+            if (isFirstRender) map.fitBounds(bounds, 24);
+            updateHireTrackDistance(hireId, null, fallbackKm, 'pending');
+
+            const waypointPoints = decimateTrackPoints(points, 25);
+            new google.maps.DirectionsService().route({
+                origin: waypointPoints[0],
+                destination: waypointPoints[waypointPoints.length - 1],
+                waypoints: waypointPoints.slice(1, -1).map((p) => ({ location: p, stopover: false })),
+                travelMode: google.maps.TravelMode.DRIVING,
+            }, (result, status) => {
+                // A live trip keeps posting new points — if a newer render
+                // has already started, this stale response should not
+                // paint over it.
+                if (layers.lastSignature !== signature) return;
+
+                if (status !== 'OK') {
+                    updateHireTrackDistance(hireId, null, fallbackKm, 'failed');
+                    return;
+                }
+
+                layers.directionsRenderer.setDirections(result);
+                if (layers.polyline) { layers.polyline.setMap(null); layers.polyline = null; }
+
+                const meters = result.routes[0].legs.reduce((sum, leg) => sum + leg.distance.value, 0);
+                updateHireTrackDistance(hireId, meters / 1000, fallbackKm);
+            });
         }
 
         function updateHireTrackStats(hireId, data) {
@@ -820,8 +954,6 @@
                     ? '<span class="text-success"><i class="bi bi-record-circle"></i> Active</span>'
                     : (data.status === 'pending' ? 'Not started' : 'Stopped');
             }
-            const distanceEl = modal.querySelector('.track-distance');
-            if (distanceEl) distanceEl.textContent = Number(data.total_distance_km).toFixed(2) + ' km';
             const countEl = modal.querySelector('.track-points-count');
             if (countEl) countEl.textContent = data.points.length;
             const liveBadge = modal.querySelector('.track-live-badge');
@@ -835,7 +967,7 @@
                 const data = await res.json();
 
                 updateHireTrackStats(hireId, data);
-                renderHireTrackPoints(hireId, data.points);
+                renderHireTrackPoints(hireId, data.points, data.total_distance_km);
 
                 // Nothing more will ever change for a completed hire —
                 // stop polling it.
@@ -858,7 +990,11 @@
                 // Renders whatever the page already has instantly, then
                 // starts polling for live updates while the modal is open.
                 modalEl.addEventListener('shown.bs.modal', function () {
-                    renderHireTrackPoints(hireId, @json($hire->trackingPoints->map(fn ($p) => ['lat' => $p->latitude, 'lng' => $p->longitude])->values()));
+                    renderHireTrackPoints(
+                        hireId,
+                        @json($hire->trackingPoints->map(fn ($p) => ['lat' => $p->latitude, 'lng' => $p->longitude])->values()),
+                        {{ $hire->total_distance_km }}
+                    );
 
                     pollHireTracking(hireId, trackingUrl);
                     window.__hireTrackPollers[hireId] = setInterval(() => pollHireTracking(hireId, trackingUrl), 10000);
