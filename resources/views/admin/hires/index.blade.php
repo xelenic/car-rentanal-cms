@@ -185,7 +185,7 @@
                                     <span class="text-muted small">Not started</span>
                                 @endif
                                 @if ($hire->trackingPoints->isNotEmpty())
-                                    <div class="text-muted mt-1" style="font-size: .72rem;">{{ number_format($hire->total_distance_km, 1) }} km</div>
+                                    <div class="text-muted mt-1 track-row-distance" id="track-row-distance-{{ $hire->id }}" style="font-size: .72rem;" title="Straight-line estimate — calculating road distance…">{{ number_format($hire->total_distance_km, 1) }} km</div>
                                 @endif
                             </td>
                             <td style="font-size: .78rem;">
@@ -980,6 +980,37 @@
             }
         }
 
+        // Resolves the road distance for a hire's row-level summary in the
+        // Hires table itself — independent of whether its Location Track
+        // modal is ever opened. The straight-line estimate already
+        // server-rendered there stays showing (it's a perfectly honest
+        // number, just not road-accurate) until/unless this succeeds.
+        function renderHireRowDistance(hireId, points, attempt) {
+            const el = document.getElementById('track-row-distance-' + hireId);
+            if (!el || points.length < 2) return;
+
+            if (!window.__placesReady || !window.google?.maps) {
+                attempt = (attempt || 0) + 1;
+                if (attempt > 12) return; // give up quietly — the estimate stays shown
+                setTimeout(() => renderHireRowDistance(hireId, points, attempt), 400);
+                return;
+            }
+
+            const waypointPoints = decimateTrackPoints(points, 25);
+            new google.maps.DirectionsService().route({
+                origin: waypointPoints[0],
+                destination: waypointPoints[waypointPoints.length - 1],
+                waypoints: waypointPoints.slice(1, -1).map((p) => ({ location: p, stopover: false })),
+                travelMode: google.maps.TravelMode.DRIVING,
+            }, (result, status) => {
+                if (status !== 'OK') return; // leave the straight-line estimate showing
+
+                const meters = result.routes[0].legs.reduce((sum, leg) => sum + leg.distance.value, 0);
+                el.textContent = (meters / 1000).toFixed(1) + ' km';
+                el.title = 'Road distance (Google Maps)';
+            });
+        }
+
         @foreach ($hires as $hire)
             (function () {
                 const hireId = {{ $hire->id }};
@@ -1007,6 +1038,18 @@
                     }
                 });
             })();
+        @endforeach
+
+        // Kick off each visible row's road-distance calculation on page
+        // load — staggered a little so a full page of hires doesn't fire
+        // a burst of simultaneous Directions requests all at once.
+        @foreach ($hires as $hire)
+            @if ($hire->trackingPoints->count() > 1)
+                setTimeout(() => renderHireRowDistance(
+                    {{ $hire->id }},
+                    @json($hire->trackingPoints->map(fn ($p) => ['lat' => $p->latitude, 'lng' => $p->longitude])->values())
+                ), {{ $loop->index * 150 }});
+            @endif
         @endforeach
     </script>
 @endpush
