@@ -111,6 +111,11 @@ class HireTrackingController extends Controller
             'tracking_started_at' => $hire->tracking_started_at?->toIso8601String(),
             'tracking_stopped_at' => $hire->tracking_stopped_at?->toIso8601String(),
             'total_distance_km' => $hire->total_distance_km,
+            // The full path recorded so far — lets the driver app open it
+            // as a route in Google Maps (see the "View Path" button) even
+            // if it wasn't the one that captured every earlier point in
+            // this session.
+            'points' => $hire->trackingPoints->map(fn ($p) => ['lat' => $p->latitude, 'lng' => $p->longitude])->values(),
         ]);
     }
 }

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
@@ -19,7 +19,13 @@ import '../models/vehicle_maintenance_record.dart';
 class ApiException implements Exception {
   final String message;
 
-  ApiException(this.message);
+  /// HTTP status when the failure came from a server response (null for
+  /// network-level failures) — the background tracking service uses it to
+  /// tell "this hire can no longer be tracked" (403/422) and "signed out"
+  /// (401) apart from a transient outage worth retrying.
+  final int? statusCode;
+
+  ApiException(this.message, {this.statusCode});
 
   @override
   String toString() => message;
@@ -30,22 +36,31 @@ class ApiClient {
 
   static final ApiClient instance = ApiClient._internal();
 
+  static const _productionBaseUrl = 'https://xnatureland1.xelenic.com/api';
+
   /// Base URL of the Car Rental CMS API.
   ///
-  /// Exported/production builds bake in the real server via
-  /// --dart-define=API_BASE_URL=https://xnatureland1.xelenic.com/api (see
-  /// the export build command) — that always wins when present. Without
-  /// it (plain `flutter run` during development) this falls back to local
-  /// dev defaults:
-  /// - Android emulator: 10.0.2.2 aliases the host machine's localhost —
-  ///   the emulator is its own machine, so plain "localhost" here would
-  ///   mean the emulator itself, not the host running the Laravel server.
-  /// - Web / iOS simulator / desktop: localhost reaches the host directly.
-  /// - Physical device during dev: replace with your computer's LAN IP,
-  ///   e.g. http://192.168.1.20:8000/api
+  /// 1. --dart-define=API_BASE_URL=... always wins when given (point a build
+  ///    at any server, e.g. a staging one).
+  /// 2. Every release build of the mobile app — the exported APK — talks to
+  ///    the production server by default, so it never depends on remembering
+  ///    a build flag (and a release APK can't end up pointing at a dev
+  ///    machine). Web is deliberately excluded: `flutter build web --release`
+  ///    is what serves the local preview, which must keep using the local
+  ///    dev server below rather than production data.
+  /// 3. Otherwise (debug / `flutter run` during development), local dev
+  ///    defaults:
+  ///    - Android emulator: 10.0.2.2 aliases the host machine's localhost —
+  ///      the emulator is its own machine, so plain "localhost" here would
+  ///      mean the emulator itself, not the host running the Laravel server.
+  ///    - Web / iOS simulator / desktop: localhost reaches the host directly.
+  ///    - Physical device during dev: pass your computer's LAN IP via
+  ///      --dart-define, e.g. http://192.168.1.20:8000/api
   static String get baseUrl {
     const override = String.fromEnvironment('API_BASE_URL');
     if (override.isNotEmpty) return override;
+
+    if (kReleaseMode && !kIsWeb) return _productionBaseUrl;
 
     if (!kIsWeb && Platform.isAndroid) {
       return 'http://10.0.2.2:8000/api';
@@ -332,7 +347,7 @@ class ApiClient {
       return TrackingStatus.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     }
 
-    throw ApiException(_extractError(response));
+    throw ApiException(_extractError(response), statusCode: response.statusCode);
   }
 
   Future<List<HireExpense>> fetchDriverExpenses({String? category}) async {

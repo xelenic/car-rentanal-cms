@@ -84,10 +84,13 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
     }
   }
 
-  Future<void> _takePhoto() async {
+  Future<void> _pickPhoto() async {
+    final source = await _chooseImageSource();
+    if (source == null) return;
+
     try {
       final photo = await _picker.pickImage(
-        source: ImageSource.camera,
+        source: source,
         maxWidth: 1600,
         imageQuality: 85,
       );
@@ -96,8 +99,56 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
       setState(() => _photo = photo);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = 'Could not open the camera: $e');
+      setState(() {
+        _error = source == ImageSource.camera
+            ? 'Could not open the camera: $e'
+            : 'Could not open the gallery: $e';
+      });
     }
+  }
+
+  /// Lets the driver pick between the camera and their photo gallery for
+  /// the receipt image, rather than forcing a fresh photo every time —
+  /// some receipts are easier to snap ahead of time or come in as an
+  /// existing screenshot/photo.
+  Future<ImageSource?> _chooseImageSource() {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined, color: AppColors.neon),
+                title: const Text('Take Photo'),
+                onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined, color: AppColors.neon),
+                title: const Text('Choose from Gallery'),
+                onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _save() async {
@@ -191,7 +242,7 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
                 _PhotoPicker(
                   photo: _photo,
                   required: widget.receiptRequired,
-                  onTap: _takePhoto,
+                  onTap: _pickPhoto,
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -308,9 +359,9 @@ class _PhotoPicker extends StatelessWidget {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                          Icon(Icons.sync, color: Colors.white, size: 14),
                           SizedBox(width: 4),
-                          Text('Retake', style: TextStyle(color: Colors.white, fontSize: 11)),
+                          Text('Change', style: TextStyle(color: Colors.white, fontSize: 11)),
                         ],
                       ),
                     ),
@@ -321,11 +372,16 @@ class _PhotoPicker extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.camera_alt_outlined, color: AppColors.neon, size: 26),
+                    const Icon(Icons.add_a_photo_outlined, color: AppColors.neon, size: 26),
                     const SizedBox(height: 6),
                     Text(
-                      required ? 'Take Photo of Receipt' : 'Take Photo of Receipt (optional)',
+                      required ? 'Add Photo of Receipt' : 'Add Photo of Receipt (optional)',
                       style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Camera or Gallery',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 10.5),
                     ),
                   ],
                 ),

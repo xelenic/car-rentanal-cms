@@ -100,6 +100,54 @@ class VehicleController extends Controller implements HasMiddleware
         ]);
     }
 
+    /** How many trailing months (including the current one) the revenue trend chart covers. */
+    private const TREND_MONTHS = 6;
+
+    public function show(Vehicle $vehicle): View
+    {
+        $hires = Hire::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->with(['customer', 'driver'])
+            ->get()
+            ->sortByDesc(fn (Hire $hire) => $hire->effective_month_date)
+            ->values();
+
+        $maintenanceRecords = $vehicle->maintenanceRecords()->with('driver')->latest()->get();
+        $leasings = $vehicle->leasings()->with('settlements')->get();
+
+        $summary = [
+            'hire_count' => $hires->count(),
+            'hire_full_value_total' => round((float) $hires->sum('hire_full_value'), 2),
+            'our_hire_value_total' => round((float) $hires->sum('our_hire_value'), 2),
+            'commission_total' => round((float) $hires->sum('commission'), 2),
+            'maintenance_total' => round((float) $maintenanceRecords->sum('cost'), 2),
+        ];
+        $summary['net_revenue'] = round($summary['commission_total'] - $summary['maintenance_total'], 2);
+
+        $now = now();
+        $trend = collect(range(self::TREND_MONTHS - 1, 0))
+            ->map(function (int $monthsAgo) use ($now, $hires) {
+                $date = $now->copy()->subMonthsNoOverflow($monthsAgo);
+                $monthHires = $hires->filter(fn (Hire $hire) => $hire->effective_month_date?->isSameMonth($date) ?? false);
+
+                return [
+                    'label' => $date->format('M Y'),
+                    'hire_full_value_total' => round((float) $monthHires->sum('hire_full_value'), 2),
+                    'commission_total' => round((float) $monthHires->sum('commission'), 2),
+                ];
+            })
+            ->values();
+
+        return view('admin.vehicles.show', [
+            'vehicle' => $vehicle,
+            'hires' => $hires->take(20),
+            'maintenanceRecords' => $maintenanceRecords,
+            'leasings' => $leasings,
+            'summary' => $summary,
+            'trend' => $trend,
+        ]);
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);

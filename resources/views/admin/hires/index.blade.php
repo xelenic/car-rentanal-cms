@@ -753,10 +753,11 @@
         window.__hireTrackPollers = window.__hireTrackPollers || {};
 
         // Google's Directions API accepts at most 25 waypoints (including
-        // origin/destination) per request. A trip tracked once a minute
-        // over several hours can easily produce far more raw points than
-        // that, so evenly sample down to the cap — always keeping the
-        // first and last point — rather than truncating the trip.
+        // origin/destination) per request. A trip tracked every 15
+        // seconds over several hours can easily produce far more raw
+        // points than that, so evenly sample down to the cap — always
+        // keeping the first and last point — rather than truncating the
+        // trip.
         function decimateTrackPoints(points, max) {
             if (points.length <= max) return points;
             const step = (points.length - 1) / (max - 1);
@@ -769,9 +770,9 @@
         }
 
         // Identifies "this exact set of points" cheaply, so a poll tick
-        // that hasn't actually picked up a new GPS point (the driver app
-        // only posts once a minute) can skip re-requesting the road route
-        // entirely instead of re-billing the Directions API every 10s.
+        // that hasn't actually picked up a new GPS point yet can skip
+        // re-requesting the road route entirely instead of re-billing the
+        // Directions API on every 10s tick.
         function trackPointsSignature(points) {
             if (!points.length) return '';
             const last = points[points.length - 1];

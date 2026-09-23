@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\VehicleController;
 use App\Http\Controllers\Admin\VehicleLeasingController;
 use App\Http\Controllers\Admin\VehicleLeasingSettlementController;
 use App\Http\Controllers\Admin\VehicleMaintenanceController;
+use App\Http\Controllers\Admin\VehicleRevenueController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use Illuminate\Support\Facades\Route;
 
@@ -37,7 +38,8 @@ Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
 Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
-    Route::resource('vehicles', VehicleController::class)->except(['show', 'create', 'edit']);
+    Route::resource('vehicles', VehicleController::class)->except(['create', 'edit']);
+    Route::get('vehicle-revenue', [VehicleRevenueController::class, 'index'])->name('vehicle-revenue.index');
     Route::get('repairs', [VehicleMaintenanceController::class, 'index'])->name('repairs.index');
     Route::delete('repairs/{vehicleMaintenanceRecord}', [VehicleMaintenanceController::class, 'destroy'])->name('repairs.destroy');
     Route::get('leasing', [VehicleLeasingController::class, 'index'])->name('leasing.index');

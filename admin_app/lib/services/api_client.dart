@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
@@ -24,14 +24,20 @@ class ApiClient {
 
   static final ApiClient instance = ApiClient._internal();
 
+  static const _productionBaseUrl = 'https://xnatureland1.xelenic.com/api';
+
   /// Base URL of the Car Rental CMS API — same resolution order as the
-  /// driver app's client (see its longer comment): a baked-in
-  /// --dart-define=API_BASE_URL for exported builds wins first; otherwise
-  /// 10.0.2.2 for the Android emulator (its alias for the host machine),
-  /// else plain localhost (web / iOS simulator / desktop dev).
+  /// driver app's client: a --dart-define=API_BASE_URL always wins; every
+  /// release build of the mobile app (the exported APK) otherwise defaults
+  /// to the production server, so it never depends on a build flag (web is
+  /// excluded — the locally served web preview must keep hitting the local
+  /// dev server); debug builds use 10.0.2.2 for the Android emulator (its
+  /// alias for the host machine), else plain localhost.
   static String get baseUrl {
     const override = String.fromEnvironment('API_BASE_URL');
     if (override.isNotEmpty) return override;
+
+    if (kReleaseMode && !kIsWeb) return _productionBaseUrl;
 
     if (!kIsWeb && Platform.isAndroid) {
       return 'http://10.0.2.2:8000/api';

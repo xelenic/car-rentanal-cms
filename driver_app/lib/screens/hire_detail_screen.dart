@@ -3,12 +3,30 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/hire.dart';
+import '../models/tracking_status.dart';
 import '../services/api_client.dart';
+import '../services/background_tracking.dart';
 import '../theme/app_theme.dart';
 import 'expense_entry_screen.dart';
 import 'placeholder_screen.dart';
+
+/// Google Maps' consumer directions deep link accepts at most 25 points
+/// (origin + destination + waypoints) — evenly sample down to that cap,
+/// always keeping the first and last point, rather than truncating the
+/// trip or failing on a long one.
+List<TrackPoint> _decimateTrackPoints(List<TrackPoint> points, int max) {
+  if (points.length <= max) return points;
+  final step = (points.length - 1) / (max - 1);
+  final picked = <TrackPoint>[points.first];
+  for (var i = 1; i < max - 1; i++) {
+    picked.add(points[(i * step).round()]);
+  }
+  picked.add(points.last);
+  return picked;
+}
 
 /// Shared copy for a hire that can't be started/completed yet because its
 /// scheduled date hasn't arrived — used by both the tracking error banner
@@ -32,27 +50,99 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
   Timer? _timer;
   bool _busy = false;
   String? _trackingError;
-
-  static const _pingInterval = Duration(minutes: 1);
+  List<TrackPoint> _points = [];
 
   @override
   void initState() {
     super.initState();
     _hire = widget.hire;
+    BackgroundTracking.addListener(_onTrackingUpdate);
     if (_hire.isTracking) {
-      _startTimer();
+      _resumeTracking();
     }
   }
 
   @override
   void dispose() {
+    // Only this screen's own listener/timer go away. The Android background
+    // service is deliberately left running — it's what keeps tracking after
+    // the driver leaves this screen or minimizes the app, and only ends when
+    // the hire is stopped or completed.
+    BackgroundTracking.removeListener(_onTrackingUpdate);
     _timer?.cancel();
     super.dispose();
   }
 
+  /// The in-app fallback (web/other platforms, or if the Android service
+  /// can't start): only records while this screen is open.
   void _startTimer() {
     _timer?.cancel();
-    _timer = Timer.periodic(_pingInterval, (_) => _captureAndSendPoint());
+    _timer = Timer.periodic(kTrackingPingInterval, (_) => _captureAndSendPoint());
+  }
+
+  /// Starts whatever keeps recording positions for an active hire: the
+  /// Android background service when available, otherwise the in-app timer.
+  Future<void> _beginTrackingLoop() async {
+    if (!backgroundTrackingSupported) {
+      _startTimer();
+      return;
+    }
+
+    final started = await BackgroundTracking.start(_hire.id);
+    if (started) {
+      _timer?.cancel();
+      return;
+    }
+
+    _startTimer();
+    if (mounted) {
+      setState(() {
+        _trackingError =
+            'Background tracking could not start, so location is only recorded while this screen stays open.';
+      });
+    }
+  }
+
+  /// Re-attaches tracking when the screen opens for a hire that's already
+  /// active — e.g. the app was closed and reopened, or the OS killed the
+  /// service. The service just keeps running if it's still alive.
+  Future<void> _resumeTracking() => _beginTrackingLoop();
+
+  /// Ends whichever recorder is running for this hire: the in-app timer and
+  /// (on Android) the background service, which also removes its pinned
+  /// notification once no hire is left.
+  Future<void> _endTrackingLoop() async {
+    _timer?.cancel();
+    await BackgroundTracking.stop(_hire.id);
+  }
+
+  /// Messages from the Android background service (see BackgroundTracking):
+  /// a fresh status for a hire it just recorded a position for, or an error
+  /// worth surfacing (GPS off, server unreachable).
+  void _onTrackingUpdate(Object data) {
+    if (!mounted || data is! Map) return;
+
+    final message = Map<String, dynamic>.from(data);
+
+    if (message['type'] == 'error') {
+      setState(() => _trackingError = message['message'] as String?);
+      return;
+    }
+
+    if (message['type'] != 'status' || message['hire_id'] != _hire.id) return;
+
+    final status = TrackingStatus.fromJson(message);
+    setState(() {
+      _hire = _hire.copyWith(
+        status: status.status,
+        statusLabel: status.statusLabel,
+        isTracking: status.isTracking,
+        trackingStoppedAt: status.trackingStoppedAt,
+        totalDistanceKm: status.totalDistanceKm,
+      );
+      _points = status.points;
+      _trackingError = null;
+    });
   }
 
   Future<Position> _getCurrentPosition() async {
@@ -84,11 +174,72 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
       if (!mounted) return;
       setState(() {
         _hire = _hire.copyWith(totalDistanceKm: status.totalDistanceKm);
+        _points = status.points;
         _trackingError = null;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() => _trackingError = e.toString());
+    }
+  }
+
+  /// Opens the path recorded so far as a route in Google Maps (the app if
+  /// installed, otherwise the browser) — a single point opens as a plain
+  /// location instead of a route, since there's nothing to route between.
+  Future<void> _openPathInMaps() async {
+    if (_points.isEmpty) return;
+
+    final Uri url;
+    if (_points.length == 1) {
+      final p = _points.first;
+      url = Uri.parse('https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}');
+    } else {
+      final sampled = _decimateTrackPoints(_points, 25);
+      final origin = sampled.first;
+      final destination = sampled.last;
+      final waypoints = sampled.sublist(1, sampled.length - 1);
+      final waypointsParam = waypoints.map((p) => '${p.lat},${p.lng}').join('|');
+
+      url = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1'
+        '&origin=${origin.lat},${origin.lng}'
+        '&destination=${destination.lat},${destination.lng}'
+        '${waypointsParam.isEmpty ? '' : '&waypoints=$waypointsParam'}'
+        '&travelmode=driving',
+      );
+    }
+
+    await _launchMapsUrl(url);
+  }
+
+  /// The hire's own pickup/destination address, shown as a "Open in Google
+  /// Maps" button from the moment the page opens — this is the address the
+  /// customer booked, not the GPS trail (that only exists once the driver
+  /// has actually pressed Start; see [_openPathInMaps]). Falls back through
+  /// whichever location the tour type actually has.
+  String? get _navigationTarget {
+    final hire = _hire;
+    if (hire.fromLocation != null && hire.fromLocation!.isNotEmpty) return hire.fromLocation;
+    if (hire.toLocation != null && hire.toLocation!.isNotEmpty) return hire.toLocation;
+    if (hire.stayLocations.isNotEmpty) return hire.stayLocations.first;
+    if (hire.package != null && hire.package!.isNotEmpty) return hire.package;
+    return null;
+  }
+
+  Future<void> _openAddressInMaps(String address) async {
+    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}');
+    await _launchMapsUrl(url);
+  }
+
+  Future<void> _launchMapsUrl(Uri url) async {
+    try {
+      final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!launched && mounted) {
+        setState(() => _trackingError = 'Could not open Google Maps.');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _trackingError = 'Could not open Google Maps: $e');
     }
   }
 
@@ -108,7 +259,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
     try {
       if (_hire.isTracking) {
         final status = await ApiClient.instance.stopTracking(_hire.id);
-        _timer?.cancel();
+        await _endTrackingLoop();
         if (!mounted) return;
         setState(() {
           _hire = _hire.copyWith(
@@ -116,9 +267,11 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
             trackingStoppedAt: status.trackingStoppedAt,
             totalDistanceKm: status.totalDistanceKm,
           );
+          _points = status.points;
         });
       } else {
         final position = await _getCurrentPosition();
+        await BackgroundTracking.requestNotificationPermission();
         final status = await ApiClient.instance.startTracking(_hire.id);
         final pointStatus = await ApiClient.instance.sendTrackingPoint(
           _hire.id,
@@ -135,8 +288,9 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
             trackingStartedAt: status.trackingStartedAt,
             totalDistanceKm: pointStatus.totalDistanceKm,
           );
+          _points = pointStatus.points;
         });
-        _startTimer();
+        await _beginTrackingLoop();
       }
     } catch (e) {
       if (!mounted) return;
@@ -185,7 +339,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
 
     try {
       final status = await ApiClient.instance.completeHire(_hire.id);
-      _timer?.cancel();
+      await _endTrackingLoop();
       if (!mounted) return;
       setState(() {
         _hire = _hire.copyWith(
@@ -195,6 +349,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
           trackingStoppedAt: status.trackingStoppedAt,
           totalDistanceKm: status.totalDistanceKm,
         );
+        _points = status.points;
       });
     } catch (e) {
       if (!mounted) return;
@@ -237,7 +392,9 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
             hire: hire,
             busy: _busy,
             error: _trackingError,
+            hasPath: _points.isNotEmpty,
             onToggle: _toggleTracking,
+            onViewPath: _openPathInMaps,
           ),
           const SizedBox(height: 12),
           _QuickActionsRow(
@@ -264,6 +421,22 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
                 _InfoRow(label: 'Start', value: dateFormat.format(hire.startTime!.toLocal())),
               if (hire.endTime != null)
                 _InfoRow(label: 'End', value: dateFormat.format(hire.endTime!.toLocal())),
+              if (_navigationTarget != null) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openAddressInMaps(_navigationTarget!),
+                    icon: const Icon(Icons.location_on_outlined, size: 18),
+                    label: const Text('Open Location in Google Maps'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.neonDeep,
+                      side: const BorderSide(color: AppColors.neon),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 12),
@@ -371,13 +544,17 @@ class _TrackingCard extends StatelessWidget {
   final Hire hire;
   final bool busy;
   final String? error;
+  final bool hasPath;
   final VoidCallback onToggle;
+  final VoidCallback onViewPath;
 
   const _TrackingCard({
     required this.hire,
     required this.busy,
     required this.error,
+    required this.hasPath,
     required this.onToggle,
+    required this.onViewPath,
   });
 
   @override
@@ -442,6 +619,22 @@ class _TrackingCard extends StatelessWidget {
             distanceKm: hire.totalDistanceKm,
             onTap: onToggle,
           ),
+          if (hasPath) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onViewPath,
+                icon: const Icon(Icons.map_outlined, size: 18),
+                label: const Text('View Path in Google Maps'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.neonDeep,
+                  side: const BorderSide(color: AppColors.neon),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
           if (isLocked) ...[
             const SizedBox(height: 12),
             Container(

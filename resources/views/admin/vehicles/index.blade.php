@@ -128,6 +128,9 @@
                             </td>
                             <td class="text-end">
                                 <div class="d-inline-flex gap-1">
+                                    <a href="{{ route('admin.vehicles.show', $vehicle) }}" class="btn btn-sm btn-light border btn-icon">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
                                     @can('vehicles.update')
                                         <button type="button" class="btn btn-sm btn-light border btn-icon" data-bs-toggle="modal" data-bs-target="#modal-edit-{{ $vehicle->id }}">
                                             <i class="bi bi-pencil"></i>

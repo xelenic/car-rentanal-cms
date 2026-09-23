@@ -3,6 +3,15 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Background hire tracking: a foreground service of type "location"
+         keeps recording the driver's position (with a pinned notification)
+         after the app is minimized or the screen locks. Android 14+ refuses
+         to start the service without FOREGROUND_SERVICE_LOCATION. Started
+         from the visible app with the normal "while in use" location grant,
+         so ACCESS_BACKGROUND_LOCATION is deliberately not requested. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="driver_app"
@@ -35,6 +44,18 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- flutter_foreground_task's service (the name must not change).
+             No stopWithTask: like a ride-hailing app, tracking keeps going if
+             the driver swipes the app away, and only ends when the hire is
+             stopped or completed. -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="location"
+            android:exported="false" />
+        <meta-data
+            android:name="com.carrentalcms.driver_app.TRACKING_NOTIFICATION_ICON"
+            android:resource="@drawable/ic_tracking_notification" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
@@ -45,6 +66,15 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Lets url_launcher resolve/launch the "View Path in Google
+             Maps" button's https:// link (opens the Maps app if
+             installed, otherwise the browser) — required for that intent
+             to resolve on Android 11+'s package visibility rules. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <category android:name="android.intent.category.BROWSABLE"/>
+            <data android:scheme="https"/>
         </intent>
     </queries>
 </manifest>

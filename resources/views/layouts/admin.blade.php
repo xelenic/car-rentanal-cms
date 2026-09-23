@@ -376,7 +376,7 @@
                 <ul class="sidebar-nav">
                     @can('vehicles.view')
                         @php
-                            $vehicleGroupActive = request()->routeIs(['admin.vehicles.*', 'admin.repairs.*', 'admin.leasing.*']);
+                            $vehicleGroupActive = request()->routeIs(['admin.vehicles.*', 'admin.vehicle-revenue.*', 'admin.repairs.*', 'admin.leasing.*']);
                         @endphp
                         <li>
                             <a class="nav-link nav-link-parent {{ $vehicleGroupActive ? 'active-group' : '' }}" href="#sidebar-vehicle-group"
@@ -389,6 +389,11 @@
                                     <li>
                                         <a class="nav-link {{ request()->routeIs('admin.vehicles.*') ? 'active' : '' }}" href="{{ route('admin.vehicles.index') }}">
                                             <i class="bi bi-car-front"></i> Vehicles
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="nav-link {{ request()->routeIs('admin.vehicle-revenue.*') ? 'active' : '' }}" href="{{ route('admin.vehicle-revenue.index') }}">
+                                            <i class="bi bi-graph-up-arrow"></i> Revenue
                                         </a>
                                     </li>
                                     <li>

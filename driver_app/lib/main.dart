@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_shell.dart';
 import 'services/api_client.dart';
+import 'services/background_tracking.dart';
 import 'theme/app_theme.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  BackgroundTracking.initialize();
   runApp(const DriverApp());
 }
 

@@ -4,4 +4,9 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Debug builds default to the local Laravel server at
+         http://10.0.2.2:8000 (see ApiClient.baseUrl), which is plain HTTP —
+         Android blocks that unless cleartext is allowed. Debug/profile
+         only: this file is not part of release builds. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

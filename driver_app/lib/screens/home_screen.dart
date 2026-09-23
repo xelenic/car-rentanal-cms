@@ -8,6 +8,7 @@ import '../models/driver_salary.dart';
 import '../models/hire.dart';
 import '../models/hire_page.dart';
 import '../services/api_client.dart';
+import '../services/background_tracking.dart';
 import '../theme/app_theme.dart';
 import '../widgets/hire_route_card.dart';
 import '../widgets/initials_avatar.dart';
@@ -79,6 +80,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _logout() async {
+    // Signing out ends any background tracking first — the pings would only
+    // start failing with 401s once the token is gone.
+    await BackgroundTracking.stopAll();
     await ApiClient.instance.logout();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
