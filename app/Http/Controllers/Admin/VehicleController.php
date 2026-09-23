@@ -103,7 +103,7 @@ class VehicleController extends Controller implements HasMiddleware
     /** How many trailing months (including the current one) the revenue trend chart covers. */
     private const TREND_MONTHS = 6;
 
-    public function show(Vehicle $vehicle): View
+    public function show(Request $request, Vehicle $vehicle): View
     {
         $hires = Hire::query()
             ->where('vehicle_id', $vehicle->id)
@@ -138,9 +138,47 @@ class VehicleController extends Controller implements HasMiddleware
             })
             ->values();
 
+        // Revenue by month for this one vehicle — the dropdown only ever
+        // offers periods this vehicle actually has hires in.
+        $periods = MonthlyPeriods::fromTimestamps($hires->pluck('effective_month_date')->filter());
+        $availableYears = $periods['years'];
+        $monthsByYear = $periods['months_by_year'];
+
+        $selectedYear = $request->filled('year')
+            ? $request->integer('year')
+            : ($availableYears[0] ?? (int) $now->format('Y'));
+
+        $selectedMonth = $request->filled('month')
+            ? $request->integer('month')
+            : ($monthsByYear[$selectedYear][0] ?? (int) $now->format('n'));
+
+        $periodHires = $hires->filter(
+            fn (Hire $hire) => $hire->effective_month_date?->year === $selectedYear
+                && $hire->effective_month_date?->month === $selectedMonth
+        )->values();
+
+        $periodMaintenanceTotal = round((float) $maintenanceRecords
+            ->filter(fn ($record) => $record->created_at->year === $selectedYear && $record->created_at->month === $selectedMonth)
+            ->sum('cost'), 2);
+
+        $periodSummary = [
+            'hire_count' => $periodHires->count(),
+            'hire_full_value_total' => round((float) $periodHires->sum('hire_full_value'), 2),
+            'our_hire_value_total' => round((float) $periodHires->sum('our_hire_value'), 2),
+            'commission_total' => round((float) $periodHires->sum('commission'), 2),
+            'maintenance_total' => $periodMaintenanceTotal,
+        ];
+        $periodSummary['net_revenue'] = round($periodSummary['commission_total'] - $periodMaintenanceTotal, 2);
+
         return view('admin.vehicles.show', [
             'vehicle' => $vehicle,
-            'hires' => $hires->take(20),
+            'periodHires' => $periodHires,
+            'periodSummary' => $periodSummary,
+            'periodLabel' => now()->setDate($selectedYear, $selectedMonth, 1)->format('F Y'),
+            'availableYears' => $availableYears,
+            'monthsByYear' => $monthsByYear,
+            'selectedYear' => $selectedYear,
+            'selectedMonth' => $selectedMonth,
             'maintenanceRecords' => $maintenanceRecords,
             'leasings' => $leasings,
             'summary' => $summary,

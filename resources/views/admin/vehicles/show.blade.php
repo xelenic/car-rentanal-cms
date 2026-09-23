@@ -105,7 +105,52 @@
     </div>
 
     <div class="card border-0 mb-2">
-        <div class="card-header fw-semibold" style="font-size: .85rem;">Recent Hires @if ($summary['hire_count'] > $hires->count()) <span class="text-muted fw-normal">(latest {{ $hires->count() }} of {{ $summary['hire_count'] }})</span> @endif</div>
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <span class="fw-semibold" style="font-size: .85rem;">Revenue &middot; {{ $periodLabel }}</span>
+            <form method="GET" class="d-flex flex-wrap align-items-center gap-2">
+                <select name="year" class="form-select form-select-sm" style="max-width: 110px;" onchange="this.form.submit()">
+                    @forelse ($availableYears as $year)
+                        <option value="{{ $year }}" {{ (string) $selectedYear === (string) $year ? 'selected' : '' }}>{{ $year }}</option>
+                    @empty
+                        <option value="{{ $selectedYear }}" selected>{{ $selectedYear }}</option>
+                    @endforelse
+                </select>
+
+                <select name="month" class="form-select form-select-sm" style="max-width: 140px;" onchange="this.form.submit()">
+                    @forelse ($monthsByYear[$selectedYear] ?? [] as $month)
+                        <option value="{{ $month }}" {{ (string) $selectedMonth === (string) $month ? 'selected' : '' }}>{{ \Carbon\Carbon::create()->month($month)->format('F') }}</option>
+                    @empty
+                        <option value="{{ $selectedMonth }}" selected>{{ \Carbon\Carbon::create()->month($selectedMonth)->format('F') }}</option>
+                    @endforelse
+                </select>
+            </form>
+        </div>
+
+        <div class="row row-cols-2 row-cols-md-5 g-2 p-3 border-bottom">
+            <div class="col">
+                <div class="text-muted" style="font-size: .7rem;">Hires</div>
+                <div class="fw-semibold" style="font-size: .85rem;">{{ $periodSummary['hire_count'] }}</div>
+            </div>
+            <div class="col">
+                <div class="text-muted" style="font-size: .7rem;">Full Value</div>
+                <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSummary['hire_full_value_total'], 2) }}</div>
+            </div>
+            <div class="col">
+                <div class="text-muted" style="font-size: .7rem;">Our Hire Value</div>
+                <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSummary['our_hire_value_total'], 2) }}</div>
+            </div>
+            <div class="col">
+                <div class="text-muted" style="font-size: .7rem;">Commission</div>
+                <div class="fw-semibold" style="color: #1baf7a; font-size: .85rem;">Rs. {{ number_format($periodSummary['commission_total'], 2) }}</div>
+            </div>
+            <div class="col">
+                <div class="text-muted" style="font-size: .7rem;">Net Revenue</div>
+                <div class="fw-semibold" style="font-size: .85rem;">
+                    <span class="{{ $periodSummary['net_revenue'] < 0 ? 'text-danger' : '' }}">Rs. {{ number_format($periodSummary['net_revenue'], 2) }}</span>
+                </div>
+            </div>
+        </div>
+
         <div class="table-responsive">
             <table class="table align-middle mb-0">
                 <thead>
@@ -120,7 +165,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse ($hires as $hire)
+                    @forelse ($periodHires as $hire)
                         <tr>
                             <td class="text-muted" style="font-size: .8rem;">{{ $hire->effective_month_date?->format('M j, Y') ?? '—' }}</td>
                             <td style="font-size: .8rem;">{{ $hire->customer->name ?? '—' }}</td>
@@ -132,7 +177,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-4">No hires recorded for this vehicle yet.</td>
+                            <td colspan="7" class="text-center text-muted py-4">No hires for {{ $periodLabel }}.</td>
                         </tr>
                     @endforelse
                 </tbody>
