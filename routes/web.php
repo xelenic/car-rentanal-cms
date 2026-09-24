@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\ExpenseController;
 use App\Http\Controllers\Admin\HireController;
 use App\Http\Controllers\Admin\HirePaymentController;
 use App\Http\Controllers\Admin\LocationController;
+use App\Http\Controllers\Admin\LogController;
 use App\Http\Controllers\Admin\PackageController;
 use App\Http\Controllers\Admin\PayrollController;
 use App\Http\Controllers\Admin\PermissionController;
@@ -67,4 +68,6 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::resource('users', UserController::class)->except(['show', 'create', 'edit']);
     Route::resource('roles', RoleController::class)->except(['show', 'create', 'edit']);
     Route::resource('permissions', PermissionController::class)->except(['show', 'create', 'edit']);
+    Route::get('logs', [LogController::class, 'index'])->name('logs.index');
+    Route::get('logs/download', [LogController::class, 'download'])->name('logs.download');
 });

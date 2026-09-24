@@ -549,6 +549,17 @@
                     @endcanany
                 </ul>
             @endcanany
+
+            @can('logs.view')
+                <div class="sidebar-section-label">System</div>
+                <ul class="sidebar-nav">
+                    <li>
+                        <a class="nav-link {{ request()->routeIs('admin.logs.*') ? 'active' : '' }}" href="{{ route('admin.logs.index') }}">
+                            <i class="bi bi-terminal"></i> Logs
+                        </a>
+                    </li>
+                </ul>
+            @endcan
         </aside>
 
         <div class="main">

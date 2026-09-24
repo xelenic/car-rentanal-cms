@@ -30,6 +30,7 @@ class RolePermissionSeeder extends Seeder
             'hires.view', 'hires.create', 'hires.update', 'hires.delete',
             'salary-advances.view', 'salary-advances.update',
             'payroll.manage',
+            'logs.view',
         ];
 
         foreach ($permissions as $permission) {
