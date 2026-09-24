@@ -818,13 +818,14 @@
             }
             delete (window.__hireTrackWaits || {})[hireId];
 
+            const first = { lat: points[0].lat, lng: points[0].lng };
             let map = window.__hireTrackMaps[hireId];
             const isFirstRender = !map;
 
             if (isFirstRender) {
                 container.innerHTML = '';
                 map = new google.maps.Map(container, {
-                    center: points[0],
+                    center: first,
                     zoom: 14,
                     streetViewControl: false,
                     mapTypeControl: false,
@@ -848,10 +849,12 @@
                     layers[key] = null;
                 }
             });
+            (layers.dots || []).forEach((dot) => dot.setMap(null));
+            layers.dots = [];
 
             if (points.length === 1) {
-                layers.singleMarker = new google.maps.Marker({ position: points[0], map, title: 'Point 1' });
-                if (isFirstRender) map.setCenter(points[0]);
+                layers.singleMarker = new google.maps.Marker({ position: first, map, title: 'Point 1' });
+                if (isFirstRender) map.setCenter(first);
                 return;
             }
 
@@ -863,15 +866,38 @@
                 strokeColor: '#fff',
                 strokeWeight: 2,
             });
+            // The Maps API is handed plain {lat, lng} literals; the timestamp
+            // only feeds the hover text on each point.
+            const path = points.map((p) => ({ lat: p.lat, lng: p.lng }));
+
             layers.polyline = new google.maps.Polyline({
-                path: points, map, strokeColor: '#4f46e5', strokeWeight: 4,
+                path, map, strokeColor: '#4f46e5', strokeWeight: 3, zIndex: 1,
             });
-            layers.startMarker = new google.maps.Marker({ position: points[0], map, title: 'Start', icon: markerIcon('#059669') });
-            layers.latestMarker = new google.maps.Marker({ position: points[points.length - 1], map, title: 'Latest', icon: markerIcon('#dc2626') });
+
+            // One dot per logged point — hover for its number and time.
+            const pointTitle = (p, index) => 'Point ' + (index + 1) + ' of ' + points.length
+                + (p.at ? ' · ' + new Date(p.at).toLocaleString() : '');
+            layers.dots = points.map((p, index) => new google.maps.Marker({
+                position: path[index],
+                map,
+                title: pointTitle(p, index),
+                zIndex: 2,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 4,
+                    fillColor: '#4f46e5',
+                    fillOpacity: 1,
+                    strokeColor: '#fff',
+                    strokeWeight: 1.5,
+                },
+            }));
+
+            layers.startMarker = new google.maps.Marker({ position: path[0], map, title: 'Start · ' + pointTitle(points[0], 0), icon: markerIcon('#059669'), zIndex: 3 });
+            layers.latestMarker = new google.maps.Marker({ position: path[path.length - 1], map, title: 'Latest · ' + pointTitle(points[points.length - 1], points.length - 1), icon: markerIcon('#dc2626'), zIndex: 3 });
 
             if (isFirstRender) {
                 const bounds = new google.maps.LatLngBounds();
-                points.forEach((p) => bounds.extend(p));
+                path.forEach((p) => bounds.extend(p));
                 map.fitBounds(bounds, 24);
                 // A parked vehicle's fixes are metres apart — don't zoom in
                 // past street level chasing them.
@@ -929,7 +955,7 @@
                 modalEl.addEventListener('shown.bs.modal', function () {
                     renderHireTrackPoints(
                         hireId,
-                        @json($hire->trackingPoints->map(fn ($p) => ['lat' => $p->latitude, 'lng' => $p->longitude])->values()),
+                        @json($hire->trackingPoints->map(fn ($p) => ['lat' => $p->latitude, 'lng' => $p->longitude, 'at' => $p->recorded_at?->toIso8601String()])->values()),
                         {{ $hire->total_distance_km }}
                     );
 

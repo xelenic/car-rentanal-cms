@@ -112,7 +112,7 @@ class HireController extends Controller implements HasMiddleware
             'status_label' => $hire->status_label,
             'is_tracking' => $hire->is_tracking,
             'total_distance_km' => $hire->total_distance_km,
-            'points' => $hire->trackingPoints->map(fn ($p) => ['lat' => $p->latitude, 'lng' => $p->longitude])->values(),
+            'points' => $hire->trackingPoints->map(fn ($p) => ['lat' => $p->latitude, 'lng' => $p->longitude, 'at' => $p->recorded_at?->toIso8601String()])->values(),
         ]);
     }
 
