@@ -111,7 +111,7 @@
                         <thead>
                             <tr>
                                 <th style="width: 160px;">Time</th>
-                                <th style="width: 110px;">Level</th>
+                                <th class="d-none d-sm-table-cell" style="width: 110px;">Level</th>
                                 <th>Message</th>
                                 <th style="width: 44px;"></th>
                             </tr>
@@ -129,13 +129,17 @@
                                         <div class="fw-semibold" style="font-size: .8rem;">{{ $entry['logged_at']->format('M j, Y') }}</div>
                                         <div class="text-muted" style="font-size: .72rem;">{{ $entry['logged_at']->format('H:i:s') }}</div>
                                     </td>
-                                    <td>
+                                    <td class="d-none d-sm-table-cell">
                                         <span class="badge rounded-pill bg-{{ $color }}-subtle text-{{ $color }}-emphasis">
                                             <i class="bi {{ $icon }}"></i> {{ ucfirst($entry['level']) }}
                                         </span>
                                         <div class="text-muted" style="font-size: .68rem;">{{ $entry['env'] }}</div>
                                     </td>
                                     <td>
+                                        {{-- Phones hide the Level column, so the badge moves in here. --}}
+                                        <span class="badge rounded-pill bg-{{ $color }}-subtle text-{{ $color }}-emphasis d-sm-none mb-1">
+                                            <i class="bi {{ $icon }}"></i> {{ ucfirst($entry['level']) }}
+                                        </span>
                                         <div class="log-message">{{ $entry['message'] }}</div>
                                     </td>
                                     <td class="text-end text-muted">
@@ -171,12 +175,13 @@
                     </table>
                 </div>
 
-                <div class="card-footer bg-white d-flex flex-wrap align-items-center justify-content-between gap-2">
-                    <span class="text-muted small">
-                        Showing {{ number_format($logs->firstItem()) }}&ndash;{{ number_format($logs->lastItem()) }}
-                        of {{ number_format($logs->total()) }} entr{{ $logs->total() === 1 ? 'y' : 'ies' }}
-                    </span>
-                    {{ $logs->links() }}
+                <div class="card-footer bg-white">
+                    @if ($logs->hasPages())
+                        {{ $logs->links() }}
+                    @else
+                        {{-- The paginator renders its own "Showing x to y of z" text, but only when there are several pages. --}}
+                        <span class="text-muted small">Showing {{ number_format($logs->total()) }} entr{{ $logs->total() === 1 ? 'y' : 'ies' }}</span>
+                    @endif
                 </div>
             @endif
         </div>
