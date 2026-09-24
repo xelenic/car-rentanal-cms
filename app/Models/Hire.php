@@ -117,6 +117,16 @@ class Hire extends Model
         return $this->status === 'completed';
     }
 
+    /**
+     * GPS fixes wobble by several metres even while the vehicle is parked, and
+     * a fix arrives every 15 seconds — adding up every wobble would invent
+     * kilometres of "travel" per hour. A move only counts once a fix is at
+     * least this far from the last position that counted. The admin map
+     * applies the same rule when it draws the trail (see cleanTrail() in
+     * admin/hires/index.blade.php), so the distance and the line agree.
+     */
+    public const TRACK_MIN_MOVE_METERS = 20;
+
     public function getTotalDistanceKmAttribute(): float
     {
         $points = $this->relationLoaded('trackingPoints')
@@ -124,18 +134,26 @@ class Hire extends Model
             : $this->trackingPoints()->get();
 
         $total = 0.0;
-        $previous = null;
+        $anchor = null;
 
         foreach ($points as $point) {
-            if ($previous !== null) {
-                $total += self::haversineKm(
-                    $previous->latitude,
-                    $previous->longitude,
-                    $point->latitude,
-                    $point->longitude,
-                );
+            if ($anchor === null) {
+                $anchor = $point;
+
+                continue;
             }
-            $previous = $point;
+
+            $km = self::haversineKm(
+                $anchor->latitude,
+                $anchor->longitude,
+                $point->latitude,
+                $point->longitude,
+            );
+
+            if ($km * 1000 >= self::TRACK_MIN_MOVE_METERS) {
+                $total += $km;
+                $anchor = $point;
+            }
         }
 
         return round($total, 2);

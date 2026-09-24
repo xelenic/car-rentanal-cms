@@ -185,7 +185,7 @@
                                     <span class="text-muted small">Not started</span>
                                 @endif
                                 @if ($hire->trackingPoints->isNotEmpty())
-                                    <div class="text-muted mt-1 track-row-distance" id="track-row-distance-{{ $hire->id }}" style="font-size: .72rem;" title="Straight-line estimate — calculating road distance…">{{ number_format($hire->total_distance_km, 1) }} km</div>
+                                    <div class="text-muted mt-1 track-row-distance" id="track-row-distance-{{ $hire->id }}" style="font-size: .72rem;" title="Distance along the recorded GPS trail">{{ number_format($hire->total_distance_km, 1) }} km</div>
                                 @endif
                             </td>
                             <td style="font-size: .78rem;">
@@ -304,7 +304,7 @@
                     <div class="col-4">
                         <div class="text-muted small">Distance</div>
                         <div class="fw-semibold track-distance" style="font-size: .85rem;">{{ number_format($hire->total_distance_km, 2) }} km</div>
-                        <div class="track-distance-note text-muted" style="font-size: .62rem;">Straight-line estimate — calculating road distance…</div>
+                        <div class="track-distance-note text-muted" style="font-size: .62rem;">Distance along the recorded GPS trail</div>
                     </div>
                     <div class="col-4">
                         <div class="text-muted small">Points Logged</div>
@@ -751,75 +751,168 @@
         window.__hireTrackMaps = window.__hireTrackMaps || {};
         window.__hireTrackLayers = window.__hireTrackLayers || {};
         window.__hireTrackPollers = window.__hireTrackPollers || {};
+        window.__roadChunkCache = window.__roadChunkCache || new Map();
 
-        // Google's Directions API accepts at most 25 waypoints (including
-        // origin/destination) per request. A trip tracked every 15
-        // seconds over several hours can easily produce far more raw
-        // points than that, so evenly sample down to the cap — always
-        // keeping the first and last point — rather than truncating the
-        // trip.
-        function decimateTrackPoints(points, max) {
-            if (points.length <= max) return points;
-            const step = (points.length - 1) / (max - 1);
-            const picked = [points[0]];
-            for (let i = 1; i < max - 1; i++) {
-                picked.push(points[Math.round(i * step)]);
+        // ── How a hire's path is built from its recorded GPS fixes ──────────
+        // The path is the trail the vehicle actually recorded — NOT a new
+        // route computed between the fixes. (Re-routing through the fixes
+        // with Google Directions treats every jittery fix as a stop on some
+        // nearby street and invents detours: a parked phone's 40 m of wobble
+        // came back as a 730 m "road path".)
+        //
+        // 1. Jitter filter: a fix only counts once it is TRACK_MIN_MOVE_M from
+        //    the last one that counted — the same rule as
+        //    Hire::TRACK_MIN_MOVE_METERS on the server, so km and line agree.
+        // 2. Where fixes are close together (the normal case: one every 15s)
+        //    the trail is drawn exactly as recorded.
+        // 3. Where consecutive fixes are far apart (a signal gap, or older
+        //    once-a-minute recordings) a straight chord could cut across
+        //    blocks, so just those stretches are routed along roads with
+        //    Google Directions. Fixes that far apart are well clear of GPS
+        //    noise, so the route follows where the vehicle really went.
+        const TRACK_MIN_MOVE_M = 20;
+        const TRACK_SPARSE_GAP_M = 800;
+        const TRACK_ROUTE_CHUNK = 25; // Directions: origin + destination + up to 23 via points
+
+        function haversineM(a, b) {
+            const toRad = (deg) => deg * Math.PI / 180;
+            const dLat = toRad(b.lat - a.lat);
+            const dLng = toRad(b.lng - a.lng);
+            const h = Math.sin(dLat / 2) ** 2
+                + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+            return 2 * 6371000 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+        }
+
+        function cleanTrail(points) {
+            if (!points.length) return [];
+            const kept = [points[0]];
+            for (let i = 1; i < points.length; i++) {
+                if (haversineM(kept[kept.length - 1], points[i]) >= TRACK_MIN_MOVE_M) kept.push(points[i]);
             }
-            picked.push(points[points.length - 1]);
-            return picked;
+            return kept;
+        }
+
+        // Consecutive runs of "dense" pairs (drawn as recorded) and "sparse"
+        // pairs (to be routed along roads).
+        function splitTrailRuns(trail) {
+            const runs = [];
+            for (let i = 1; i < trail.length; i++) {
+                const sparse = haversineM(trail[i - 1], trail[i]) > TRACK_SPARSE_GAP_M;
+                const last = runs[runs.length - 1];
+                if (last && last.sparse === sparse) last.points.push(trail[i]);
+                else runs.push({ sparse, points: [trail[i - 1], trail[i]] });
+            }
+            return runs;
+        }
+
+        // One Directions request for up to TRACK_ROUTE_CHUNK consecutive
+        // fixes. Cached by coordinates, so a live trip that grows by a fix
+        // every 15s only ever pays for the newest chunk, never re-bills the
+        // old ones.
+        function routeChunk(chunkPoints) {
+            const key = chunkPoints.map((p) => p.lat.toFixed(6) + ',' + p.lng.toFixed(6)).join('|');
+            if (window.__roadChunkCache.has(key)) return window.__roadChunkCache.get(key);
+
+            const promise = new Promise((resolve) => {
+                new google.maps.DirectionsService().route({
+                    origin: chunkPoints[0],
+                    destination: chunkPoints[chunkPoints.length - 1],
+                    waypoints: chunkPoints.slice(1, -1).map((p) => ({ location: p, stopover: false })),
+                    travelMode: google.maps.TravelMode.DRIVING,
+                }, (result, status) => {
+                    if (status !== 'OK') { resolve(null); return; }
+
+                    const route = result.routes[0];
+                    const path = [];
+                    route.legs.forEach((leg) => leg.steps.forEach((step) => {
+                        step.path.forEach((ll) => path.push({ lat: ll.lat(), lng: ll.lng() }));
+                    }));
+                    resolve({ path, meters: route.legs.reduce((sum, leg) => sum + leg.distance.value, 0) });
+                });
+            });
+
+            // Failures aren't cached — a later poll can retry (quota blip etc).
+            promise.then((routed) => { if (!routed) window.__roadChunkCache.delete(key); });
+            window.__roadChunkCache.set(key, promise);
+            return promise;
+        }
+
+        // Resolves to { pieces, distanceKm, moved, routedAny, estimated }.
+        // pieces: [{ path, estimated }] — estimated pieces are straight chords
+        // drawn over a sparse stretch Google couldn't route (or couldn't be
+        // asked, if Maps hasn't loaded).
+        async function buildHirePath(points) {
+            const trail = cleanTrail(points);
+            const pieces = [];
+            let meters = 0;
+            let routedAny = false;
+            let estimated = false;
+
+            const addStraight = (pts, isEstimate) => {
+                pieces.push({ path: pts, estimated: isEstimate });
+                for (let i = 1; i < pts.length; i++) meters += haversineM(pts[i - 1], pts[i]);
+            };
+
+            for (const run of splitTrailRuns(trail)) {
+                if (!run.sparse) {
+                    addStraight(run.points, false);
+                    continue;
+                }
+
+                if (!window.google?.maps) {
+                    estimated = true;
+                    addStraight(run.points, true);
+                    continue;
+                }
+
+                for (let start = 0; start < run.points.length - 1; start += TRACK_ROUTE_CHUNK - 1) {
+                    const chunk = run.points.slice(start, start + TRACK_ROUTE_CHUNK);
+                    if (chunk.length < 2) break;
+
+                    const routed = await routeChunk(chunk);
+                    if (routed) {
+                        routedAny = true;
+                        pieces.push({ path: routed.path, estimated: false });
+                        meters += routed.meters;
+                    } else {
+                        estimated = true;
+                        addStraight(chunk, true);
+                    }
+                }
+            }
+
+            return { pieces, distanceKm: meters / 1000, moved: trail.length > 1, routedAny, estimated };
+        }
+
+        function trackDistanceNote(result) {
+            if (!result.moved) return 'No movement recorded (GPS jitter ignored)';
+            if (result.estimated) return 'Recorded trail — some long gaps are straight-line estimates';
+            if (result.routedAny) return 'Recorded trail, long gaps routed along roads (Google Maps)';
+            return 'Distance along the recorded GPS trail';
         }
 
         // Identifies "this exact set of points" cheaply, so a poll tick
         // that hasn't actually picked up a new GPS point yet can skip
-        // re-requesting the road route entirely instead of re-billing the
-        // Directions API on every 10s tick.
+        // rebuilding the path entirely.
         function trackPointsSignature(points) {
             if (!points.length) return '';
             const last = points[points.length - 1];
             return points.length + ':' + last.lat + ',' + last.lng;
         }
 
-        // reason: 'pending' (still waiting on Directions) | 'failed' (no
-        // driving route found) | 'single' (only one point — nothing to
-        // route between yet).
-        function updateHireTrackDistance(hireId, roadKm, fallbackKm, reason) {
+        function updateHireTrackDistance(hireId, km, note) {
             const modal = document.getElementById('modal-track-' + hireId);
             if (!modal) return;
             const distanceEl = modal.querySelector('.track-distance');
             const noteEl = modal.querySelector('.track-distance-note');
-            if (!distanceEl) return;
-
-            if (roadKm !== null) {
-                distanceEl.textContent = roadKm.toFixed(2) + ' km';
-                if (noteEl) noteEl.textContent = 'Road distance (Google Maps)';
-                return;
-            }
-
-            if (reason === 'single') {
-                distanceEl.textContent = '0.00 km';
-                if (noteEl) noteEl.textContent = 'Only one point recorded so far';
-                return;
-            }
-
-            const shown = fallbackKm === null || fallbackKm === undefined ? null : Number(fallbackKm);
-            distanceEl.textContent = shown !== null ? shown.toFixed(2) + ' km' : '—';
-            if (noteEl) {
-                noteEl.textContent = reason === 'failed'
-                    ? 'Straight-line estimate — no road route found for this path'
-                    : 'Straight-line estimate — calculating road distance…';
-            }
+            if (distanceEl) distanceEl.textContent = km === null ? '—' : Number(km).toFixed(2) + ' km';
+            if (noteEl) noteEl.textContent = note;
         }
 
-        // Draws (or redraws) a hire's path from a fresh set of points, and
-        // resolves the actual road-following route (and its real driving
-        // distance) via the Google Directions API. A plain straight-line
-        // polyline between the raw GPS points is drawn immediately so
-        // there's always something on the map, then replaced by the
-        // road-snapped route once Directions responds — or left in place,
-        // as an honestly-labeled estimate, if no driving route can be
-        // found between the recorded points. Only fits the map's view on
-        // the very first render, so live updates don't yank the viewport
-        // out from under an admin who's panned/zoomed to look at something.
+        // Draws (or redraws) a hire's path from a fresh set of points. Only
+        // fits the map's view on the very first render, so live updates
+        // don't yank the viewport out from under an admin who's panned or
+        // zoomed to look at something.
         function renderHireTrackPoints(hireId, points, fallbackKm) {
             const container = document.getElementById('map-track-' + hireId);
             if (!container) return;
@@ -868,14 +961,7 @@
                     fullscreenControl: false,
                 });
                 window.__hireTrackMaps[hireId] = map;
-                window.__hireTrackLayers[hireId] = {
-                    directionsRenderer: new google.maps.DirectionsRenderer({
-                        map,
-                        suppressMarkers: true, // custom Start/Latest markers below carry the meaning instead
-                        preserveViewport: true, // we control fitBounds ourselves, only on first render
-                        polylineOptions: { strokeColor: '#4f46e5', strokeWeight: 4 },
-                    }),
-                };
+                window.__hireTrackLayers[hireId] = { pieces: [] };
             }
 
             const layers = window.__hireTrackLayers[hireId];
@@ -884,7 +970,7 @@
             if (!isFirstRender && layers.lastSignature === signature) return;
             layers.lastSignature = signature;
 
-            ['polyline', 'startMarker', 'latestMarker', 'singleMarker'].forEach((key) => {
+            ['startMarker', 'latestMarker', 'singleMarker', 'provisional'].forEach((key) => {
                 if (layers[key]) {
                     layers[key].setMap(null);
                     layers[key] = null;
@@ -892,14 +978,13 @@
             });
 
             if (points.length === 1) {
+                layers.pieces.forEach((piece) => piece.setMap(null));
+                layers.pieces = [];
                 layers.singleMarker = new google.maps.Marker({ position: points[0], map, title: 'Point 1' });
                 if (isFirstRender) map.setCenter(points[0]);
-                updateHireTrackDistance(hireId, null, fallbackKm, 'single');
+                updateHireTrackDistance(hireId, 0, 'Only one point recorded so far');
                 return;
             }
-
-            const bounds = new google.maps.LatLngBounds();
-            points.forEach((p) => bounds.extend(p));
 
             const markerIcon = (color) => ({
                 path: google.maps.SymbolPath.CIRCLE,
@@ -912,36 +997,43 @@
             layers.startMarker = new google.maps.Marker({ position: points[0], map, title: 'Start', icon: markerIcon('#059669') });
             layers.latestMarker = new google.maps.Marker({ position: points[points.length - 1], map, title: 'Latest', icon: markerIcon('#dc2626') });
 
-            // Straight-line placeholder — visible until (and unless) the
-            // road-snapped route below takes over.
-            layers.polyline = new google.maps.Polyline({
-                path: points, map, strokeColor: '#94a3b8', strokeWeight: 3, strokeOpacity: .6,
-            });
-            if (isFirstRender) map.fitBounds(bounds, 24);
-            updateHireTrackDistance(hireId, null, fallbackKm, 'pending');
+            if (isFirstRender) {
+                const bounds = new google.maps.LatLngBounds();
+                points.forEach((p) => bounds.extend(p));
+                map.fitBounds(bounds, 24);
+                // A parked vehicle's fixes are metres apart — don't zoom in
+                // past street level chasing them.
+                google.maps.event.addListenerOnce(map, 'idle', () => {
+                    if (map.getZoom() > 18) map.setZoom(18);
+                });
+            }
 
-            const waypointPoints = decimateTrackPoints(points, 25);
-            new google.maps.DirectionsService().route({
-                origin: waypointPoints[0],
-                destination: waypointPoints[waypointPoints.length - 1],
-                waypoints: waypointPoints.slice(1, -1).map((p) => ({ location: p, stopover: false })),
-                travelMode: google.maps.TravelMode.DRIVING,
-            }, (result, status) => {
+            // If long gaps need routing, show the plain trail right away and
+            // swap the routed version in when Google answers.
+            const trail = cleanTrail(points);
+            if (splitTrailRuns(trail).some((run) => run.sparse)) {
+                layers.provisional = new google.maps.Polyline({
+                    path: trail, map, strokeColor: '#94a3b8', strokeWeight: 3, strokeOpacity: .6,
+                });
+                updateHireTrackDistance(hireId, fallbackKm, 'Recorded trail — routing long gaps along roads…');
+            }
+
+            buildHirePath(points).then((result) => {
                 // A live trip keeps posting new points — if a newer render
-                // has already started, this stale response should not
-                // paint over it.
+                // has already started, this stale result must not paint over it.
                 if (layers.lastSignature !== signature) return;
 
-                if (status !== 'OK') {
-                    updateHireTrackDistance(hireId, null, fallbackKm, 'failed');
-                    return;
-                }
+                if (layers.provisional) { layers.provisional.setMap(null); layers.provisional = null; }
+                layers.pieces.forEach((piece) => piece.setMap(null));
+                layers.pieces = result.pieces.map((piece) => new google.maps.Polyline({
+                    path: piece.path,
+                    map,
+                    strokeColor: piece.estimated ? '#94a3b8' : '#4f46e5',
+                    strokeWeight: piece.estimated ? 3 : 4,
+                    strokeOpacity: piece.estimated ? .7 : 1,
+                }));
 
-                layers.directionsRenderer.setDirections(result);
-                if (layers.polyline) { layers.polyline.setMap(null); layers.polyline = null; }
-
-                const meters = result.routes[0].legs.reduce((sum, leg) => sum + leg.distance.value, 0);
-                updateHireTrackDistance(hireId, meters / 1000, fallbackKm);
+                updateHireTrackDistance(hireId, result.distanceKm, trackDistanceNote(result));
             });
         }
 
@@ -981,34 +1073,26 @@
             }
         }
 
-        // Resolves the road distance for a hire's row-level summary in the
-        // Hires table itself — independent of whether its Location Track
-        // modal is ever opened. The straight-line estimate already
-        // server-rendered there stays showing (it's a perfectly honest
-        // number, just not road-accurate) until/unless this succeeds.
+        // Row-level distance in the Hires table itself — independent of
+        // whether the Location Track modal is ever opened. It's built with
+        // exactly the same rules as the map (buildHirePath), so the two never
+        // disagree. Most trails need no Google request at all; only long
+        // gaps between fixes do.
         function renderHireRowDistance(hireId, points, attempt) {
             const el = document.getElementById('track-row-distance-' + hireId);
             if (!el || points.length < 2) return;
 
-            if (!window.__placesReady || !window.google?.maps) {
+            const needsGoogle = splitTrailRuns(cleanTrail(points)).some((run) => run.sparse);
+            if (needsGoogle && (!window.__placesReady || !window.google?.maps)) {
                 attempt = (attempt || 0) + 1;
-                if (attempt > 12) return; // give up quietly — the estimate stays shown
+                if (attempt > 12) return; // give up quietly — the server-rendered figure stays shown
                 setTimeout(() => renderHireRowDistance(hireId, points, attempt), 400);
                 return;
             }
 
-            const waypointPoints = decimateTrackPoints(points, 25);
-            new google.maps.DirectionsService().route({
-                origin: waypointPoints[0],
-                destination: waypointPoints[waypointPoints.length - 1],
-                waypoints: waypointPoints.slice(1, -1).map((p) => ({ location: p, stopover: false })),
-                travelMode: google.maps.TravelMode.DRIVING,
-            }, (result, status) => {
-                if (status !== 'OK') return; // leave the straight-line estimate showing
-
-                const meters = result.routes[0].legs.reduce((sum, leg) => sum + leg.distance.value, 0);
-                el.textContent = (meters / 1000).toFixed(1) + ' km';
-                el.title = 'Road distance (Google Maps)';
+            buildHirePath(points).then((result) => {
+                el.textContent = result.distanceKm.toFixed(1) + ' km';
+                el.title = trackDistanceNote(result);
             });
         }
 
