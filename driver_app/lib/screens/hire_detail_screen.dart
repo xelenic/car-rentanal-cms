@@ -1,15 +1,20 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/hire.dart';
+import '../models/hire_stage.dart';
 import '../models/tracking_status.dart';
 import '../services/api_client.dart';
+import '../services/arrival_detector.dart';
 import '../services/background_tracking.dart';
+import '../services/pickup_store.dart';
 import '../theme/app_theme.dart';
+import '../widgets/background_access_prompt.dart';
 import 'expense_entry_screen.dart';
 import 'placeholder_screen.dart';
 
@@ -39,37 +44,197 @@ String _scheduledMessage(Hire hire) {
 class HireDetailScreen extends StatefulWidget {
   final Hire hire;
 
-  const HireDetailScreen({super.key, required this.hire});
+  /// Where the driver's "Pickup" mark is remembered. Only tests replace it.
+  final PickupStore? pickupStore;
+
+  /// The phone's position updates used to notice arrival at the pickup
+  /// location. Only tests replace it (the default uses the device's GPS).
+  final Stream<Position> Function()? positionStream;
+
+  const HireDetailScreen({super.key, required this.hire, this.pickupStore, this.positionStream});
 
   @override
   State<HireDetailScreen> createState() => _HireDetailScreenState();
 }
 
-class _HireDetailScreenState extends State<HireDetailScreen> {
+class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBindingObserver {
   late Hire _hire;
   Timer? _timer;
   bool _busy = false;
   String? _trackingError;
   List<TrackPoint> _points = [];
 
+  /// What the phone currently allows for tracking to survive the app being
+  /// minimized (null until first checked, or when it doesn't apply).
+  BackgroundAccess? _access;
+
+  late final PickupStore _pickupStore;
+
+  /// The driver has tapped "Pickup" for this hire (null until read from the
+  /// phone's storage, so the first frame doesn't flash the wrong button).
+  bool? _pickedUp;
+
+  /// Arrival at the pickup location — see [_syncArrivalWatch].
+  final ArrivalDetector _arrival = ArrivalDetector();
+  StreamSubscription<Position>? _positionSub;
+  double? _metersToPickup;
+
+  bool get _arrived => _arrival.arrived && !_hire.isScheduledInFuture;
+
+  HireStage get _stage => hireStageOf(_hire, pickedUp: _pickedUp ?? false);
+
   @override
   void initState() {
     super.initState();
     _hire = widget.hire;
+    _pickupStore = widget.pickupStore ?? const SecurePickupStore();
+    _loadPickedUp();
+    WidgetsBinding.instance.addObserver(this);
     BackgroundTracking.addListener(_onTrackingUpdate);
     if (_hire.isTracking) {
       _resumeTracking();
+      _refreshAccess();
     }
+  }
+
+  /// Coming back to the app — from Settings after changing a permission, or
+  /// after it sat in the background — re-checks the phone's settings and
+  /// revives the service if the phone killed it meanwhile.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      // The arrival highlight only matters while the driver is looking at
+      // the screen — don't keep the GPS busy behind another app.
+      unawaited(_stopArrivalWatch());
+      return;
+    }
+    if (state != AppLifecycleState.resumed) return;
+
+    unawaited(_syncArrivalWatch());
+    if (!_hire.isTracking) return;
+
+    unawaited(BackgroundTracking.ensureRunning());
+    _refreshAccess();
+  }
+
+  Future<void> _loadPickedUp() async {
+    final pickedUp = await _pickupStore.isPickedUp(_hire.id);
+    if (!mounted) return;
+
+    setState(() => _pickedUp = pickedUp);
+    unawaited(_syncArrivalWatch());
+  }
+
+  /// "Pickup": the driver is on the way to collect the customer. Remembered on
+  /// the phone, reveals the Start button, and (asking for location permission
+  /// if it isn't granted yet) starts watching for arrival at the pickup
+  /// location so Start can light up when the driver gets there.
+  Future<void> _pickup() async {
+    if (_busy) return;
+
+    await _pickupStore.markPickedUp(_hire.id);
+    if (!mounted) return;
+
+    setState(() {
+      _pickedUp = true;
+      _trackingError = null;
+    });
+    unawaited(_syncArrivalWatch(requestPermission: true));
+  }
+
+  /// Watches the phone's position while the Start button is showing, so the
+  /// button can highlight itself on arrival. Runs only in the Start stage, only
+  /// for hires whose pickup location has coordinates, and stops otherwise.
+  Future<void> _syncArrivalWatch({bool requestPermission = false}) async {
+    final wanted = mounted && _stage == HireStage.start && _hire.hasPickupCoordinates;
+    if (!wanted) {
+      await _stopArrivalWatch();
+      return;
+    }
+    if (_positionSub != null) return;
+
+    final Stream<Position>? stream = widget.positionStream != null
+        ? widget.positionStream!()
+        : await _openPositionStream(requestPermission: requestPermission);
+    if (stream == null || !mounted || _positionSub != null) return;
+
+    // Errors (GPS switched off mid-way, …) just mean no highlight.
+    _positionSub = stream.listen(_onPosition, onError: (_) {});
+  }
+
+  Future<void> _stopArrivalWatch() async {
+    final sub = _positionSub;
+    _positionSub = null;
+    await sub?.cancel();
+
+    _arrival.reset();
+    if (mounted && (_metersToPickup != null)) {
+      setState(() => _metersToPickup = null);
+    }
+  }
+
+  Future<Stream<Position>?> _openPositionStream({required bool requestPermission}) async {
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied && requestPermission) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        return null;
+      }
+
+      return Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _onPosition(Position position) {
+    if (!mounted || !_hire.hasPickupCoordinates) return;
+
+    final meters = distanceMeters(
+      position.latitude,
+      position.longitude,
+      _hire.pickupLatitude!,
+      _hire.pickupLongitude!,
+    );
+    final changed = _arrival.update(meters);
+
+    setState(() => _metersToPickup = meters);
+    if (changed && _arrived) {
+      // Once, the moment the driver gets there — the screen may not be in view.
+      HapticFeedback.heavyImpact().catchError((_) {});
+    }
+  }
+
+  Future<void> _refreshAccess() async {
+    if (!backgroundTrackingSupported) return;
+
+    final access = await BackgroundTracking.checkAccess();
+    if (mounted) setState(() => _access = access);
+  }
+
+  /// Asks for the phone settings that keep tracking alive in the background
+  /// (see [offerBackgroundAccess]), then refreshes the reminder.
+  Future<void> _offerAccess() async {
+    if (!backgroundTrackingSupported || !mounted) return;
+
+    await offerBackgroundAccess(context);
+    await _refreshAccess();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     // Only this screen's own listener/timer go away. The Android background
     // service is deliberately left running — it's what keeps tracking after
     // the driver leaves this screen or minimizes the app, and only ends when
     // the hire is stopped or completed.
     BackgroundTracking.removeListener(_onTrackingUpdate);
     _timer?.cancel();
+    _positionSub?.cancel();
     super.dispose();
   }
 
@@ -158,7 +323,9 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
     }
 
     return Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      // Never spin forever waiting for a fix — after this the driver gets an
+      // error and can tap Start again.
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 20)),
     );
   }
 
@@ -270,6 +437,9 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
           _points = status.points;
         });
       } else {
+        // Starting: the arrival highlight has done its job, and the GPS is
+        // needed for the first point.
+        await _stopArrivalWatch();
         final position = await _getCurrentPosition();
         await BackgroundTracking.requestNotificationPermission();
         final status = await ApiClient.instance.startTracking(_hire.id);
@@ -291,6 +461,10 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
           _points = pointStatus.points;
         });
         await _beginTrackingLoop();
+        // With the service already running (so it isn't started from the
+        // background while Settings is open), ask for the phone settings
+        // that keep it alive once another app is opened.
+        unawaited(_offerAccess());
       }
     } catch (e) {
       if (!mounted) return;
@@ -340,6 +514,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
     try {
       final status = await ApiClient.instance.completeHire(_hire.id);
       await _endTrackingLoop();
+      await _pickupStore.clear(_hire.id);
       if (!mounted) return;
       setState(() {
         _hire = _hire.copyWith(
@@ -351,11 +526,15 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
         );
         _points = status.points;
       });
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() => _trackingError = "Couldn't get your location. Check that GPS is on, then try again.");
     } catch (e) {
       if (!mounted) return;
       setState(() => _trackingError = e.toString());
     } finally {
       if (mounted) setState(() => _busy = false);
+      unawaited(_syncArrivalWatch());
     }
   }
 
@@ -390,11 +569,20 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
         children: [
           _TrackingCard(
             hire: hire,
+            stage: _stage,
+            stageLoading: _pickedUp == null && _stage == HireStage.pickup,
             busy: _busy,
             error: _trackingError,
             hasPath: _points.isNotEmpty,
-            onToggle: _toggleTracking,
+            arrived: _arrived,
+            metersToPickup: _metersToPickup,
+            accessNotice: backgroundAccessNotice(_access),
+            onPickup: _pickup,
+            onStart: _toggleTracking,
+            onStop: _toggleTracking,
+            onComplete: _confirmComplete,
             onViewPath: _openPathInMaps,
+            onFixAccess: _offerAccess,
           ),
           const SizedBox(height: 12),
           _QuickActionsRow(
@@ -465,115 +653,141 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
           ],
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.all(16),
-        child: _CompleteBar(
-          hire: hire,
-          busy: _busy,
-          onComplete: _confirmComplete,
-        ),
-      ),
+      // Completing a hire happens on the tracking card (next to Stop); the
+      // bar is only left to confirm a hire that's already done.
+      bottomNavigationBar: hire.isCompleted
+          ? SafeArea(
+              minimum: const EdgeInsets.all(16),
+              child: _CompleteBar(hire: hire),
+            )
+          : null,
     );
   }
 }
 
+/// Shown at the bottom of a hire that's already been completed.
 class _CompleteBar extends StatelessWidget {
   final Hire hire;
-  final bool busy;
-  final VoidCallback onComplete;
 
-  const _CompleteBar({required this.hire, required this.busy, required this.onComplete});
+  const _CompleteBar({required this.hire});
 
   @override
   Widget build(BuildContext context) {
-    if (hire.isCompleted) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: AppColors.neon.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.neon.withValues(alpha: 0.4)),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_circle, color: AppColors.neon, size: 18),
-            SizedBox(width: 8),
-            Text(
-              'Hire Completed',
-              style: TextStyle(
-                color: AppColors.neon,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final canComplete = hire.status == 'started' && !busy;
-
-    return SizedBox(
+    return Container(
       width: double.infinity,
-      child: ElevatedButton(
-        onPressed: canComplete ? onComplete : null,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.neon,
-          foregroundColor: AppColors.onNeon,
-          disabledBackgroundColor: AppColors.surfaceElevated,
-          disabledForegroundColor: AppColors.textMuted,
-          padding: const EdgeInsets.symmetric(vertical: 15),
-        ),
-        child: Text(
-          hire.status == 'started'
-              ? 'Complete Hire'
-              : (hire.isScheduledInFuture
-                  ? _scheduledMessage(hire)
-                  : 'Start the hire to enable completion'),
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.neon.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.neon.withValues(alpha: 0.4)),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.check_circle, color: AppColors.neon, size: 18),
+          SizedBox(width: 8),
+          Text(
+            'Hire Completed',
+            style: TextStyle(
+              color: AppColors.neon,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
+/// The hire's action area, one of three scenarios (see [HireStage]):
+///
+///  1. before the hire starts — a "Pickup" button;
+///  2. once picked up — the "Start" button, which highlights itself when the
+///     driver reaches the hire's assigned location;
+///  3. while the hire runs — "Stop" and "Complete" buttons.
 class _TrackingCard extends StatelessWidget {
   final Hire hire;
+  final HireStage stage;
+
+  /// The saved "picked up" mark hasn't been read yet — show a spinner instead
+  /// of a button that might turn out to be the wrong one.
+  final bool stageLoading;
   final bool busy;
   final String? error;
   final bool hasPath;
-  final VoidCallback onToggle;
+
+  /// The phone is at the pickup location (only ever true in the Start stage).
+  final bool arrived;
+  final double? metersToPickup;
+
+  /// Reminder that the phone's settings may stop tracking once another app
+  /// is opened (see backgroundAccessNotice); null when nothing needs fixing.
+  final String? accessNotice;
+  final VoidCallback onPickup;
+  final VoidCallback onStart;
+  final VoidCallback onStop;
+  final VoidCallback onComplete;
   final VoidCallback onViewPath;
+  final VoidCallback onFixAccess;
 
   const _TrackingCard({
     required this.hire,
+    required this.stage,
+    required this.stageLoading,
     required this.busy,
     required this.error,
     required this.hasPath,
-    required this.onToggle,
+    required this.arrived,
+    required this.metersToPickup,
+    required this.accessNotice,
+    required this.onPickup,
+    required this.onStart,
+    required this.onStop,
+    required this.onComplete,
     required this.onViewPath,
+    required this.onFixAccess,
   });
+
+  bool get _isPaused => stage == HireStage.start && hire.trackingStartedAt != null;
+
+  /// A future-dated hire can be picked up early (the driver has to set off
+  /// before the scheduled time) but not started until its date arrives.
+  bool get _startLocked => stage == HireStage.start && hire.isScheduledInFuture;
+
+  String get _statusText {
+    switch (stage) {
+      case HireStage.completed:
+        return 'Completed';
+      case HireStage.inProgress:
+        return 'Tracking active';
+      case HireStage.start:
+        if (_isPaused) return 'Tracking paused';
+        if (_startLocked) return 'Scheduled — not startable yet';
+        return arrived ? 'You have arrived' : 'Ready to start';
+      case HireStage.pickup:
+        return 'Not started';
+    }
+  }
+
+  static String _distance(double meters) =>
+      meters < 1000 ? '${meters.round()} m' : '${(meters / 1000).toStringAsFixed(1)} km';
 
   @override
   Widget build(BuildContext context) {
-    final isTracking = hire.isTracking;
-    final isCompleted = hire.isCompleted;
-    final isLocked = !isTracking && !isCompleted && hire.isScheduledInFuture;
+    final isTracking = stage == HireStage.inProgress;
+    final showScheduleNote = (stage == HireStage.pickup || stage == HireStage.start) && hire.isScheduledInFuture;
+    final place = hire.pickupLocationName;
 
-    final String statusText;
-    if (isCompleted) {
-      statusText = 'Completed';
-    } else if (isTracking) {
-      statusText = 'Tracking active';
-    } else if (hire.trackingStartedAt != null) {
-      statusText = 'Tracking paused';
-    } else if (isLocked) {
-      statusText = 'Scheduled — not startable yet';
-    } else {
-      statusText = 'Not started';
+    final VoidCallback? circleTap;
+    switch (stage) {
+      case HireStage.pickup:
+        circleTap = onPickup;
+      case HireStage.start:
+        circleTap = onStart;
+      case HireStage.inProgress:
+      case HireStage.completed:
+        circleTap = null;
     }
 
     return Container(
@@ -601,7 +815,7 @@ class _TrackingCard extends StatelessWidget {
                 const SizedBox(width: 8),
               ],
               Text(
-                statusText,
+                _statusText,
                 style: const TextStyle(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w700,
@@ -612,13 +826,127 @@ class _TrackingCard extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           _PulseStartButton(
-            isTracking: isTracking,
-            isCompleted: isCompleted,
-            isLocked: isLocked,
-            busy: busy,
+            stage: stage,
+            isLocked: _startLocked,
+            arrived: arrived,
+            busy: busy || stageLoading,
             distanceKm: hire.totalDistanceKm,
-            onTap: onToggle,
+            onTap: circleTap,
           ),
+          if (stage == HireStage.pickup) ...[
+            const SizedBox(height: 12),
+            _StageHint(
+              icon: Icons.directions_car_outlined,
+              color: AppColors.textSecondary,
+              text: place != null
+                  ? 'Tap Pickup when you set off to collect the customer at $place.'
+                  : 'Tap Pickup when you set off to collect the customer.',
+            ),
+          ],
+          if (stage == HireStage.start && !_startLocked) ...[
+            const SizedBox(height: 12),
+            if (arrived)
+              _StageHint(
+                icon: Icons.place,
+                color: _arrivedColor,
+                strong: true,
+                text: place != null
+                    ? "You've arrived at $place — tap Start."
+                    : "You've arrived — tap Start.",
+              )
+            else if (_isPaused)
+              const _StageHint(
+                icon: Icons.pause_circle_outline,
+                color: AppColors.textSecondary,
+                text: 'Tracking is paused — tap Start to resume.',
+              )
+            else if (hire.hasPickupCoordinates && metersToPickup != null)
+              _StageHint(
+                icon: Icons.near_me_outlined,
+                color: AppColors.textSecondary,
+                text: '${place ?? 'Pickup'} is ${_distance(metersToPickup!)} away — Start lights up when you arrive.',
+              )
+            else
+              const _StageHint(
+                icon: Icons.play_circle_outline,
+                color: AppColors.textSecondary,
+                text: 'Tap Start when you reach the pickup location.',
+              ),
+          ],
+          if (stage == HireStage.inProgress) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: busy ? null : onStop,
+                    icon: const Icon(Icons.stop_circle_outlined, size: 20),
+                    label: const Text('Stop'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.danger,
+                      side: BorderSide(color: busy ? AppColors.border : AppColors.danger),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _CompleteButton(busy: busy, onPressed: onComplete),
+                ),
+              ],
+            ),
+          ],
+          // Paused (started once, then stopped): Start resumes, and the hire
+          // can still be completed without starting it again.
+          if (_isPaused) ...[
+            const SizedBox(height: 12),
+            SizedBox(width: double.infinity, child: _CompleteButton(busy: busy, onPressed: onComplete)),
+          ],
+          if (isTracking && accessNotice != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(top: 1),
+                    child: Icon(Icons.battery_alert_outlined, color: AppColors.warning, size: 18),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          accessNotice!,
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, height: 1.3),
+                        ),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            onPressed: onFixAccess,
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 32),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              foregroundColor: AppColors.neonDeep,
+                            ),
+                            child: const Text('Fix now', style: TextStyle(fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (hasPath) ...[
             const SizedBox(height: 16),
             SizedBox(
@@ -635,7 +963,7 @@ class _TrackingCard extends StatelessWidget {
               ),
             ),
           ],
-          if (isLocked) ...[
+          if (showScheduleNote) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -689,21 +1017,98 @@ class _TrackingCard extends StatelessWidget {
   }
 }
 
-/// Large centered "record button"-style meter: pulses to invite a tap,
-/// shows expanding ripple rings while actively tracking, and doubles as
-/// the live distance readout instead of a separate stat block.
+/// The green used for "you've arrived" — the Start button turns this colour.
+const _arrivedColor = Color(0xFF16A34A);
+
+/// A line of guidance under the main button.
+class _StageHint extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String text;
+  final bool strong;
+
+  const _StageHint({required this.icon, required this.color, required this.text, this.strong = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: strong ? color.withValues(alpha: 0.12) : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        border: strong ? Border.all(color: color.withValues(alpha: 0.5)) : null,
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: strong ? AppColors.textPrimary : AppColors.textSecondary,
+                fontSize: 12.5,
+                height: 1.3,
+                fontWeight: strong ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Complete Hire" — asks for confirmation (see _confirmComplete) before
+/// anything is sent.
+class _CompleteButton extends StatelessWidget {
+  final bool busy;
+  final VoidCallback onPressed;
+
+  const _CompleteButton({required this.busy, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton.icon(
+      onPressed: busy ? null : onPressed,
+      icon: const Icon(Icons.check_circle_outline, size: 20),
+      label: const Text('Complete Hire'),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.neon,
+        foregroundColor: AppColors.onNeon,
+        disabledBackgroundColor: AppColors.surfaceElevated,
+        disabledForegroundColor: AppColors.textMuted,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+/// Large centered "record button"-style meter that is the hire's main action:
+/// "Pickup" (blue) before the hire starts, "Start" (red) once picked up, and —
+/// while it runs — the live distance readout with ripples (Stop and Complete
+/// are separate buttons under it).
+///
+/// It breathes to invite a tap. When the driver reaches the hire's assigned
+/// location ([arrived]) the Start button highlights itself: it turns green,
+/// pulses faster and sends out ripples until it's tapped.
 class _PulseStartButton extends StatefulWidget {
-  final bool isTracking;
-  final bool isCompleted;
+  final HireStage stage;
   final bool isLocked;
+  final bool arrived;
   final bool busy;
   final double distanceKm;
-  final VoidCallback onTap;
+
+  /// Null when the button isn't tappable in this stage (tracking, completed).
+  final VoidCallback? onTap;
 
   const _PulseStartButton({
-    required this.isTracking,
-    required this.isCompleted,
+    required this.stage,
     required this.isLocked,
+    required this.arrived,
     required this.busy,
     required this.distanceKm,
     required this.onTap,
@@ -714,41 +1119,49 @@ class _PulseStartButton extends StatefulWidget {
 }
 
 class _PulseStartButtonState extends State<_PulseStartButton> with TickerProviderStateMixin {
+  static const _calmBreath = Duration(milliseconds: 1100);
+  static const _arrivedBreath = Duration(milliseconds: 600);
+  static const _calmRipple = Duration(milliseconds: 1600);
+  static const _arrivedRipple = Duration(milliseconds: 1200);
+
   late final AnimationController _breathController;
   late final AnimationController _rippleController;
+
+  bool get _isTracking => widget.stage == HireStage.inProgress;
+  bool get _isCompleted => widget.stage == HireStage.completed;
+  bool get _highlighted => widget.arrived && widget.stage == HireStage.start && !widget.isLocked;
+  bool get _shouldBreathe => !_isCompleted && !_isTracking && !widget.isLocked;
+  bool get _shouldRipple => _isTracking || _highlighted;
 
   @override
   void initState() {
     super.initState();
-    _breathController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1100),
-    );
-    _rippleController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1600),
-    );
-    if (!widget.isCompleted && !widget.isLocked) _breathController.repeat(reverse: true);
-    if (widget.isTracking) _rippleController.repeat();
+    _breathController = AnimationController(vsync: this, duration: _highlighted ? _arrivedBreath : _calmBreath);
+    _rippleController = AnimationController(vsync: this, duration: _highlighted ? _arrivedRipple : _calmRipple);
+    if (_shouldBreathe) _breathController.repeat(reverse: true);
+    if (_shouldRipple) _rippleController.repeat();
   }
 
   @override
   void didUpdateWidget(covariant _PulseStartButton oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final shouldBreathe = !widget.isCompleted && !widget.isLocked;
-    if (!shouldBreathe && _breathController.isAnimating) {
+    // Highlighting switches the tempo, so restart the loops with the new one.
+    _breathController.duration = _highlighted ? _arrivedBreath : _calmBreath;
+    _rippleController.duration = _highlighted ? _arrivedRipple : _calmRipple;
+
+    if (!_shouldBreathe) {
       _breathController.stop();
       _breathController.value = 0;
-    } else if (shouldBreathe && !_breathController.isAnimating) {
+    } else if (!_breathController.isAnimating || oldWidget.arrived != widget.arrived) {
       _breathController.repeat(reverse: true);
     }
 
-    if (widget.isTracking && !_rippleController.isAnimating) {
-      _rippleController.repeat();
-    } else if (!widget.isTracking && _rippleController.isAnimating) {
+    if (!_shouldRipple) {
       _rippleController.stop();
       _rippleController.reset();
+    } else if (!_rippleController.isAnimating || oldWidget.arrived != widget.arrived) {
+      _rippleController.repeat();
     }
   }
 
@@ -759,13 +1172,34 @@ class _PulseStartButtonState extends State<_PulseStartButton> with TickerProvide
     super.dispose();
   }
 
+  Color get _color {
+    if (_isCompleted) return AppColors.neon;
+    if (widget.isLocked) return AppColors.textMuted;
+    if (widget.stage == HireStage.pickup) return AppColors.neonDeep;
+    if (_highlighted) return _arrivedColor;
+    return AppColors.danger;
+  }
+
+  String get _pillText {
+    switch (widget.stage) {
+      case HireStage.pickup:
+        return 'PICKUP';
+      case HireStage.start:
+        return _highlighted ? 'TAP TO START' : 'START';
+      case HireStage.inProgress:
+        return 'TRACKING';
+      case HireStage.completed:
+        return 'DONE';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     const size = 188.0;
-    final color = widget.isCompleted
-        ? AppColors.neon
-        : (widget.isLocked ? AppColors.textMuted : AppColors.danger);
-    final canTap = !widget.isCompleted && !widget.isLocked && !widget.busy;
+    final color = _color;
+    final canTap = widget.onTap != null && !widget.isLocked && !widget.busy;
+    final rings = _highlighted ? 3 : 2;
+    final ringColor = _highlighted ? _arrivedColor : AppColors.danger;
 
     return Center(
       child: GestureDetector(
@@ -776,22 +1210,22 @@ class _PulseStartButtonState extends State<_PulseStartButton> with TickerProvide
           child: Stack(
             alignment: Alignment.center,
             children: [
-              if (widget.isTracking)
+              if (_shouldRipple)
                 AnimatedBuilder(
                   animation: _rippleController,
                   builder: (context, _) {
                     return Stack(
                       alignment: Alignment.center,
-                      children: List.generate(2, (i) {
-                        final t = (_rippleController.value + (i / 2)) % 1.0;
+                      children: List.generate(rings, (i) {
+                        final t = (_rippleController.value + (i / rings)) % 1.0;
                         return Opacity(
-                          opacity: (1 - t) * 0.45,
+                          opacity: (1 - t) * (_highlighted ? 0.7 : 0.45),
                           child: Container(
                             width: size + t * 56,
                             height: size + t * 56,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              border: Border.all(color: AppColors.danger, width: 2),
+                              border: Border.all(color: ringColor, width: _highlighted ? 3 : 2),
                             ),
                           ),
                         );
@@ -802,10 +1236,14 @@ class _PulseStartButtonState extends State<_PulseStartButton> with TickerProvide
               AnimatedBuilder(
                 animation: _breathController,
                 builder: (context, child) {
-                  final scale = widget.isCompleted ? 1.0 : 1.0 + (_breathController.value * 0.045);
+                  final amount = _highlighted ? 0.09 : 0.045;
+                  final scale = _shouldBreathe ? 1.0 + (_breathController.value * amount) : 1.0;
                   return Transform.scale(scale: scale, child: child);
                 },
-                child: Container(
+                // Colour changes (Pickup blue → Start red → arrived green)
+                // fade instead of jumping.
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 400),
                   width: size,
                   height: size,
                   decoration: BoxDecoration(
@@ -818,9 +1256,9 @@ class _PulseStartButtonState extends State<_PulseStartButton> with TickerProvide
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: color.withValues(alpha: 0.45),
-                        blurRadius: 30,
-                        spreadRadius: 2,
+                        color: color.withValues(alpha: _highlighted ? 0.7 : 0.45),
+                        blurRadius: _highlighted ? 44 : 30,
+                        spreadRadius: _highlighted ? 6 : 2,
                       ),
                     ],
                   ),
@@ -849,46 +1287,51 @@ class _PulseStartButtonState extends State<_PulseStartButton> with TickerProvide
                               ],
                             )
                           : Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              widget.distanceKm.toStringAsFixed(1),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 40,
-                                fontWeight: FontWeight.w800,
-                                height: 1,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'KM',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.85),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1.5,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                widget.isCompleted ? 'DONE' : (widget.isTracking ? 'STOP' : 'START'),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 1.2,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (widget.stage == HireStage.pickup) ...[
+                                  const Icon(Icons.directions_car_filled_outlined, color: Colors.white, size: 52),
+                                  const SizedBox(height: 12),
+                                ] else ...[
+                                  Text(
+                                    widget.distanceKm.toStringAsFixed(1),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 40,
+                                      fontWeight: FontWeight.w800,
+                                      height: 1,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'KM',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.85),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                ],
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    _pillText,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
-                          ],
-                        ),
                 ),
               ),
             ],

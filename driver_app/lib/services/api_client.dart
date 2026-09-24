@@ -332,16 +332,32 @@ class ApiClient {
     throw ApiException(_extractError(response));
   }
 
+  /// How long a position upload may take before it's treated as a failed
+  /// (offline) attempt. Without a limit, a connection that stalls mid-request
+  /// would hang the background service's tick forever and silently stop every
+  /// later ping.
+  static const _trackingPointTimeout = Duration(seconds: 20);
+
+  /// [recordedAt] is only for points that waited in the offline queue — it
+  /// tells the server when the fix was really taken. Leave it null for a
+  /// fresh fix and the server stamps its own clock.
   Future<TrackingStatus> sendTrackingPoint(
     int hireId, {
     required double latitude,
     required double longitude,
+    DateTime? recordedAt,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/driver/hires/$hireId/tracking/points'),
-      headers: await _headers(auth: true),
-      body: jsonEncode({'latitude': latitude, 'longitude': longitude}),
-    );
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/driver/hires/$hireId/tracking/points'),
+          headers: await _headers(auth: true),
+          body: jsonEncode({
+            'latitude': latitude,
+            'longitude': longitude,
+            if (recordedAt != null) 'recorded_at': recordedAt.toUtc().toIso8601String(),
+          }),
+        )
+        .timeout(_trackingPointTimeout);
 
     if (response.statusCode == 200) {
       return TrackingStatus.fromJson(jsonDecode(response.body) as Map<String, dynamic>);

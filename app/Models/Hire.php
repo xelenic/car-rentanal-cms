@@ -206,6 +206,32 @@ class Hire extends Model
         return $this->hasOne(HireLocation::class)->where('role', 'to');
     }
 
+    /**
+     * The place the driver has to reach before this hire can begin — the
+     * driver app highlights its Start button once the phone is near it.
+     * Depends on the tour type: the "from" location for drop-and-pickup and
+     * day tours, the first stay for multi day tours, the first stop of a
+     * package's itinerary otherwise. Null when the hire has none.
+     */
+    public function pickupLocation(): ?Location
+    {
+        $locations = $this->relationLoaded('locations')
+            ? $this->locations
+            : $this->locations()->with('location')->get();
+
+        $from = $locations->firstWhere('role', 'from');
+        if ($from !== null) {
+            return $from->location;
+        }
+
+        $stay = $locations->where('role', 'stay')->sortBy([['day_number', 'asc'], ['order', 'asc']])->first();
+        if ($stay !== null) {
+            return $stay->location;
+        }
+
+        return $this->package?->itineraries()->with('location')->orderBy('order')->first()?->location;
+    }
+
     public function stayLocations(): HasMany
     {
         return $this->hasMany(HireLocation::class)->where('role', 'stay')->orderBy('order');

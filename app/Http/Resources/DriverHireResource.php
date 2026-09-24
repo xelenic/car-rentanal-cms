@@ -17,6 +17,7 @@ class DriverHireResource extends JsonResource
             'from_location' => $this->fromLocation?->location?->name,
             'to_location' => $this->toLocation?->location?->name,
             'stay_locations' => $this->stayLocations->pluck('location.name')->values(),
+            'pickup_location' => $this->pickupLocationPayload(),
             'package' => $this->package?->name,
             'start_time' => $this->start_time?->toIso8601String(),
             'end_time' => $this->end_time?->toIso8601String(),
@@ -33,6 +34,29 @@ class DriverHireResource extends JsonResource
             'tracking_stopped_at' => $this->tracking_stopped_at?->toIso8601String(),
             'total_distance_km' => $this->total_distance_km,
             'fuel_cost_total' => $this->fuel_cost_total,
+        ];
+    }
+
+    /**
+     * Where the driver has to be for this hire to begin, with coordinates so
+     * the app can tell when the phone gets there. Null when the hire has no
+     * such location or it has no coordinates saved (the app then simply
+     * doesn't highlight anything).
+     *
+     * @return array{name: string, latitude: float, longitude: float}|null
+     */
+    private function pickupLocationPayload(): ?array
+    {
+        $location = $this->pickupLocation();
+
+        if ($location === null || $location->latitude === null || $location->longitude === null) {
+            return null;
+        }
+
+        return [
+            'name' => $location->name,
+            'latitude' => $location->latitude,
+            'longitude' => $location->longitude,
         ];
     }
 }

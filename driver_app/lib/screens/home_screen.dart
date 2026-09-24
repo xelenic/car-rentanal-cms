@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -38,13 +40,30 @@ class _HomeDashboardData {
   });
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late Future<_HomeDashboardData> _future;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _future = _load();
+    // A hire may still be tracked from before the app was closed — bring the
+    // background service back if the phone killed it meanwhile.
+    unawaited(BackgroundTracking.ensureRunning());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(BackgroundTracking.ensureRunning());
+    }
   }
 
   Future<_HomeDashboardData> _load() async {
@@ -55,9 +74,15 @@ class _HomeScreenState extends State<HomeScreen> {
       _loadSalarySafely(),
     ]);
 
+    final hires = results[1] as HirePage;
+
+    // The server's own list of hires being tracked is the source of truth —
+    // re-attach the background service to any it doesn't already cover.
+    unawaited(BackgroundTracking.resume(hires.items.where((h) => h.isTracking).map((h) => h.id)));
+
     return _HomeDashboardData(
       driver: results[0] as Driver,
-      hires: results[1] as HirePage,
+      hires: hires,
       periods: results[2] as AvailablePeriods,
       salary: results[3] as DriverSalary?,
     );

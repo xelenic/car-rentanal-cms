@@ -6,12 +6,20 @@
     <!-- Background hire tracking: a foreground service of type "location"
          keeps recording the driver's position (with a pinned notification)
          after the app is minimized or the screen locks. Android 14+ refuses
-         to start the service without FOREGROUND_SERVICE_LOCATION. Started
-         from the visible app with the normal "while in use" location grant,
-         so ACCESS_BACKGROUND_LOCATION is deliberately not requested. -->
+         to start the service without FOREGROUND_SERVICE_LOCATION. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- What makes tracking survive the phone's own "kill background apps"
+         logic, the usual reason it stops once another app is opened:
+         - ACCESS_BACKGROUND_LOCATION adds the "Allow all the time" choice to
+           the app's Location permission (without it Settings only offers
+           "While using the app"). It lets a service the OS restarts while the
+           app is closed keep reading the GPS.
+         - REQUEST_IGNORE_BATTERY_OPTIMIZATIONS lets the app ask to be
+           exempted from battery optimisation (Doze / app standby). -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="driver_app"

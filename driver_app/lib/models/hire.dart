@@ -5,6 +5,14 @@ class Hire {
   final String? fromLocation;
   final String? toLocation;
   final List<String> stayLocations;
+
+  /// Where the driver has to be for this hire to begin, with coordinates —
+  /// the hire screen highlights its Start button once the phone is near it.
+  /// Null when the hire has no such location, its coordinates aren't saved, or
+  /// the server predates this field.
+  final String? pickupLocationName;
+  final double? pickupLatitude;
+  final double? pickupLongitude;
   final String? package;
   final DateTime? startTime;
   final DateTime? endTime;
@@ -28,6 +36,9 @@ class Hire {
     this.fromLocation,
     this.toLocation,
     this.stayLocations = const [],
+    this.pickupLocationName,
+    this.pickupLatitude,
+    this.pickupLongitude,
     this.package,
     this.startTime,
     this.endTime,
@@ -46,6 +57,8 @@ class Hire {
   });
 
   factory Hire.fromJson(Map<String, dynamic> json) {
+    final pickup = json['pickup_location'];
+
     return Hire(
       id: json['id'] as int,
       tourType: json['tour_type'] as String,
@@ -55,6 +68,9 @@ class Hire {
       stayLocations: (json['stay_locations'] as List<dynamic>? ?? [])
           .map((e) => e.toString())
           .toList(),
+      pickupLocationName: pickup is Map ? pickup['name'] as String? : null,
+      pickupLatitude: pickup is Map ? (pickup['latitude'] as num?)?.toDouble() : null,
+      pickupLongitude: pickup is Map ? (pickup['longitude'] as num?)?.toDouble() : null,
       package: json['package'] as String?,
       startTime: json['start_time'] != null
           ? DateTime.tryParse(json['start_time'] as String)
@@ -98,6 +114,9 @@ class Hire {
       fromLocation: fromLocation,
       toLocation: toLocation,
       stayLocations: stayLocations,
+      pickupLocationName: pickupLocationName,
+      pickupLatitude: pickupLatitude,
+      pickupLongitude: pickupLongitude,
       package: package,
       startTime: startTime,
       endTime: endTime,
@@ -117,6 +136,9 @@ class Hire {
   }
 
   bool get isCompleted => status == 'completed';
+
+  /// Whether the phone's position can be compared with the pickup location.
+  bool get hasPickupCoordinates => pickupLatitude != null && pickupLongitude != null;
 
   /// A hire scheduled ahead of time (see the admin panel's "Schedule"
   /// field) whose date hasn't arrived yet — tracking can't be started or
