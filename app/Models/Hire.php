@@ -121,9 +121,7 @@ class Hire extends Model
      * GPS fixes wobble by several metres even while the vehicle is parked, and
      * a fix arrives every 15 seconds — adding up every wobble would invent
      * kilometres of "travel" per hour. A move only counts once a fix is at
-     * least this far from the last position that counted. The admin map
-     * applies the same rule when it draws the trail (see cleanTrail() in
-     * admin/hires/index.blade.php), so the distance and the line agree.
+     * least this far from the last position that counted.
      */
     public const TRACK_MIN_MOVE_METERS = 20;
 
