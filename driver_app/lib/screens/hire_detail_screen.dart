@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -12,8 +13,10 @@ import '../models/hire_stage.dart';
 import '../models/tracking_status.dart';
 import '../services/api_client.dart';
 import '../services/arrival_detector.dart';
+import '../services/arrival_target.dart';
 import '../services/background_tracking.dart';
 import '../services/pickup_store.dart';
+import '../services/route_planner.dart';
 import '../theme/app_theme.dart';
 import '../widgets/background_access_prompt.dart';
 import '../widgets/hire_map.dart';
@@ -61,6 +64,18 @@ class HireDetailScreen extends StatefulWidget {
   /// tests replace it (the default asks the server).
   final Future<TrackingStatus> Function(int hireId)? loadTracking;
 
+  /// Plans the road route drawn on the map. Only tests replace it (the default
+  /// asks the server).
+  final Future<PlannedRoute> Function(int hireId, LatLng origin)? planRoute;
+
+  /// Cancels the hire on the server. Only tests replace it.
+  final Future<TrackingStatus> Function(int hireId, String? reason)? cancelHire;
+
+  /// Records the phone's position for the hire — what the in-app timer does
+  /// every 15 seconds where there is no Android background service. Only tests
+  /// replace it (the default reads the GPS and posts the point).
+  final Future<TrackingStatus> Function(int hireId)? recordPoint;
+
   const HireDetailScreen({
     super.key,
     required this.hire,
@@ -68,6 +83,9 @@ class HireDetailScreen extends StatefulWidget {
     this.positionStream,
     this.launchMapsUrl,
     this.loadTracking,
+    this.planRoute,
+    this.cancelHire,
+    this.recordPoint,
   });
 
   @override
@@ -87,16 +105,26 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
 
   late final PickupStore _pickupStore;
 
+  /// Lets the page scroll the map into view once the hire has started.
+  final GlobalKey _mapCardKey = GlobalKey();
+
   /// The driver has tapped "Pickup" for this hire (null until read from the
   /// phone's storage, so the first frame doesn't flash the wrong button).
   bool? _pickedUp;
 
-  /// Arrival at the pickup location — see [_syncArrivalWatch].
+  /// Arrival at the place the driver is heading for — the pickup location
+  /// before the hire starts, the end location after (see [_syncArrivalWatch]).
   final ArrivalDetector _arrival = ArrivalDetector();
   StreamSubscription<Position>? _positionSub;
-  double? _metersToPickup;
+  ArrivalGoal? _watchedGoal;
+  double? _metersToTarget;
 
-  bool get _arrived => _arrival.arrived && !_hire.isScheduledInFuture;
+  /// On a round trip (it ends where it began) the driver is standing at the end
+  /// location the moment they press Start. Arrival only counts once they have
+  /// been away from it; this remembers that they have.
+  bool _leftEnd = false;
+
+  bool get _arrived => _arrival.arrived && !(_watchedGoal == ArrivalGoal.pickup && _hire.isScheduledInFuture);
 
   HireStage get _stage => hireStageOf(_hire, pickedUp: _pickedUp ?? false);
 
@@ -153,6 +181,36 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
     } catch (_) {}
   }
 
+  /// The road route from the driver to what is still ahead, for the map. A
+  /// failure (offline, an older server, Directions unavailable) is not an
+  /// error — the map just keeps its straight-line view.
+  Future<PlannedRoute?> _planRoute(LatLng origin) async {
+    try {
+      final plan = widget.planRoute;
+      if (plan != null) return await plan(_hire.id, origin);
+
+      return await ApiClient.instance.fetchRoute(_hire.id, latitude: origin.latitude, longitude: origin.longitude);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Brings the map into view — after Start, where the driver wants to see the
+  /// way ahead.
+  void _revealMap() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = _mapCardKey.currentContext;
+      if (!mounted || context == null) return;
+
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeInOut,
+        alignment: 0.08,
+      );
+    });
+  }
+
   Future<void> _loadPickedUp() async {
     final pickedUp = await _pickupStore.isPickedUp(_hire.id);
     if (!mounted) return;
@@ -178,15 +236,19 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
     unawaited(_syncArrivalWatch(requestPermission: true));
   }
 
-  /// Watches the phone's position while the Start button is showing, so the
-  /// button can highlight itself on arrival. Runs only in the Start stage, only
-  /// for hires whose pickup location has coordinates, and stops otherwise.
+  /// Watches the phone's position so the button the driver needs next can
+  /// highlight itself on arrival: Start at the pickup location, then Complete
+  /// Hire at the end location (see [arrivalTargetFor]). Only runs while there is
+  /// somewhere with saved coordinates to arrive at, and stops otherwise.
   Future<void> _syncArrivalWatch({bool requestPermission = false}) async {
-    final wanted = mounted && _stage == HireStage.start && _hire.hasPickupCoordinates;
-    if (!wanted) {
+    final target = mounted ? arrivalTargetFor(_hire, stage: _stage) : null;
+    if (target == null) {
       await _stopArrivalWatch();
       return;
     }
+
+    // The destination changed (Start was pressed): begin afresh for the new one.
+    if (_positionSub != null && _watchedGoal != target.goal) await _stopArrivalWatch();
     if (_positionSub != null) return;
 
     final Stream<Position>? stream = widget.positionStream != null
@@ -195,17 +257,19 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
     if (stream == null || !mounted || _positionSub != null) return;
 
     // Errors (GPS switched off mid-way, …) just mean no highlight.
+    _watchedGoal = target.goal;
     _positionSub = stream.listen(_onPosition, onError: (_) {});
   }
 
   Future<void> _stopArrivalWatch() async {
     final sub = _positionSub;
     _positionSub = null;
+    _watchedGoal = null;
     await sub?.cancel();
 
     _arrival.reset();
-    if (mounted && (_metersToPickup != null)) {
-      setState(() => _metersToPickup = null);
+    if (mounted && (_metersToTarget != null)) {
+      setState(() => _metersToTarget = null);
     }
   }
 
@@ -228,17 +292,26 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
   }
 
   void _onPosition(Position position) {
-    if (!mounted || !_hire.hasPickupCoordinates) return;
+    final target = arrivalTargetFor(_hire, stage: _stage);
+    if (!mounted || target == null) return;
 
-    final meters = distanceMeters(
-      position.latitude,
-      position.longitude,
-      _hire.pickupLatitude!,
-      _hire.pickupLongitude!,
-    );
+    final meters = distanceMeters(position.latitude, position.longitude, target.latitude, target.longitude);
+
+    // A round trip ends where it began, so being at the "end" right after
+    // pressing Start is not arriving — wait until the driver has been away
+    // (on this screen, or in the path the background service recorded).
+    if (target.goal == ArrivalGoal.end && !_leftEnd && endIsWhereItStarted(_hire)) {
+      if (meters > ArrivalDetector.defaultExitRadiusMeters || pathHasLeft(_points, target)) {
+        _leftEnd = true;
+      } else {
+        setState(() => _metersToTarget = null);
+        return;
+      }
+    }
+
     final changed = _arrival.update(meters);
 
-    setState(() => _metersToPickup = meters);
+    setState(() => _metersToTarget = meters);
     if (changed && _arrived) {
       // Once, the moment the driver gets there — the screen may not be in view.
       HapticFeedback.heavyImpact().catchError((_) {});
@@ -365,14 +438,19 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
     );
   }
 
+  Future<TrackingStatus> _recordPointFromGps(int hireId) async {
+    final position = await _getCurrentPosition();
+
+    return ApiClient.instance.sendTrackingPoint(
+      hireId,
+      latitude: position.latitude,
+      longitude: position.longitude,
+    );
+  }
+
   Future<void> _captureAndSendPoint() async {
     try {
-      final position = await _getCurrentPosition();
-      final status = await ApiClient.instance.sendTrackingPoint(
-        _hire.id,
-        latitude: position.latitude,
-        longitude: position.longitude,
-      );
+      final status = await (widget.recordPoint ?? _recordPointFromGps)(_hire.id);
 
       if (!mounted) return;
       setState(() {
@@ -437,10 +515,12 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
     }
   }
 
-  Future<void> _toggleTracking() async {
-    if (_hire.isCompleted) return;
+  /// Starts the hire: the customer is on board. (There is no Stop any more — a
+  /// hire that can't go on is cancelled, and one that is finished is completed.)
+  Future<void> _startTracking() async {
+    if (_hire.isCompleted || _hire.isCancelled) return;
 
-    if (!_hire.isTracking && _hire.isScheduledInFuture) {
+    if (_hire.isScheduledInFuture) {
       setState(() => _trackingError = _scheduledMessage(_hire));
       return;
     }
@@ -451,55 +531,102 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
     });
 
     try {
-      if (_hire.isTracking) {
-        final status = await ApiClient.instance.stopTracking(_hire.id);
-        await _endTrackingLoop();
-        if (!mounted) return;
-        setState(() {
-          _hire = _hire.copyWith(
-            isTracking: false,
-            trackingStoppedAt: status.trackingStoppedAt,
-            totalDistanceKm: status.totalDistanceKm,
-          );
-          _points = status.points;
-        });
-      } else {
-        // Starting: the arrival highlight has done its job, and the GPS is
-        // needed for the first point.
-        await _stopArrivalWatch();
-        final position = await _getCurrentPosition();
-        await BackgroundTracking.requestNotificationPermission();
-        final status = await ApiClient.instance.startTracking(_hire.id);
-        final pointStatus = await ApiClient.instance.sendTrackingPoint(
-          _hire.id,
-          latitude: position.latitude,
-          longitude: position.longitude,
-        );
+      // The arrival highlight has done its job, and the GPS is needed for the
+      // first point.
+      await _stopArrivalWatch();
+      _leftEnd = false;
+      final position = await _getCurrentPosition();
+      await BackgroundTracking.requestNotificationPermission();
+      final status = await ApiClient.instance.startTracking(_hire.id);
+      final pointStatus = await ApiClient.instance.sendTrackingPoint(
+        _hire.id,
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
 
-        if (!mounted) return;
-        setState(() {
-          _hire = _hire.copyWith(
-            status: status.status,
-            statusLabel: status.statusLabel,
-            isTracking: true,
-            trackingStartedAt: status.trackingStartedAt,
-            totalDistanceKm: pointStatus.totalDistanceKm,
-          );
-          _points = pointStatus.points;
-        });
-        await _beginTrackingLoop();
-        // With the service already running (so it isn't started from the
-        // background while Settings is open), ask for the phone settings
-        // that keep it alive once another app is opened.
-        unawaited(_offerAccess());
-      }
+      if (!mounted) return;
+      setState(() {
+        _hire = _hire.copyWith(
+          status: status.status,
+          statusLabel: status.statusLabel,
+          isTracking: true,
+          trackingStartedAt: status.trackingStartedAt,
+          totalDistanceKm: pointStatus.totalDistanceKm,
+        );
+        _points = pointStatus.points;
+      });
+      await _beginTrackingLoop();
+      // Now that the customer is on board, show the way ahead: the map is
+      // already re-planning from the driver to the end location.
+      _revealMap();
+      // With the service already running (so it isn't started from the
+      // background while Settings is open), ask for the phone settings
+      // that keep it alive once another app is opened.
+      unawaited(_offerAccess());
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() => _trackingError = "Couldn't get your location. Check that GPS is on, then try again.");
     } catch (e) {
       if (!mounted) return;
       setState(() => _trackingError = e.toString());
     } finally {
       if (mounted) setState(() => _busy = false);
+      // Watch for arrival at the end location now (or again, if starting failed).
+      unawaited(_syncArrivalWatch());
     }
   }
+
+  /// "Cancel Hire": asks for confirmation — and, optionally, why — before
+  /// anything is sent. Cancelling is for good.
+  Future<void> _confirmCancel() async {
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => const _CancelHireDialog(),
+    );
+
+    // null: the driver kept the hire. Otherwise the reason, possibly empty.
+    if (reason != null) {
+      await _cancelHire(reason.trim().isEmpty ? null : reason.trim());
+    }
+  }
+
+  /// The hire is over: nothing continues. Tracking is stopped everywhere it
+  /// runs — the in-app timer and, on Android, the background service and its
+  /// pinned notification.
+  Future<void> _cancelHire(String? reason) async {
+    setState(() {
+      _busy = true;
+      _trackingError = null;
+    });
+
+    try {
+      final status = await (widget.cancelHire ?? _cancelOnServer)(_hire.id, reason);
+      await _endTrackingLoop();
+      await _pickupStore.clear(_hire.id);
+      if (!mounted) return;
+      setState(() {
+        _hire = _hire.copyWith(
+          status: status.status,
+          statusLabel: status.statusLabel,
+          isTracking: false,
+          trackingStoppedAt: status.trackingStoppedAt,
+          cancelledAt: status.cancelledAt ?? DateTime.now(),
+          cancelReason: reason,
+          totalDistanceKm: status.totalDistanceKm,
+        );
+        _points = status.points;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _trackingError = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+      unawaited(_syncArrivalWatch()); // a cancelled hire has nothing to arrive at: this stops the watch
+    }
+  }
+
+  Future<TrackingStatus> _cancelOnServer(int hireId, String? reason) =>
+      ApiClient.instance.cancelHire(hireId, reason: reason);
 
   Future<void> _confirmComplete() async {
     final confirmed = await showDialog<bool>(
@@ -553,9 +680,6 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
         );
         _points = status.points;
       });
-    } on TimeoutException {
-      if (!mounted) return;
-      setState(() => _trackingError = "Couldn't get your location. Check that GPS is on, then try again.");
     } catch (e) {
       if (!mounted) return;
       setState(() => _trackingError = e.toString());
@@ -605,19 +729,27 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
             error: _trackingError,
             hasPath: _points.isNotEmpty,
             arrived: _arrived,
-            metersToPickup: _metersToPickup,
+            metersToTarget: _metersToTarget,
+            arrivalTarget: arrivalTargetFor(hire, stage: _stage),
             mapRoute: route,
             onOpenRoute: (route) => _launchMapsUrl(route.url),
             accessNotice: backgroundAccessNotice(_access),
             onPickup: _pickup,
-            onStart: _toggleTracking,
-            onStop: _toggleTracking,
+            onStart: _startTracking,
+            onCancel: _confirmCancel,
             onComplete: _confirmComplete,
             onViewPath: _openPathInMaps,
             onFixAccess: _offerAccess,
           ),
           const SizedBox(height: 12),
-          HireMapCard(hireId: hire.id, places: hire.mapPoints, path: _points),
+          HireMapCard(
+            key: _mapCardKey,
+            hireId: hire.id,
+            places: hire.mapPoints,
+            path: _points,
+            routeStops: routeStopsFor(hire.mapPoints, started: hire.trackingStartedAt != null, completed: _stage.isOver),
+            planRoute: _planRoute,
+          ),
           const SizedBox(height: 12),
           _QuickActionsRow(
             onOpen: _openShortcut,
@@ -687,7 +819,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
       ),
       // Completing a hire happens on the tracking card (next to Stop); the
       // bar is only left to confirm a hire that's already done.
-      bottomNavigationBar: hire.isCompleted
+      bottomNavigationBar: _stage.isOver
           ? SafeArea(
               minimum: const EdgeInsets.all(16),
               child: _CompleteBar(hire: hire),
@@ -697,7 +829,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
   }
 }
 
-/// Shown at the bottom of a hire that's already been completed.
+/// Shown at the bottom of a hire that is over: completed, or cancelled.
 class _CompleteBar extends StatelessWidget {
   final Hire hire;
 
@@ -705,26 +837,25 @@ class _CompleteBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cancelled = hire.isCancelled;
+    final color = cancelled ? AppColors.danger : AppColors.neon;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.neon.withValues(alpha: 0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.neon.withValues(alpha: 0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
-      child: const Row(
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.check_circle, color: AppColors.neon, size: 18),
-          SizedBox(width: 8),
+          Icon(cancelled ? Icons.cancel : Icons.check_circle, color: color, size: 18),
+          const SizedBox(width: 8),
           Text(
-            'Hire Completed',
-            style: TextStyle(
-              color: AppColors.neon,
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-            ),
+            cancelled ? 'Hire Cancelled' : 'Hire Completed',
+            style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 14),
           ),
         ],
       ),
@@ -749,9 +880,12 @@ class _TrackingCard extends StatelessWidget {
   final String? error;
   final bool hasPath;
 
-  /// The phone is at the pickup location (only ever true in the Start stage).
+  /// The phone is at the place the driver is heading for ([arrivalTarget]) —
+  /// the pickup location while Start is showing, the end location once the
+  /// hire has started.
   final bool arrived;
-  final double? metersToPickup;
+  final double? metersToTarget;
+  final ArrivalTarget? arrivalTarget;
 
   /// The Google Maps route for this stage — Your location → pickup → end
   /// before the hire starts, Your location → end once it has — or null when
@@ -764,7 +898,7 @@ class _TrackingCard extends StatelessWidget {
   final String? accessNotice;
   final VoidCallback onPickup;
   final VoidCallback onStart;
-  final VoidCallback onStop;
+  final VoidCallback onCancel;
   final VoidCallback onComplete;
   final VoidCallback onViewPath;
   final VoidCallback onFixAccess;
@@ -777,13 +911,14 @@ class _TrackingCard extends StatelessWidget {
     required this.error,
     required this.hasPath,
     required this.arrived,
-    required this.metersToPickup,
+    required this.metersToTarget,
+    required this.arrivalTarget,
     required this.mapRoute,
     required this.onOpenRoute,
     required this.accessNotice,
     required this.onPickup,
     required this.onStart,
-    required this.onStop,
+    required this.onCancel,
     required this.onComplete,
     required this.onViewPath,
     required this.onFixAccess,
@@ -795,19 +930,48 @@ class _TrackingCard extends StatelessWidget {
   /// before the scheduled time) but not started until its date arrives.
   bool get _startLocked => stage == HireStage.start && hire.isScheduledInFuture;
 
+  bool get _arrivedAtPickup => arrived && arrivalTarget?.goal == ArrivalGoal.pickup;
+  bool get _arrivedAtEnd => arrived && arrivalTarget?.goal == ArrivalGoal.end;
+
   String get _statusText {
     switch (stage) {
       case HireStage.completed:
         return 'Completed';
+      case HireStage.cancelled:
+        return 'Cancelled';
       case HireStage.inProgress:
-        return 'Tracking active';
+        return _arrivedAtEnd ? 'You have arrived' : 'Tracking active';
       case HireStage.start:
         if (_isPaused) return 'Tracking paused';
         if (_startLocked) return 'Scheduled — not startable yet';
-        return arrived ? 'You have arrived' : 'Ready to start';
+        return _arrivedAtPickup ? 'You have arrived' : 'Ready to start';
       case HireStage.pickup:
         return 'Not started';
     }
+  }
+
+  /// Under Stop / Complete Hire: how far the end location is, or — once the
+  /// driver gets there — that Complete Hire is what to press.
+  Widget? get _endHint {
+    final target = arrivalTarget;
+    if (target == null || target.goal != ArrivalGoal.end) return null;
+
+    if (_arrivedAtEnd) {
+      return _StageHint(
+        icon: Icons.flag,
+        color: _arrivedColor,
+        strong: true,
+        text: "You've arrived at ${target.name} — tap Complete Hire.",
+      );
+    }
+    if (metersToTarget != null) {
+      return _StageHint(
+        icon: Icons.near_me_outlined,
+        color: AppColors.textSecondary,
+        text: '${target.name} is ${_distance(metersToTarget!)} away — Complete Hire lights up when you arrive.',
+      );
+    }
+    return null;
   }
 
   static String _distance(double meters) =>
@@ -827,6 +991,7 @@ class _TrackingCard extends StatelessWidget {
         circleTap = onStart;
       case HireStage.inProgress:
       case HireStage.completed:
+      case HireStage.cancelled:
         circleTap = null;
     }
 
@@ -868,7 +1033,7 @@ class _TrackingCard extends StatelessWidget {
           _PulseStartButton(
             stage: stage,
             isLocked: _startLocked,
-            arrived: arrived,
+            arrived: _arrivedAtPickup,
             busy: busy || stageLoading,
             distanceKm: hire.totalDistanceKm,
             onTap: circleTap,
@@ -885,7 +1050,7 @@ class _TrackingCard extends StatelessWidget {
           ],
           if (stage == HireStage.start && !_startLocked) ...[
             const SizedBox(height: 12),
-            if (arrived)
+            if (_arrivedAtPickup)
               _StageHint(
                 icon: Icons.place,
                 color: _arrivedColor,
@@ -900,11 +1065,11 @@ class _TrackingCard extends StatelessWidget {
                 color: AppColors.textSecondary,
                 text: 'Tracking is paused — tap Start to resume.',
               )
-            else if (hire.hasPickupCoordinates && metersToPickup != null)
+            else if (arrivalTarget?.goal == ArrivalGoal.pickup && metersToTarget != null)
               _StageHint(
                 icon: Icons.near_me_outlined,
                 color: AppColors.textSecondary,
-                text: '${place ?? 'Pickup'} is ${_distance(metersToPickup!)} away — Start lights up when you arrive.',
+                text: '${place ?? 'Pickup'} is ${_distance(metersToTarget!)} away — Start lights up when you arrive.',
               )
             else
               const _StageHint(
@@ -917,31 +1082,36 @@ class _TrackingCard extends StatelessWidget {
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: busy ? null : onStop,
-                    icon: const Icon(Icons.stop_circle_outlined, size: 20),
-                    label: const Text('Stop'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.danger,
-                      side: BorderSide(color: busy ? AppColors.border : AppColors.danger),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      textStyle: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ),
+                Expanded(child: _CancelButton(busy: busy, onPressed: onCancel)),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: _CompleteButton(busy: busy, onPressed: onComplete),
+                  child: _CompleteButton(busy: busy, highlighted: _arrivedAtEnd, onPressed: onComplete),
                 ),
               ],
             ),
+            if (_endHint != null) ...[const SizedBox(height: 10), _endHint!],
           ],
           // Paused (started once, then stopped): Start resumes, and the hire
           // can still be completed without starting it again.
           if (_isPaused) ...[
             const SizedBox(height: 12),
-            SizedBox(width: double.infinity, child: _CompleteButton(busy: busy, onPressed: onComplete)),
+            SizedBox(
+              width: double.infinity,
+              child: _CompleteButton(busy: busy, highlighted: _arrivedAtEnd, onPressed: onComplete),
+            ),
+            if (_endHint != null) ...[const SizedBox(height: 10), _endHint!],
+            const SizedBox(height: 10),
+            SizedBox(width: double.infinity, child: _CancelButton(busy: busy, onPressed: onCancel)),
+          ],
+          // Not started yet (Pickup / Start): the hire can still be cancelled —
+          // a customer who never shows up, a vehicle that won't start.
+          if (stage == HireStage.pickup || (stage == HireStage.start && !_isPaused)) ...[
+            const SizedBox(height: 14),
+            SizedBox(width: double.infinity, child: _CancelButton(busy: busy, onPressed: onCancel)),
+          ],
+          if (stage == HireStage.cancelled) ...[
+            const SizedBox(height: 14),
+            _CancelledNotice(hire: hire),
           ],
           if (mapRoute != null) ...[
             const SizedBox(height: 14),
@@ -1203,28 +1373,237 @@ class _StageHint extends StatelessWidget {
   }
 }
 
-/// "Complete Hire" — asks for confirmation (see _confirmComplete) before
-/// anything is sent.
-class _CompleteButton extends StatelessWidget {
-  final bool busy;
-  final VoidCallback onPressed;
+/// The "Cancel this hire?" dialog. Pops the reason the driver typed (empty if
+/// none) to confirm, or null to keep the hire. It owns its text controller so
+/// the controller is only disposed once the dialog has finished closing.
+class _CancelHireDialog extends StatefulWidget {
+  const _CancelHireDialog();
 
-  const _CompleteButton({required this.busy, required this.onPressed});
+  @override
+  State<_CancelHireDialog> createState() => _CancelHireDialogState();
+}
+
+class _CancelHireDialogState extends State<_CancelHireDialog> {
+  final _reason = TextEditingController();
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton.icon(
+    return AlertDialog(
+      backgroundColor: AppColors.surface,
+      title: const Text(
+        'Cancel this hire?',
+        style: TextStyle(color: AppColors.textPrimary),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'The hire will be marked as cancelled and tracking will stop. It cannot be started again afterwards.',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            key: const Key('cancel-reason'),
+            controller: _reason,
+            maxLines: 2,
+            maxLength: 500,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              hintText: 'Reason (optional) — e.g. customer did not show up',
+              counterText: '',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Keep hire', style: TextStyle(color: AppColors.textSecondary)),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.of(context).pop(_reason.text),
+          style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
+          child: const Text('Yes, cancel hire'),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Cancel Hire" — asks for confirmation, and why, before anything is sent
+/// (see _confirmCancel). Replaces the old Stop button.
+class _CancelButton extends StatelessWidget {
+  final bool busy;
+  final VoidCallback onPressed;
+
+  const _CancelButton({required this.busy, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
       onPressed: busy ? null : onPressed,
-      icon: const Icon(Icons.check_circle_outline, size: 20),
+      icon: const Icon(Icons.cancel_outlined, size: 20),
+      label: const Text('Cancel Hire'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.danger,
+        side: BorderSide(color: busy ? AppColors.border : AppColors.danger),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+/// Shown on a cancelled hire instead of any buttons: that it is over, when,
+/// and why.
+class _CancelledNotice extends StatelessWidget {
+  final Hire hire;
+
+  const _CancelledNotice({required this.hire});
+
+  @override
+  Widget build(BuildContext context) {
+    final when = hire.cancelledAt != null ? DateFormat('MMM d, y  h:mm a').format(hire.cancelledAt!.toLocal()) : null;
+    final reason = hire.cancelReason;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.danger.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Icon(Icons.cancel, color: AppColors.danger, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  when != null ? 'This hire was cancelled on $when.' : 'This hire was cancelled.',
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 12.5, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 3),
+                const Text(
+                  'It will not continue, and tracking has stopped.',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                ),
+                if (reason != null && reason.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Reason: $reason',
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontStyle: FontStyle.italic),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Complete Hire" — asks for confirmation (see _confirmComplete) before
+/// anything is sent. When the driver reaches the end location ([highlighted])
+/// it turns green and pulses — a breathing glow and a slight swell — until it
+/// is tapped.
+class _CompleteButton extends StatefulWidget {
+  final bool busy;
+  final bool highlighted;
+  final VoidCallback onPressed;
+
+  const _CompleteButton({required this.busy, required this.onPressed, this.highlighted = false});
+
+  @override
+  State<_CompleteButton> createState() => _CompleteButtonState();
+}
+
+class _CompleteButtonState extends State<_CompleteButton> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
+
+  bool get _glowing => widget.highlighted && !widget.busy;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_glowing) _pulse.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _CompleteButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (_glowing && !_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    } else if (!_glowing && _pulse.isAnimating) {
+      _pulse.stop();
+      _pulse.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final button = ElevatedButton.icon(
+      onPressed: widget.busy ? null : widget.onPressed,
+      icon: Icon(widget.highlighted ? Icons.flag : Icons.check_circle_outline, size: 20),
       label: const Text('Complete Hire'),
       style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.neon,
+        backgroundColor: widget.highlighted ? _arrivedColor : AppColors.neon,
         foregroundColor: AppColors.onNeon,
         disabledBackgroundColor: AppColors.surfaceElevated,
         disabledForegroundColor: AppColors.textMuted,
         padding: const EdgeInsets.symmetric(vertical: 14),
         textStyle: const TextStyle(fontWeight: FontWeight.w700),
       ),
+    );
+
+    if (!widget.highlighted) return button;
+
+    return AnimatedBuilder(
+      animation: _pulse,
+      child: button,
+      builder: (context, child) {
+        final t = Curves.easeInOut.transform(_pulse.value);
+
+        return Transform.scale(
+          scale: 1 + 0.045 * t,
+          child: DecoratedBox(
+            key: const Key('complete-hire-highlight'),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: _arrivedColor.withValues(alpha: 0.35 + 0.35 * t),
+                  blurRadius: 10 + 18 * t,
+                  spreadRadius: 1 + 4 * t,
+                ),
+              ],
+            ),
+            child: child,
+          ),
+        );
+      },
     );
   }
 }
@@ -1271,8 +1650,9 @@ class _PulseStartButtonState extends State<_PulseStartButton> with TickerProvide
 
   bool get _isTracking => widget.stage == HireStage.inProgress;
   bool get _isCompleted => widget.stage == HireStage.completed;
+  bool get _isCancelled => widget.stage == HireStage.cancelled;
   bool get _highlighted => widget.arrived && widget.stage == HireStage.start && !widget.isLocked;
-  bool get _shouldBreathe => !_isCompleted && !_isTracking && !widget.isLocked;
+  bool get _shouldBreathe => !widget.stage.isOver && !_isTracking && !widget.isLocked;
   bool get _shouldRipple => _isTracking || _highlighted;
 
   @override
@@ -1316,6 +1696,7 @@ class _PulseStartButtonState extends State<_PulseStartButton> with TickerProvide
 
   Color get _color {
     if (_isCompleted) return AppColors.neon;
+    if (_isCancelled) return AppColors.textMuted;
     if (widget.isLocked) return AppColors.textMuted;
     if (widget.stage == HireStage.pickup) return AppColors.neonDeep;
     if (_highlighted) return _arrivedColor;
@@ -1332,6 +1713,8 @@ class _PulseStartButtonState extends State<_PulseStartButton> with TickerProvide
         return 'TRACKING';
       case HireStage.completed:
         return 'DONE';
+      case HireStage.cancelled:
+        return 'CANCELLED';
     }
   }
 
@@ -1431,8 +1814,12 @@ class _PulseStartButtonState extends State<_PulseStartButton> with TickerProvide
                           : Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (widget.stage == HireStage.pickup) ...[
-                                  const Icon(Icons.directions_car_filled_outlined, color: Colors.white, size: 52),
+                                if (widget.stage == HireStage.pickup || _isCancelled) ...[
+                                  Icon(
+                                    _isCancelled ? Icons.cancel_outlined : Icons.directions_car_filled_outlined,
+                                    color: Colors.white,
+                                    size: 52,
+                                  ),
                                   const SizedBox(height: 12),
                                 ] else ...[
                                   Text(

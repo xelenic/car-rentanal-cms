@@ -15,6 +15,7 @@ import '../models/salary_advance_request.dart';
 import '../models/tracking_status.dart';
 import '../models/vehicle.dart';
 import '../models/vehicle_maintenance_record.dart';
+import 'route_planner.dart';
 
 class ApiException implements Exception {
   final String message;
@@ -140,11 +141,20 @@ class ApiClient {
     throw ApiException(_extractError(response));
   }
 
-  Future<HirePage> fetchHires({int? year, int? month}) async {
+  /// The driver's hires, newest first, in pages.
+  ///
+  /// [status] narrows to one group — 'open' (still to do), 'completed' or
+  /// 'cancelled'; [year]/[month] to a period; [perPage] (1–50) sets the page
+  /// size and [page] picks the page (from 1). A server that predates these
+  /// filters ignores them and sends everything, which callers must tolerate.
+  Future<HirePage> fetchHires({int? year, int? month, String? status, int page = 1, int? perPage}) async {
     final uri = Uri.parse('$baseUrl/driver/hires').replace(
       queryParameters: {
         if (year != null) 'year': '$year',
         if (month != null) 'month': '$month',
+        if (status != null) 'status': status,
+        if (page > 1) 'page': '$page',
+        if (perPage != null) 'per_page': '$perPage',
       },
     );
     final response = await http.get(uri, headers: await _headers(auth: true));
@@ -157,9 +167,13 @@ class ApiClient {
     throw ApiException(_extractError(response));
   }
 
-  Future<AvailablePeriods> fetchAvailablePeriods() async {
+  /// The years/months that have hires — only those of one [status] group
+  /// ('open', 'completed', 'cancelled') when given.
+  Future<AvailablePeriods> fetchAvailablePeriods({String? status}) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/driver/hires/periods'),
+      Uri.parse('$baseUrl/driver/hires/periods').replace(
+        queryParameters: {if (status != null) 'status': status},
+      ),
       headers: await _headers(auth: true),
     );
 
@@ -319,17 +333,40 @@ class ApiClient {
     throw ApiException(_extractError(response));
   }
 
-  Future<TrackingStatus> stopTracking(int hireId) async {
+  /// Cancels the hire for good: the server marks it cancelled and stops its
+  /// tracking. [reason] is optional.
+  Future<TrackingStatus> cancelHire(int hireId, {String? reason}) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/driver/hires/$hireId/tracking/stop'),
+      Uri.parse('$baseUrl/driver/hires/$hireId/cancel'),
       headers: await _headers(auth: true),
+      body: jsonEncode({if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim()}),
     );
 
     if (response.statusCode == 200) {
       return TrackingStatus.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     }
 
-    throw ApiException(_extractError(response));
+    throw ApiException(_extractError(response), statusCode: response.statusCode);
+  }
+
+  /// The road route from [latitude]/[longitude] through what is still ahead on
+  /// the hire, to its end (see the server's HireRouteController). Throws when
+  /// no route can be planned — the map then keeps its straight-line view.
+  Future<PlannedRoute> fetchRoute(int hireId, {required double latitude, required double longitude}) async {
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/driver/hires/$hireId/route').replace(
+            queryParameters: {'origin_lat': '$latitude', 'origin_lng': '$longitude'},
+          ),
+          headers: await _headers(auth: true),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    if (response.statusCode == 200) {
+      return PlannedRoute.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response), statusCode: response.statusCode);
   }
 
   /// The hire's tracking state and the path recorded so far — read-only.

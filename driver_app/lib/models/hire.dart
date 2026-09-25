@@ -33,6 +33,10 @@ class Hire {
   final bool isTracking;
   final DateTime? trackingStartedAt;
   final DateTime? trackingStoppedAt;
+
+  /// When the driver cancelled the hire, and the reason they gave (if any).
+  final DateTime? cancelledAt;
+  final String? cancelReason;
   final double totalDistanceKm;
 
   Hire({
@@ -60,6 +64,8 @@ class Hire {
     this.isTracking = false,
     this.trackingStartedAt,
     this.trackingStoppedAt,
+    this.cancelledAt,
+    this.cancelReason,
     this.totalDistanceKm = 0,
   });
 
@@ -106,6 +112,8 @@ class Hire {
       trackingStoppedAt: json['tracking_stopped_at'] != null
           ? DateTime.tryParse(json['tracking_stopped_at'] as String)
           : null,
+      cancelledAt: json['cancelled_at'] != null ? DateTime.tryParse(json['cancelled_at'] as String) : null,
+      cancelReason: json['cancel_reason'] as String?,
       totalDistanceKm: (json['total_distance_km'] as num?)?.toDouble() ?? 0,
     );
   }
@@ -116,6 +124,8 @@ class Hire {
     bool? isTracking,
     DateTime? trackingStartedAt,
     DateTime? trackingStoppedAt,
+    DateTime? cancelledAt,
+    String? cancelReason,
     double? totalDistanceKm,
   }) {
     return Hire(
@@ -143,11 +153,17 @@ class Hire {
       isTracking: isTracking ?? this.isTracking,
       trackingStartedAt: trackingStartedAt ?? this.trackingStartedAt,
       trackingStoppedAt: trackingStoppedAt ?? this.trackingStoppedAt,
+      cancelledAt: cancelledAt ?? this.cancelledAt,
+      cancelReason: cancelReason ?? this.cancelReason,
       totalDistanceKm: totalDistanceKm ?? this.totalDistanceKm,
     );
   }
 
   bool get isCompleted => status == 'completed';
+
+  /// The driver cancelled it: it does not continue, tracking has stopped, and
+  /// it earns nothing.
+  bool get isCancelled => status == 'cancelled';
 
   /// Whether the phone's position can be compared with the pickup location.
   bool get hasPickupCoordinates => pickupLatitude != null && pickupLongitude != null;

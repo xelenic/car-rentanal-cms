@@ -7,13 +7,20 @@ import 'hire.dart';
 ///  * [start]      — picked up (or tracking was paused): the "Start" button.
 ///  * [inProgress] — tracking: "Stop" and "Complete".
 ///  * [completed]  — finished.
-enum HireStage { pickup, start, inProgress, completed }
+///  * [cancelled]  — the driver cancelled it: nothing more can be done.
+enum HireStage { pickup, start, inProgress, completed, cancelled }
+
+extension HireStageInfo on HireStage {
+  /// Nothing more can be done with the hire: it is finished or was cancelled.
+  bool get isOver => this == HireStage.completed || this == HireStage.cancelled;
+}
 
 /// [pickedUp] is the driver's own "I'm on my way to the pickup" mark for this
 /// hire (see PickupStore). A hire that was already started once and then
 /// stopped counts as picked up too, so pausing never sends the driver back to
 /// the Pickup button.
 HireStage hireStageOf(Hire hire, {required bool pickedUp}) {
+  if (hire.isCancelled) return HireStage.cancelled;
   if (hire.isCompleted) return HireStage.completed;
   if (hire.isTracking) return HireStage.inProgress;
   if (pickedUp || hire.trackingStartedAt != null) return HireStage.start;

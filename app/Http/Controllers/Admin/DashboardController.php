@@ -101,6 +101,7 @@ class DashboardController extends Controller
         // "Average Day Hire Rate": the average hire_full_value among this
         // month's Day Tour hires specifically (Hire::TOUR_TYPES['day_tour']).
         $dayTourHires = Hire::query()
+            ->counted()
             ->inMonth($year, $month)
             ->where('tour_type', 'day_tour')
             ->get(['hire_full_value']);
@@ -117,11 +118,13 @@ class DashboardController extends Controller
             ->sum('amount'), 2);
 
         $creditHiresCount = Hire::query()
+            ->counted()
             ->inMonth($year, $month)
             ->where('payment_type', 'credit')
             ->count();
 
         $cashHiresCount = Hire::query()
+            ->counted()
             ->inMonth($year, $month)
             ->where('payment_type', 'cash')
             ->count();

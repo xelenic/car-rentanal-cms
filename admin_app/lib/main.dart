@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'screens/hires_list_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/vehicles_dashboard_screen.dart';
 import 'services/api_client.dart';
 import 'theme/app_theme.dart';
 
@@ -24,7 +24,7 @@ class AdminApp extends StatelessWidget {
 }
 
 /// Checks for a stored token before deciding whether to land on the login
-/// screen or straight on the hires list — avoids a login-screen flash for
+/// screen or straight on the vehicles dashboard — avoids a login-screen flash for
 /// an already-authenticated user.
 class _SplashGate extends StatefulWidget {
   const _SplashGate();
@@ -49,6 +49,6 @@ class _SplashGateState extends State<_SplashGate> {
     if (_loggedIn == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    return _loggedIn! ? const HiresListScreen() : const LoginScreen();
+    return _loggedIn! ? const VehiclesDashboardScreen() : const LoginScreen();
   }
 }

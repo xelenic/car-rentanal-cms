@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
-import 'hires_list_screen.dart';
+import 'vehicles_dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -39,7 +39,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await ApiClient.instance.login(_emailController.text.trim(), _passwordController.text);
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HiresListScreen()),
+        MaterialPageRoute(builder: (_) => const VehiclesDashboardScreen()),
         (route) => false,
       );
     } on ApiException catch (e) {

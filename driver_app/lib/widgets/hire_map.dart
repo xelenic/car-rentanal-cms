@@ -9,6 +9,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../models/hire_map_point.dart';
 import '../models/map_role.dart';
 import '../models/tracking_status.dart';
+import '../services/arrival_detector.dart' show distanceMeters;
+import '../services/route_planner.dart';
 import '../theme/app_theme.dart';
 import 'map_pins.dart';
 
@@ -81,8 +83,29 @@ Set<Polyline> hirePathLines(List<TrackPoint> path) {
     Polyline(
       polylineId: const PolylineId('driven-path'),
       points: [for (final p in thinPath(path)) LatLng(p.lat, p.lng)],
-      color: AppColors.neonDeep,
+      color: const Color(0xFF0D9488), // teal — distinct from the blue route ahead
       width: 5,
+      zIndex: 2,
+    ),
+  };
+}
+
+/// Blue, like Google Maps' own route line.
+const Color kRouteColor = Color(0xFF2563EB);
+
+/// The route ahead, drawn beneath the driven path. A straight line (no road
+/// route yet, or none possible) is dashed where the map supports it.
+Set<Polyline> hireRouteLines(PlannedRoute? route) {
+  if (route == null || route.points.length < 2) return const {};
+
+  return {
+    Polyline(
+      polylineId: const PolylineId('planned-route'),
+      points: route.points,
+      color: kRouteColor,
+      width: 6,
+      zIndex: 1,
+      patterns: route.approximate ? [PatternItem.dash(18), PatternItem.gap(12)] : const [],
     ),
   };
 }
@@ -105,6 +128,16 @@ LatLngBounds? boundsOf(Iterable<LatLng> points) {
 
   if (south == north && west == east) return null;
   return LatLngBounds(southwest: LatLng(south, west), northeast: LatLng(north, east));
+}
+
+/// [bounds] with extra room added along the top. Pins are drawn *above* the
+/// spot they mark and the route chip sits over the top edge, so a place at the
+/// top of the frame would otherwise have its pin hidden under the chip.
+LatLngBounds withTopRoom(LatLngBounds bounds, {double fraction = 0.3}) {
+  final south = bounds.southwest.latitude, north = bounds.northeast.latitude;
+  final extended = (north + (north - south) * fraction).clamp(-85.0, 85.0);
+
+  return LatLngBounds(southwest: bounds.southwest, northeast: LatLng(extended, bounds.northeast.longitude));
 }
 
 /// The driver's last known position, shared by every map on screen so a map
@@ -148,6 +181,15 @@ class HireMapView extends StatefulWidget {
   /// supply their own.
   final Stream<LatLng>? locationOverride;
 
+  /// What is still ahead of the driver, in order (see routeStopsFor). While
+  /// this isn't empty and the driver's position is known, the map draws the
+  /// route from the driver through these places to the last one.
+  final List<HireMapPoint> routeStops;
+
+  /// Plans the road route from the driver's position through [routeStops].
+  /// Null, or a failure, leaves the straight-line view in place.
+  final Future<PlannedRoute?> Function(LatLng origin)? planRoute;
+
   const HireMapView({
     super.key,
     required this.places,
@@ -155,6 +197,8 @@ class HireMapView extends StatefulWidget {
     this.height,
     this.interactive = false,
     this.locationOverride,
+    this.routeStops = const [],
+    this.planRoute,
   });
 
   @override
@@ -173,6 +217,18 @@ class _HireMapViewState extends State<HireMapView> {
   /// The drawn pin pictures, filled in shortly after the map opens.
   final Map<MapRole, BitmapDescriptor> _pins = {};
 
+  /// The route ahead: a straight line at once, replaced by the road route when
+  /// it has been planned.
+  PlannedRoute? _route;
+  LatLng? _routeOrigin;
+  DateTime? _routeAt;
+  bool _planning = false;
+
+  /// How far the driver has to move, and how long ago the route was last
+  /// drawn, before it is planned again — every ping would be a billed call.
+  static const double _replanMeters = 400;
+  static const Duration _replanEvery = Duration(seconds: 45);
+
   bool get _hasData => widget.places.isNotEmpty || widget.path.isNotEmpty;
 
   @override
@@ -182,6 +238,7 @@ class _HireMapViewState extends State<HireMapView> {
     _loadPins();
     _loadMeIcon();
     _watchMe(askPermission: false);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshRoute());
   }
 
   Future<void> _loadMeIcon() async {
@@ -213,12 +270,22 @@ class _HireMapViewState extends State<HireMapView> {
       _loadPins();
       _fit();
     }
+
+    // What is ahead changed (the hire was started: the pickup is now behind) →
+    // draw the new route and frame it.
+    if (!listEquals(oldWidget.routeStops, widget.routeStops)) {
+      _route = null;
+      _routeOrigin = null;
+      _routeAt = null;
+      _refreshRoute();
+    }
   }
 
   @override
   void dispose() {
     _meSub?.cancel();
-    _controller?.dispose();
+    // The controller is not disposed here: the GoogleMap widget disposes its own
+    // when it goes away, and disposing it a second time throws on the web.
     super.dispose();
   }
 
@@ -228,11 +295,24 @@ class _HireMapViewState extends State<HireMapView> {
     return _me ?? kDefaultMapCenter;
   }
 
-  Iterable<LatLng> get _framePoints => [
-        for (final place in widget.places) LatLng(place.latitude, place.longitude),
-        for (final p in thinPath(widget.path, max: 100)) LatLng(p.lat, p.lng),
-        if (_me != null) _me!,
+  /// What the map frames: the journey ahead (the driver, the places still to
+  /// visit and the route between them) while there is one, otherwise everything.
+  Iterable<LatLng> get _framePoints {
+    final route = _route;
+    if (route != null && _me != null && widget.routeStops.isNotEmpty) {
+      return [
+        _me!,
+        for (final stop in widget.routeStops) LatLng(stop.latitude, stop.longitude),
+        ...route.points,
       ];
+    }
+
+    return [
+      for (final place in widget.places) LatLng(place.latitude, place.longitude),
+      for (final p in thinPath(widget.path, max: 100)) LatLng(p.lat, p.lng),
+      if (_me != null) _me!,
+    ];
+  }
 
   /// Frames everything on the map. Failing to (the map not laid out yet, a
   /// platform hiccup) is harmless — the map just stays where it is.
@@ -244,7 +324,8 @@ class _HireMapViewState extends State<HireMapView> {
       final points = _framePoints.toList();
       final bounds = boundsOf(points);
       if (bounds != null) {
-        await controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 56));
+        // The small inline map can't afford the padding of the full screen one.
+        await controller.animateCamera(CameraUpdate.newLatLngBounds(withTopRoom(bounds), widget.height == null ? 56 : 36));
       } else if (points.isNotEmpty) {
         await controller.animateCamera(CameraUpdate.newLatLngZoom(points.first, 15));
       }
@@ -293,6 +374,58 @@ class _HireMapViewState extends State<HireMapView> {
     _lastKnownMeAt = DateTime.now();
     setState(() => _me = me);
     if (first) unawaited(_fit()); // include the driver in the opening frame
+    unawaited(_refreshRoute());
+  }
+
+  /// Draws the route ahead from the driver's position: a straight line at once
+  /// so the direction is visible immediately, then the road route once it has
+  /// been planned. Planned again only when the driver has moved well away, and
+  /// not more often than [_replanEvery].
+  Future<void> _refreshRoute() async {
+    if (!mounted) return;
+
+    if (widget.routeStops.isEmpty) {
+      if (_route != null) setState(() => _route = null);
+      return;
+    }
+
+    final me = _me;
+    if (me == null || _planning) return;
+
+    final origin = _routeOrigin;
+    if (_route != null && origin != null) {
+      final moved = distanceMeters(origin.latitude, origin.longitude, me.latitude, me.longitude);
+      final stale = _routeAt == null || DateTime.now().difference(_routeAt!) >= _replanEvery;
+      if (moved < _replanMeters || !stale) return;
+    }
+
+    final firstDraw = _route == null;
+    final stops = widget.routeStops;
+    setState(() {
+      _route = straightRoute(me, stops);
+      _routeOrigin = me;
+      _routeAt = DateTime.now();
+    });
+    if (firstDraw) unawaited(_fit());
+
+    final plan = widget.planRoute;
+    if (plan == null) return;
+
+    _planning = true;
+    setState(() {});
+    try {
+      final planned = await plan(me);
+
+      // The hire moved on (or the map went away) while this was being planned.
+      if (!mounted || planned == null || !listEquals(stops, widget.routeStops)) return;
+
+      setState(() => _route = planned);
+      if (firstDraw) unawaited(_fit()); // the road bends away from the straight line
+    } catch (_) {
+      // keep the straight line
+    } finally {
+      if (mounted) setState(() => _planning = false);
+    }
   }
 
   Future<void> _goToMe() async {
@@ -315,6 +448,19 @@ class _HireMapViewState extends State<HireMapView> {
     } catch (_) {}
   }
 
+  /// What the route chip says: where to, and how far — or that it's still being
+  /// planned / only a straight line.
+  String _routeText() {
+    final route = _route!;
+    final destination = widget.routeStops.last.name;
+
+    if (!route.approximate) {
+      final summary = route.summary;
+      return summary == null ? 'To $destination' : 'To $destination · $summary';
+    }
+    return _planning ? 'To $destination · planning route…' : 'To $destination · straight line';
+  }
+
   @override
   Widget build(BuildContext context) {
     final map = Stack(
@@ -322,7 +468,7 @@ class _HireMapViewState extends State<HireMapView> {
         GoogleMap(
           initialCameraPosition: CameraPosition(target: _initialTarget, zoom: _hasData ? 12 : 7),
           markers: hireMarkers(widget.places, pins: _pins, me: _me, meIcon: _meIcon),
-          polylines: hirePathLines(widget.path),
+          polylines: {...hireRouteLines(_route), ...hirePathLines(widget.path)},
           myLocationButtonEnabled: false,
           zoomControlsEnabled: widget.interactive,
           mapToolbarEnabled: false,
@@ -349,7 +495,7 @@ class _HireMapViewState extends State<HireMapView> {
             ],
           ),
         ),
-        if (!_hasData)
+        if (!_hasData && _route == null)
           Positioned(
             left: 8,
             right: 64,
@@ -366,10 +512,53 @@ class _HireMapViewState extends State<HireMapView> {
               ),
             ),
           ),
+        if (_route != null && widget.routeStops.isNotEmpty)
+          Positioned(
+            left: 8,
+            right: 64,
+            top: 8,
+            child: _RouteChip(text: _routeText()),
+          ),
       ],
     );
 
     return widget.height == null ? map : SizedBox(height: widget.height, child: map);
+  }
+}
+
+class _RouteChip extends StatelessWidget {
+  final String text;
+
+  const _RouteChip({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 4, offset: Offset(0, 1))],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.alt_route, size: 15, color: kRouteColor),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 11.5, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -406,7 +595,10 @@ class HireMapLegend extends StatelessWidget {
   final List<HireMapPoint> places;
   final bool hasPath;
 
-  const HireMapLegend({super.key, required this.places, required this.hasPath});
+  /// A route ahead is being drawn.
+  final bool hasRoute;
+
+  const HireMapLegend({super.key, required this.places, required this.hasPath, this.hasRoute = false});
 
   @override
   Widget build(BuildContext context) {
@@ -424,7 +616,8 @@ class HireMapLegend extends StatelessWidget {
             },
           ),
       const _LegendDot(color: Color(0xFF2563EB), label: 'You'),
-      if (hasPath) const _LegendDot(color: AppColors.neonDeep, label: 'Driven path', line: true),
+      if (hasRoute) const _LegendDot(color: kRouteColor, label: 'Route', line: true),
+      if (hasPath) const _LegendDot(color: Color(0xFF0D9488), label: 'Driven path', line: true),
     ];
 
     return Wrap(spacing: 14, runSpacing: 6, children: items);
@@ -466,7 +659,19 @@ class HireMapCard extends StatelessWidget {
   final List<HireMapPoint> places;
   final List<TrackPoint> path;
 
-  const HireMapCard({super.key, required this.hireId, required this.places, required this.path});
+  /// The places still ahead of the driver, and how to plan the road to them —
+  /// see [HireMapView].
+  final List<HireMapPoint> routeStops;
+  final Future<PlannedRoute?> Function(LatLng origin)? planRoute;
+
+  const HireMapCard({
+    super.key,
+    required this.hireId,
+    required this.places,
+    required this.path,
+    this.routeStops = const [],
+    this.planRoute,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -492,7 +697,15 @@ class HireMapCard extends StatelessWidget {
               InkWell(
                 borderRadius: BorderRadius.circular(8),
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => HireMapScreen(hireId: hireId, places: places, path: path)),
+                  MaterialPageRoute(
+                    builder: (_) => HireMapScreen(
+                      hireId: hireId,
+                      places: places,
+                      path: path,
+                      routeStops: routeStops,
+                      planRoute: planRoute,
+                    ),
+                  ),
                 ),
                 child: const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -511,10 +724,10 @@ class HireMapCard extends StatelessWidget {
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: HireMapView(places: places, path: path, height: 240),
+            child: HireMapView(places: places, path: path, height: 240, routeStops: routeStops, planRoute: planRoute),
           ),
           const SizedBox(height: 10),
-          HireMapLegend(places: places, hasPath: path.length > 1),
+          HireMapLegend(places: places, hasPath: path.length > 1, hasRoute: routeStops.isNotEmpty),
         ],
       ),
     );
@@ -526,8 +739,17 @@ class HireMapScreen extends StatelessWidget {
   final int hireId;
   final List<HireMapPoint> places;
   final List<TrackPoint> path;
+  final List<HireMapPoint> routeStops;
+  final Future<PlannedRoute?> Function(LatLng origin)? planRoute;
 
-  const HireMapScreen({super.key, required this.hireId, required this.places, required this.path});
+  const HireMapScreen({
+    super.key,
+    required this.hireId,
+    required this.places,
+    required this.path,
+    this.routeStops = const [],
+    this.planRoute,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -535,14 +757,16 @@ class HireMapScreen extends StatelessWidget {
       appBar: AppBar(title: Text('Hire #$hireId · Map')),
       body: Column(
         children: [
-          Expanded(child: HireMapView(places: places, path: path, interactive: true)),
+          Expanded(
+            child: HireMapView(places: places, path: path, interactive: true, routeStops: routeStops, planRoute: planRoute),
+          ),
           SafeArea(
             top: false,
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: HireMapLegend(places: places, hasPath: path.length > 1),
+                child: HireMapLegend(places: places, hasPath: path.length > 1, hasRoute: routeStops.isNotEmpty),
               ),
             ),
           ),

@@ -33,6 +33,8 @@ class DriverHireResource extends JsonResource
             'is_tracking' => $this->is_tracking,
             'tracking_started_at' => $this->tracking_started_at?->toIso8601String(),
             'tracking_stopped_at' => $this->tracking_stopped_at?->toIso8601String(),
+            'cancelled_at' => $this->cancelled_at?->toIso8601String(),
+            'cancel_reason' => $this->cancel_reason,
             'total_distance_km' => $this->total_distance_km,
             'fuel_cost_total' => $this->fuel_cost_total,
         ];

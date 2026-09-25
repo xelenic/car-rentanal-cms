@@ -41,9 +41,14 @@ class DriverSalaryCalculator
 
     private static function calculateForQuery(Builder $query, int $year, int $month, ?int $driverId): array
     {
-        $hires = $query
+        $monthHires = $query
             ->inMonth($year, $month)
-            ->get(['id', 'our_hire_value', 'hire_full_value', 'payment_type']);
+            ->get(['id', 'our_hire_value', 'hire_full_value', 'payment_type', 'status']);
+
+        // A cancelled hire earned nothing, so it counts toward no total, pay or
+        // hire count ($hires) — but fuel and other costs the driver already
+        // incurred on it were really spent, so those stay attributed below.
+        $hires = $monthHires->reject(fn (Hire $hire) => $hire->is_cancelled)->values();
 
         $ourHireValueTotal = round((float) $hires->sum('our_hire_value'), 2);
 
@@ -57,8 +62,8 @@ class DriverSalaryCalculator
         // from the driver app's Options page — attributed by the month
         // they were actually logged in instead.
         $expensesByCategory = HireExpense::query()
-            ->where(function ($query) use ($hires, $driverId, $year, $month) {
-                $query->whereIn('hire_id', $hires->pluck('id'))
+            ->where(function ($query) use ($monthHires, $driverId, $year, $month) {
+                $query->whereIn('hire_id', $monthHires->pluck('id'))
                     ->orWhere(function ($query) use ($driverId, $year, $month) {
                         $query->whereNull('hire_id')
                             ->whereYear('created_at', $year)

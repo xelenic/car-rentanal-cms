@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -16,6 +17,7 @@ use Illuminate\Support\Collection;
     'hire_full_value', 'our_hire_value', 'customer_id',
     'driver_id', 'vehicle_id', 'description', 'payment_type', 'status',
     'tracking_started_at', 'tracking_stopped_at',
+    'cancelled_at', 'cancel_reason',
 ])]
 class Hire extends Model
 {
@@ -35,7 +37,13 @@ class Hire extends Model
         'pending' => 'Pending',
         'started' => 'Driver Hire Started',
         'completed' => 'Completed',
+        'cancelled' => 'Cancelled',
     ];
+
+    public const STATUS_CANCELLED = 'cancelled';
+
+    /** The tabs a vehicle's hire list is split into — see scopeTab(). */
+    public const TABS = ['all', 'today', 'scheduled', 'completed', 'cancelled'];
 
     protected function casts(): array
     {
@@ -46,6 +54,7 @@ class Hire extends Model
             'our_hire_value' => 'decimal:2',
             'tracking_started_at' => 'datetime',
             'tracking_stopped_at' => 'datetime',
+            'cancelled_at' => 'datetime',
         ];
     }
 
@@ -115,6 +124,60 @@ class Hire extends Model
     public function getIsCompletedAttribute(): bool
     {
         return $this->status === 'completed';
+    }
+
+    public function getIsCancelledAttribute(): bool
+    {
+        return $this->status === self::STATUS_CANCELLED;
+    }
+
+    /**
+     * Narrows to one group of statuses — what the driver app's tabs show:
+     * "open" (pending or started: still to do), "completed" or "cancelled".
+     * Null or anything else leaves the query alone.
+     */
+    public function scopeStatusGroup(Builder $query, ?string $group): Builder
+    {
+        return match ($group) {
+            'open' => $query->whereNotIn('status', ['completed', self::STATUS_CANCELLED]),
+            'completed' => $query->where('status', 'completed'),
+            'cancelled' => $query->where('status', self::STATUS_CANCELLED),
+            default => $query,
+        };
+    }
+
+    /**
+     * One tab of a hire list, the same split the driver app uses:
+     *  - today: still to do (pending or started) and not scheduled for a later
+     *    day — so a hire with no date, or an overdue or running one, is here too;
+     *  - scheduled: still to do, scheduled for tomorrow or later;
+     *  - completed / cancelled: by status;
+     *  - anything else (incl. "all"): no narrowing.
+     * "Day" is the app's timezone, like every other date on a hire.
+     */
+    public function scopeTab(Builder $query, ?string $tab, ?CarbonInterface $now = null): Builder
+    {
+        $startOfTomorrow = ($now ?? now())->copy()->addDay()->startOfDay();
+
+        return match ($tab) {
+            'today' => $query->statusGroup('open')->where(
+                fn (Builder $query) => $query->whereNull('start_time')->orWhere('start_time', '<', $startOfTomorrow)
+            ),
+            'scheduled' => $query->statusGroup('open')->where('start_time', '>=', $startOfTomorrow),
+            'completed' => $query->statusGroup('completed'),
+            'cancelled' => $query->statusGroup('cancelled'),
+            default => $query,
+        };
+    }
+
+    /**
+     * Hires that count toward money: revenue, commission, driver pay and the
+     * per-month hire counts. A cancelled hire earned nothing, so it stays in
+     * the lists (with its "Cancelled" badge) but out of every total.
+     */
+    public function scopeCounted(Builder $query): Builder
+    {
+        return $query->where('status', '!=', self::STATUS_CANCELLED);
     }
 
     /**

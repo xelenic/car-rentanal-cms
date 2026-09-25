@@ -94,13 +94,14 @@ final _iosOnly = TargetPlatformVariant.only(TargetPlatform.iOS);
 
 void main() {
   group('scenario 1 — before the hire starts', () {
-    testWidgets('shows only the Pickup button', (tester) async {
+    testWidgets('shows the Pickup button (and the option to cancel), nothing else', (tester) async {
       await _show(tester, _hire());
 
       expect(find.text('PICKUP'), findsOneWidget);
       expect(find.text('START'), findsNothing);
       expect(find.text('Stop'), findsNothing);
       expect(find.text('Complete Hire'), findsNothing);
+      expect(find.text('Cancel Hire'), findsOneWidget);
       expect(find.text('Not started'), findsOneWidget);
 
       await _hide(tester);
@@ -146,13 +147,14 @@ void main() {
   });
 
   group('scenario 2 — picked up, ready to start', () {
-    testWidgets('shows the Start button (no Pickup, Stop or Complete yet)', (tester) async {
+    testWidgets('shows the Start button and Cancel Hire (no Pickup, Stop or Complete yet)', (tester) async {
       await _show(tester, _hire(), store: _MemoryPickupStore([7]), positions: StreamController<Position>.broadcast());
 
       expect(find.text('START'), findsOneWidget);
       expect(find.text('PICKUP'), findsNothing);
       expect(find.text('Stop'), findsNothing);
       expect(find.text('Complete Hire'), findsNothing);
+      expect(find.text('Cancel Hire'), findsOneWidget);
 
       await _hide(tester);
     }, variant: _iosOnly);
@@ -225,14 +227,15 @@ void main() {
   group('scenario 3 — hire running', () {
     final started = DateTime(2026, 9, 24, 8);
 
-    testWidgets('shows the Stop and Complete Hire buttons', (tester) async {
+    testWidgets('shows Cancel Hire and Complete Hire — there is no Stop any more', (tester) async {
       await _show(
         tester,
         _hire(status: 'started', isTracking: true, trackingStartedAt: started),
         store: _MemoryPickupStore([7]),
       );
 
-      expect(find.text('Stop'), findsOneWidget);
+      expect(find.text('Cancel Hire'), findsOneWidget);
+      expect(find.text('Stop'), findsNothing);
       expect(find.text('Complete Hire'), findsOneWidget);
       expect(find.text('TRACKING'), findsOneWidget);
       expect(find.text('PICKUP'), findsNothing);
@@ -246,7 +249,7 @@ void main() {
       await _show(tester, _hire(status: 'started', isTracking: true, trackingStartedAt: started));
 
       expect(find.text('PICKUP'), findsNothing);
-      expect(find.text('Stop'), findsOneWidget);
+      expect(find.text('Cancel Hire'), findsOneWidget);
 
       await _hide(tester);
     }, variant: _iosOnly);
@@ -265,11 +268,12 @@ void main() {
       await _hide(tester);
     }, variant: _iosOnly);
 
-    testWidgets('a stopped (paused) hire offers Start to resume and can still be completed', (tester) async {
+    testWidgets('a paused hire (stopped in an older version) offers Start to resume, and can still be completed or cancelled', (tester) async {
       await _show(tester, _hire(status: 'started', trackingStartedAt: started));
 
       expect(find.text('START'), findsOneWidget);
       expect(find.text('Complete Hire'), findsOneWidget);
+      expect(find.text('Cancel Hire'), findsOneWidget);
       expect(find.text('Stop'), findsNothing);
       expect(find.text('PICKUP'), findsNothing);
       expect(find.text('Tracking paused'), findsOneWidget);
@@ -286,6 +290,7 @@ void main() {
     expect(find.text('START'), findsNothing);
     expect(find.text('Stop'), findsNothing);
     expect(find.text('Complete Hire'), findsNothing);
+    expect(find.text('Cancel Hire'), findsNothing);
 
     await _hide(tester);
   }, variant: _iosOnly);

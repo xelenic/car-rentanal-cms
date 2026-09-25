@@ -1,5 +1,7 @@
 import 'package:driver_app/models/hire.dart';
+import 'package:driver_app/models/hire_page.dart';
 import 'package:driver_app/models/hire_stage.dart';
+import 'package:driver_app/models/tracking_status.dart';
 import 'package:driver_app/services/arrival_detector.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -30,7 +32,7 @@ void main() {
       expect(hireStageOf(_hire(), pickedUp: true), HireStage.start);
     });
 
-    test('a running hire offers Stop and Complete, whatever the pickup mark says', () {
+    test('a running hire is in progress, whatever the pickup mark says', () {
       final running = _hire(status: 'started', isTracking: true, trackingStartedAt: DateTime(2026, 9, 24));
 
       expect(hireStageOf(running, pickedUp: false), HireStage.inProgress);
@@ -45,6 +47,23 @@ void main() {
 
     test('a completed hire is completed', () {
       expect(hireStageOf(_hire(status: 'completed'), pickedUp: true), HireStage.completed);
+    });
+
+    test('a cancelled hire is cancelled — whether or not it was ever picked up or started', () {
+      expect(hireStageOf(_hire(status: 'cancelled'), pickedUp: false), HireStage.cancelled);
+      expect(hireStageOf(_hire(status: 'cancelled'), pickedUp: true), HireStage.cancelled);
+      expect(
+        hireStageOf(_hire(status: 'cancelled', trackingStartedAt: DateTime(2026, 9, 25)), pickedUp: true),
+        HireStage.cancelled,
+      );
+    });
+
+    test('completed and cancelled hires are over; the others are not', () {
+      expect(HireStage.completed.isOver, isTrue);
+      expect(HireStage.cancelled.isOver, isTrue);
+      expect(HireStage.pickup.isOver, isFalse);
+      expect(HireStage.start.isOver, isFalse);
+      expect(HireStage.inProgress.isOver, isFalse);
     });
   });
 
@@ -137,6 +156,87 @@ void main() {
       expect(copy.pickupLocationName, 'Colombo Fort');
       expect(copy.pickupLatitude, 6.9344);
       expect(copy.hasPickupCoordinates, isTrue);
+    });
+  });
+
+  group('cancelling, from the API', () {
+    Map<String, dynamic> hireJson({String status = 'pending', Map<String, dynamic> extra = const {}}) => {
+          'id': 5,
+          'tour_type': 'drop_pickup',
+          'tour_type_label': 'Drop and Pickup',
+          'hire_full_value': 100,
+          'payment_type': 'cash',
+          'payment_type_label': 'Cash',
+          'status': status,
+          ...extra,
+        };
+
+    test('a cancelled hire carries when and why', () {
+      final hire = Hire.fromJson(hireJson(
+        status: 'cancelled',
+        extra: {'cancelled_at': '2026-09-25T10:10:00+00:00', 'cancel_reason': 'Customer did not show up'},
+      ));
+
+      expect(hire.isCancelled, isTrue);
+      expect(hire.isCompleted, isFalse);
+      expect(hire.cancelledAt, DateTime.utc(2026, 9, 25, 10, 10));
+      expect(hire.cancelReason, 'Customer did not show up');
+    });
+
+    test('a hire that was never cancelled has neither, and a server that predates cancelling is fine', () {
+      final hire = Hire.fromJson(hireJson());
+
+      expect(hire.isCancelled, isFalse);
+      expect(hire.cancelledAt, isNull);
+      expect(hire.cancelReason, isNull);
+    });
+
+    test('they survive copyWith (the screen copies the hire on every update)', () {
+      final hire = Hire.fromJson(hireJson(
+        status: 'cancelled',
+        extra: {'cancelled_at': '2026-09-25T10:10:00+00:00', 'cancel_reason': 'Breakdown'},
+      ));
+
+      final copy = hire.copyWith(totalDistanceKm: 3);
+
+      expect(copy.isCancelled, isTrue);
+      expect(copy.cancelReason, 'Breakdown');
+      expect(copy.cancelledAt, hire.cancelledAt);
+    });
+
+    test('the tracking status reports when it was cancelled', () {
+      final status = TrackingStatus.fromJson({
+        'status': 'cancelled',
+        'status_label': 'Cancelled',
+        'is_tracking': false,
+        'cancelled_at': '2026-09-25T10:10:00+00:00',
+        'total_distance_km': 3.2,
+      });
+
+      expect(status.status, 'cancelled');
+      expect(status.isTracking, isFalse);
+      expect(status.cancelledAt, DateTime.utc(2026, 9, 25, 10, 10));
+      expect(TrackingStatus.fromJson(status.toJson()).cancelledAt, status.cancelledAt);
+    });
+
+    test('the hire list reports a total that leaves cancelled hires out', () {
+      final page = HirePage.fromJson({
+        'data': [hireJson(), hireJson(status: 'cancelled')],
+        'meta': {'total': 2},
+        'counted_total': 1,
+      });
+
+      expect(page.total, 2);
+      expect(page.countedTotal, 1);
+    });
+
+    test('and falls back to the plain total for a server that does not send one', () {
+      final page = HirePage.fromJson({
+        'data': [hireJson()],
+        'meta': {'total': 1},
+      });
+
+      expect(page.countedTotal, 1);
     });
   });
 }

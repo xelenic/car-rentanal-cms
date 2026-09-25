@@ -56,6 +56,7 @@ class VehicleController extends Controller implements HasMiddleware
 
         $hireTotalsByVehicle = Hire::query()
             ->whereIn('vehicle_id', $vehicleIds)
+            ->counted()
             ->inMonth($selectedYear, $selectedMonth)
             ->get(['vehicle_id', 'hire_full_value', 'our_hire_value'])
             ->groupBy('vehicle_id')
@@ -105,7 +106,9 @@ class VehicleController extends Controller implements HasMiddleware
 
     public function show(Request $request, Vehicle $vehicle): View
     {
+        // Revenue view: cancelled hires earned nothing, so they are left out.
         $hires = Hire::query()
+            ->counted()
             ->where('vehicle_id', $vehicle->id)
             ->with(['customer', 'driver'])
             ->get()
@@ -213,12 +216,6 @@ class VehicleController extends Controller implements HasMiddleware
 
     private function validated(Request $request): array
     {
-        return $request->validate([
-            'model' => ['required', 'string', 'max:255'],
-            'condition' => ['required', 'string', 'in:'.implode(',', Vehicle::CONDITIONS)],
-            'description' => ['nullable', 'string'],
-            'seats' => ['required', 'integer', 'min:1', 'max:100'],
-            'pax' => ['required', 'integer', 'min:1', 'max:100'],
-        ]);
+        return $request->validate(Vehicle::rules());
     }
 }

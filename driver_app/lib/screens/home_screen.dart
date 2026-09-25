@@ -3,18 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../models/available_periods.dart';
 import '../models/driver.dart';
 import '../models/driver_deposit_transfer.dart';
 import '../models/driver_salary.dart';
-import '../models/hire.dart';
 import '../models/hire_page.dart';
+import '../models/hire_tab.dart';
+import '../models/tab_hires.dart';
 import '../services/api_client.dart';
 import '../services/background_tracking.dart';
 import '../theme/app_theme.dart';
-import '../widgets/hire_route_card.dart';
+import '../widgets/tour_tabs.dart';
 import '../widgets/initials_avatar.dart';
-import '../widgets/period_dropdown.dart';
 import 'deposit_transfer_screen.dart';
 import 'login_screen.dart';
 import 'salary_screen.dart';
@@ -28,14 +27,18 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeDashboardData {
   final Driver driver;
-  final HirePage hires;
-  final AvailablePeriods periods;
+
+  /// What each tour tab holds (its first hires, and how many there are).
+  final Map<HireTab, TabHires> tabs;
+
+  /// Every hire that counts — all but the cancelled ones.
+  final int hireCount;
   final DriverSalary? salary;
 
   _HomeDashboardData({
     required this.driver,
-    required this.hires,
-    required this.periods,
+    required this.tabs,
+    required this.hireCount,
     required this.salary,
   });
 }
@@ -69,22 +72,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<_HomeDashboardData> _load() async {
     final results = await Future.wait([
       ApiClient.instance.fetchMe(),
-      ApiClient.instance.fetchHires(),
-      ApiClient.instance.fetchAvailablePeriods(),
+      // Every open hire (Today and Scheduled are told apart on the phone by the
+      // driver's own date), and just the first few completed / cancelled ones
+      // with their exact totals — the rest is behind each tab's "More".
+      ApiClient.instance.fetchHires(status: 'open'),
+      ApiClient.instance.fetchHires(status: 'completed', perPage: kHomeTabLimit),
+      ApiClient.instance.fetchHires(status: 'cancelled', perPage: kHomeTabLimit),
+      // Only its counted total is used: how many hires there are that count.
+      ApiClient.instance.fetchHires(perPage: 1),
       _loadSalarySafely(),
     ]);
 
-    final hires = results[1] as HirePage;
+    final open = results[1] as HirePage;
 
     // The server's own list of hires being tracked is the source of truth —
     // re-attach the background service to any it doesn't already cover.
-    unawaited(BackgroundTracking.resume(hires.items.where((h) => h.isTracking).map((h) => h.id)));
+    unawaited(BackgroundTracking.resume(open.items.where((h) => h.isTracking).map((h) => h.id)));
 
     return _HomeDashboardData(
       driver: results[0] as Driver,
-      hires: hires,
-      periods: results[2] as AvailablePeriods,
-      salary: results[3] as DriverSalary?,
+      tabs: buildHomeTabs(open: open, completed: results[2] as HirePage, cancelled: results[3] as HirePage),
+      hireCount: (results[4] as HirePage).countedTotal,
+      salary: results[5] as DriverSalary?,
     );
   }
 
@@ -102,6 +111,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final future = _load();
     setState(() => _future = future);
     await future;
+  }
+
+  /// Reloads after the driver comes back from a hire or a full list — what they
+  /// did there (cancelled, completed, …) moves hires between tabs. The screen
+  /// keeps showing what it has until the fresh data arrives.
+  void _refreshQuietly() {
+    if (mounted) unawaited(_refresh());
   }
 
   Future<void> _logout() async {
@@ -127,7 +143,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           child: FutureBuilder<_HomeDashboardData>(
             future: _future,
             builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
+              // While reloading, the previous data stays on screen (a snapshot
+              // keeps it until the new future completes); only a first load —
+              // with nothing to show yet — is a bare spinner.
+              if (!snapshot.hasData && !snapshot.hasError) {
                 return const Center(
                   child: CircularProgressIndicator(color: AppColors.neon),
                 );
@@ -149,32 +168,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               }
 
               final data = snapshot.data!;
-              final assignedTours = data.hires.items
-                  .where((hire) => hire.status != 'completed')
-                  .toList();
-              final recentCompletedTours = data.hires.items
-                  .where((hire) => hire.status == 'completed')
-                  .take(5)
-                  .toList();
-
               return ListView(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                 children: [
                   _ProfileHeader(driver: data.driver, onLogout: _logout),
                   const SizedBox(height: 24),
-                  _DashboardSummaryCard(hireCount: data.hires.total, salary: data.salary),
+                  _DashboardSummaryCard(hireCount: data.hireCount, salary: data.salary),
                   const SizedBox(height: 24),
-                  _HireSection(
-                    title: 'Assigned Tours',
-                    icon: Icons.assignment_outlined,
-                    hires: assignedTours,
-                    emptyText: 'No active tours assigned right now.',
-                  ),
-                  const SizedBox(height: 24),
-                  _CompletedToursFilterSection(
-                    periods: data.periods,
-                    defaultRecent: recentCompletedTours,
-                  ),
+                  TourTabs(tabs: data.tabs, onChanged: _refreshQuietly),
                 ],
               );
             },
@@ -861,222 +862,6 @@ class _StatFigure extends StatelessWidget {
             ),
           ),
         ],
-      ],
-    );
-  }
-}
-
-class _HireSection extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final List<Hire> hires;
-  final String emptyText;
-
-  const _HireSection({
-    required this.title,
-    required this.icon,
-    required this.hires,
-    required this.emptyText,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, color: AppColors.neon, size: 18),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceElevated,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '${hires.length}',
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _HireListOrEmpty(hires: hires, emptyText: emptyText),
-      ],
-    );
-  }
-}
-
-class _HireListOrEmpty extends StatelessWidget {
-  final List<Hire> hires;
-  final String emptyText;
-
-  const _HireListOrEmpty({required this.hires, required this.emptyText});
-
-  @override
-  Widget build(BuildContext context) {
-    if (hires.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          emptyText,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-        ),
-      );
-    }
-
-    return Column(
-      children: hires
-          .map(
-            (hire) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: HireRouteCard(hire: hire),
-            ),
-          )
-          .toList(),
-    );
-  }
-}
-
-/// "Recent Completed Tours" section with a Year/Month filter driven by the
-/// periods that actually have data. With no filter selected, it shows the
-/// 5 most recent completed tours (same as before); once a year is chosen,
-/// it fetches and shows every completed tour in that period.
-class _CompletedToursFilterSection extends StatefulWidget {
-  final AvailablePeriods periods;
-  final List<Hire> defaultRecent;
-
-  const _CompletedToursFilterSection({required this.periods, required this.defaultRecent});
-
-  @override
-  State<_CompletedToursFilterSection> createState() => _CompletedToursFilterSectionState();
-}
-
-class _CompletedToursFilterSectionState extends State<_CompletedToursFilterSection> {
-  int? _year;
-  int? _month;
-  Future<HirePage>? _filteredFuture;
-
-  void _setYear(int? year) {
-    setState(() {
-      _year = year;
-      _month = null;
-      _filteredFuture = year == null
-          ? null
-          : ApiClient.instance.fetchHires(year: year);
-    });
-  }
-
-  void _setMonth(int? month) {
-    setState(() {
-      _month = month;
-      _filteredFuture = ApiClient.instance.fetchHires(year: _year, month: month);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final months = widget.periods.monthsFor(_year);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Row(
-          children: [
-            Icon(Icons.task_alt_outlined, color: AppColors.neon, size: 18),
-            SizedBox(width: 8),
-            Text(
-              'Completed Tours',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-              ),
-            ),
-          ],
-        ),
-        if (widget.periods.years.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: PeriodDropdown(
-                  hint: 'All years',
-                  value: _year,
-                  items: widget.periods.years,
-                  labelBuilder: (year) => '$year',
-                  onChanged: _setYear,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: PeriodDropdown(
-                  hint: 'All months',
-                  value: _month,
-                  items: months,
-                  labelBuilder: (month) => DateFormat.MMMM().format(DateTime(2000, month)),
-                  onChanged: _year == null ? null : _setMonth,
-                ),
-              ),
-            ],
-          ),
-        ],
-        const SizedBox(height: 12),
-        if (_filteredFuture == null)
-          _HireListOrEmpty(
-            hires: widget.defaultRecent,
-            emptyText: 'Completed tours will show up here.',
-          )
-        else
-          FutureBuilder<HirePage>(
-            future: _filteredFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: CircularProgressIndicator(color: AppColors.neon)),
-                );
-              }
-
-              if (snapshot.hasError) {
-                return Text(
-                  snapshot.error.toString(),
-                  style: const TextStyle(color: AppColors.danger, fontSize: 12),
-                );
-              }
-
-              final completed = snapshot.data!.items
-                  .where((hire) => hire.status == 'completed')
-                  .toList();
-
-              return _HireListOrEmpty(
-                hires: completed,
-                emptyText: 'No completed tours in this period.',
-              );
-            },
-          ),
       ],
     );
   }

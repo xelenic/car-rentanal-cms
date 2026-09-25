@@ -3,12 +3,14 @@
 use App\Http\Controllers\Api\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Api\Admin\HireController as AdminHireController;
 use App\Http\Controllers\Api\Admin\PlaceController as AdminPlaceController;
+use App\Http\Controllers\Api\Admin\VehicleController as AdminVehicleController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DriverArrearsLoanController;
 use App\Http\Controllers\Api\DriverDepositTransferController;
 use App\Http\Controllers\Api\DriverHireController;
 use App\Http\Controllers\Api\DriverSalaryController;
 use App\Http\Controllers\Api\HireExpenseController;
+use App\Http\Controllers\Api\HireRouteController;
 use App\Http\Controllers\Api\HireTrackingController;
 use App\Http\Controllers\Api\SalaryAdvanceController;
 use App\Http\Controllers\Api\VehicleController;
@@ -45,7 +47,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/driver/vehicle-maintenance', [VehicleMaintenanceController::class, 'index']);
     Route::post('/driver/vehicle-maintenance', [VehicleMaintenanceController::class, 'store']);
 
+    Route::get('/driver/hires/{hire}/route', [HireRouteController::class, 'show'])->middleware('throttle:30,1');
     Route::get('/driver/hires/{hire}/tracking', [HireTrackingController::class, 'show']);
+    Route::post('/driver/hires/{hire}/cancel', [HireTrackingController::class, 'cancel']);
     Route::post('/driver/hires/{hire}/tracking/start', [HireTrackingController::class, 'start']);
     Route::post('/driver/hires/{hire}/tracking/stop', [HireTrackingController::class, 'stop']);
     Route::post('/driver/hires/{hire}/tracking/complete', [HireTrackingController::class, 'complete']);
@@ -60,6 +64,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/admin/hires/reference-data', [AdminHireController::class, 'referenceData']);
     Route::get('/admin/hires/{hire}', [AdminHireController::class, 'show']);
     Route::post('/admin/hires', [AdminHireController::class, 'store']);
+
+    Route::get('/admin/vehicles', [AdminVehicleController::class, 'index']);
+    Route::post('/admin/vehicles', [AdminVehicleController::class, 'store']);
+    Route::get('/admin/vehicles/{vehicle}', [AdminVehicleController::class, 'show']);
+    Route::get('/admin/vehicles/{vehicle}/hires', [AdminVehicleController::class, 'hires']);
 
     Route::get('/admin/places/autocomplete', [AdminPlaceController::class, 'autocomplete']);
     Route::get('/admin/places/details', [AdminPlaceController::class, 'details']);

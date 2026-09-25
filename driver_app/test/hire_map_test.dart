@@ -5,6 +5,7 @@ import 'package:driver_app/models/hire_map_point.dart';
 import 'package:driver_app/models/map_role.dart';
 import 'package:driver_app/models/tracking_status.dart';
 import 'package:driver_app/screens/hire_detail_screen.dart';
+import 'package:driver_app/services/route_planner.dart';
 import 'package:driver_app/services/pickup_store.dart';
 import 'package:driver_app/widgets/hire_map.dart';
 import 'package:flutter/material.dart';
@@ -111,6 +112,23 @@ void main() {
       expect(boundsOf(const []), isNull);
       expect(boundsOf(const [LatLng(6.9, 79.8)]), isNull);
       expect(boundsOf(const [LatLng(6.9, 79.8), LatLng(6.9, 79.8)]), isNull);
+    });
+  });
+
+  group('withTopRoom', () {
+    test('extends the frame northwards only, so a pin at the top clears the route chip', () {
+      final base = LatLngBounds(southwest: const LatLng(6.0, 79.8), northeast: const LatLng(7.0, 80.6));
+      final roomy = withTopRoom(base);
+
+      expect(roomy.southwest, base.southwest);
+      expect(roomy.northeast.longitude, base.northeast.longitude);
+      expect(roomy.northeast.latitude, closeTo(7.3, 1e-9)); // 1.0° tall + 30%
+    });
+
+    test('never runs past the poles', () {
+      final polar = withTopRoom(LatLngBounds(southwest: const LatLng(60, 0), northeast: const LatLng(84, 10)));
+
+      expect(polar.northeast.latitude, 85);
     });
   });
 
@@ -250,6 +268,206 @@ void main() {
       unawaited(positions.close());
       unawaited(silent.close());
     }, variant: _iosOnly);
+
+    group('the route ahead', () {
+      const galle = LatLng(6.0535, 80.2210);
+      const road = PlannedRoute(
+        points: [LatLng(6.0535, 80.2210), LatLng(6.5, 80.0), LatLng(6.87, 81.05)],
+        distanceMeters: 94000,
+        durationSeconds: 7200,
+      );
+
+      Future<StreamController<LatLng>> showMap(
+        WidgetTester tester, {
+        required List<HireMapPoint> stops,
+        Future<PlannedRoute?> Function(LatLng origin)? plan,
+        StreamController<LatLng>? positions,
+      }) async {
+        final controller = positions ?? StreamController<LatLng>.broadcast();
+        tester.view.physicalSize = const Size(800, 3200);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: HireMapView(
+              places: const [_colombo, _ella],
+              height: 300,
+              locationOverride: controller.stream,
+              routeStops: stops,
+              planRoute: plan,
+            ),
+          ),
+        ));
+        await _settle(tester);
+        return controller;
+      }
+
+      Polyline? routeLine() => maps.polylines.where((p) => p.polylineId.value == 'planned-route').firstOrNull;
+
+      testWidgets('is a straight line from the driver to the end at once, then the road route replaces it', (tester) async {
+        final planned = Completer<PlannedRoute?>();
+        final origins = <LatLng>[];
+        final positions = await showMap(tester, stops: const [_ella], plan: (origin) {
+          origins.add(origin);
+          return planned.future;
+        });
+
+        expect(routeLine(), isNull); // no position yet, nothing to draw
+
+        positions.add(galle);
+        await _settle(tester);
+
+        // straight line while the road route is being planned
+        expect(routeLine()!.points, [galle, const LatLng(6.8667, 81.0466)]);
+        expect(routeLine()!.patterns, isNotEmpty); // dashed
+        expect(find.text('To Ella · planning route…'), findsOneWidget);
+        expect(origins, [galle]);
+
+        planned.complete(road);
+        await _settle(tester);
+
+        expect(routeLine()!.points, road.points);
+        expect(routeLine()!.patterns, isEmpty); // solid
+        expect(find.text('To Ella · 94.0 km · 2 h'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox());
+        unawaited(positions.close());
+      }, variant: _iosOnly);
+
+      testWidgets('stays a straight line, and says so, when no road route can be planned', (tester) async {
+        final positions = await showMap(tester, stops: const [_ella], plan: (origin) async => null);
+
+        positions.add(galle);
+        await _settle(tester);
+
+        expect(routeLine()!.points, [galle, const LatLng(6.8667, 81.0466)]);
+        expect(find.text('To Ella · straight line'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox());
+        unawaited(positions.close());
+      }, variant: _iosOnly);
+
+      testWidgets('a planner that throws is shrugged off too', (tester) async {
+        final positions = await showMap(tester, stops: const [_ella], plan: (origin) async => throw Exception('offline'));
+
+        positions.add(galle);
+        await _settle(tester);
+
+        expect(tester.takeException(), isNull);
+        expect(routeLine()!.points, hasLength(2));
+        expect(find.text('To Ella · straight line'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox());
+        unawaited(positions.close());
+      }, variant: _iosOnly);
+
+      testWidgets('before the hire starts it runs through the pickup to the end', (tester) async {
+        final positions = await showMap(tester, stops: const [_colombo, _ella], plan: (origin) async => null);
+
+        positions.add(galle);
+        await _settle(tester);
+
+        expect(routeLine()!.points, [galle, const LatLng(6.9344, 79.8428), const LatLng(6.8667, 81.0466)]);
+
+        await tester.pumpWidget(const SizedBox());
+        unawaited(positions.close());
+      }, variant: _iosOnly);
+
+      testWidgets('when the hire is started the pickup drops out and the route is planned again to the end', (tester) async {
+        final positions = StreamController<LatLng>.broadcast();
+        final asked = <LatLng>[];
+        Future<PlannedRoute?> plan(LatLng origin) async {
+          asked.add(origin);
+          return road;
+        }
+
+        Widget app(List<HireMapPoint> stops) => MaterialApp(
+              home: Scaffold(
+                body: HireMapView(
+                  places: const [_colombo, _ella],
+                  height: 300,
+                  locationOverride: positions.stream,
+                  routeStops: stops,
+                  planRoute: plan,
+                ),
+              ),
+            );
+
+        tester.view.physicalSize = const Size(800, 3200);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(app(const [_colombo, _ella]));
+        await _settle(tester);
+        positions.add(galle);
+        await _settle(tester);
+        expect(asked, hasLength(1));
+
+        // Start pressed: the customer is on board, only the end is ahead now
+        await tester.pumpWidget(app(const [_ella]));
+        await _settle(tester);
+
+        expect(asked, hasLength(2)); // planned again straight away, despite the rate limit
+        expect(find.text('To Ella · 94.0 km · 2 h'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox());
+        unawaited(positions.close());
+      }, variant: _iosOnly);
+
+      testWidgets('does not call the planner on every position ping', (tester) async {
+        var calls = 0;
+        final positions = await showMap(tester, stops: const [_ella], plan: (origin) async {
+          calls++;
+          return road;
+        });
+
+        positions.add(galle);
+        await _settle(tester);
+        positions.add(const LatLng(6.0540, 80.2212)); // a few metres on
+        await _settle(tester);
+        positions.add(const LatLng(6.60, 80.00)); // far, but only moments after the last plan
+        await _settle(tester);
+
+        expect(calls, 1);
+
+        await tester.pumpWidget(const SizedBox());
+        unawaited(positions.close());
+      }, variant: _iosOnly);
+
+      testWidgets('draws nothing when nothing is ahead (a finished hire)', (tester) async {
+        final positions = await showMap(tester, stops: const [], plan: (origin) async => road);
+
+        positions.add(galle);
+        await _settle(tester);
+
+        expect(routeLine(), isNull);
+        expect(find.textContaining('To Ella'), findsNothing);
+
+        await tester.pumpWidget(const SizedBox());
+        unawaited(positions.close());
+      }, variant: _iosOnly);
+
+      testWidgets('the legend lists the route, and the card passes it on to the full screen map', (tester) async {
+        tester.view.physicalSize = const Size(800, 3200);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(const MaterialApp(
+          home: Scaffold(
+            body: HireMapCard(hireId: 7, places: [_colombo, _ella], path: [], routeStops: [_ella]),
+          ),
+        ));
+        await _settle(tester);
+        expect(find.text('Route'), findsOneWidget);
+
+        await tester.tap(find.text('Full screen'));
+        await _settle(tester);
+        expect(find.descendant(of: find.byType(HireMapScreen), matching: find.text('Route')), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox());
+      }, variant: _iosOnly);
+    });
 
     testWidgets('a hire whose places have no coordinates says so instead of showing an empty map', (tester) async {
       await show(tester, _hire());

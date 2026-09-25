@@ -20,7 +20,11 @@ const _paymentTypes = {
 };
 
 class CreateHireScreen extends StatefulWidget {
-  const CreateHireScreen({super.key});
+  const CreateHireScreen({super.key, this.vehicle});
+
+  /// Set when the hire is booked from a vehicle's page: the hire is for that
+  /// vehicle, so it is shown fixed rather than as a choice.
+  final NamedOption? vehicle;
 
   @override
   State<CreateHireScreen> createState() => _CreateHireScreenState();
@@ -78,6 +82,7 @@ class _CreateHireScreenState extends State<CreateHireScreen> {
   @override
   void initState() {
     super.initState();
+    _vehicleId = widget.vehicle?.id;
     _loadReference();
   }
 
@@ -301,7 +306,7 @@ class _CreateHireScreenState extends State<CreateHireScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Hire #${hire.id} created.')),
       );
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pop(hire);
     } on ApiException catch (e) {
       setState(() => _submitError = e.message);
     } catch (_) {
@@ -439,29 +444,43 @@ class _CreateHireScreenState extends State<CreateHireScreen> {
             ),
           const SizedBox(height: 20),
 
-          const _SectionLabel('Driver & Vehicle (optional)'),
+          _SectionLabel(widget.vehicle != null ? 'Vehicle & Driver' : 'Driver & Vehicle (optional)'),
           const SizedBox(height: 8),
+          if (widget.vehicle != null) ...[
+            InputDecorator(
+              key: const Key('locked-vehicle'),
+              decoration: const InputDecoration(
+                labelText: 'Vehicle',
+                prefixIcon: Icon(Icons.directions_car_filled_rounded, size: 18),
+                suffixIcon: Icon(Icons.lock_outline_rounded, size: 18),
+              ),
+              child: Text(widget.vehicle!.name, style: const TextStyle(fontSize: 14)),
+            ),
+            const SizedBox(height: 12),
+          ],
           DropdownButtonFormField<int>(
             initialValue: _driverId,
             isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Driver'),
+            decoration: const InputDecoration(labelText: 'Driver (optional)'),
             items: [
               const DropdownMenuItem<int>(value: null, child: Text('No driver assigned')),
               ...reference.drivers.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))),
             ],
             onChanged: (value) => setState(() => _driverId = value),
           ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<int>(
-            initialValue: _vehicleId,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Vehicle'),
-            items: [
-              const DropdownMenuItem<int>(value: null, child: Text('No vehicle assigned')),
-              ...reference.vehicles.map((v) => DropdownMenuItem(value: v.id, child: Text(v.name))),
-            ],
-            onChanged: (value) => setState(() => _vehicleId = value),
-          ),
+          if (widget.vehicle == null) ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              initialValue: _vehicleId,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Vehicle'),
+              items: [
+                const DropdownMenuItem<int>(value: null, child: Text('No vehicle assigned')),
+                ...reference.vehicles.map((v) => DropdownMenuItem(value: v.id, child: Text(v.name))),
+              ],
+              onChanged: (value) => setState(() => _vehicleId = value),
+            ),
+          ],
           const SizedBox(height: 20),
 
           if (_needsFromTo) ...[

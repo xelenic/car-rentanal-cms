@@ -50,6 +50,8 @@ class HireResource extends JsonResource
             'description' => $this->description,
             'is_tracking' => $this->is_tracking,
             'total_distance_km' => $this->total_distance_km,
+            'cancelled_at' => $this->cancelled_at?->toIso8601String(),
+            'cancel_reason' => $this->cancel_reason,
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

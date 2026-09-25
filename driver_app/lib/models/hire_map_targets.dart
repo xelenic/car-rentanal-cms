@@ -88,7 +88,7 @@ List<MapTarget> mapTargetsOf(Hire hire) {
 /// single place (a package, a one-stay tour) points at it the whole way; a
 /// finished hire has nowhere left to go.
 MapTarget? mapTargetFor(Hire hire, HireStage stage) {
-  if (stage == HireStage.completed) return null;
+  if (stage.isOver) return null;
 
   final beforeStart = stage == HireStage.pickup || (stage == HireStage.start && hire.trackingStartedAt == null);
   final wanted = beforeStart ? MapRole.pickup : MapRole.end;
@@ -145,7 +145,7 @@ class MapRoute {
 ///  * a hire with a single place just goes there;
 ///  * null for a finished hire, or one with no places to go to.
 MapRoute? mapRouteFor(Hire hire, HireStage stage) {
-  if (stage == HireStage.completed) return null;
+  if (stage.isOver) return null;
 
   final beforeStart = stage == HireStage.pickup || (stage == HireStage.start && hire.trackingStartedAt == null);
   final places = mapTargetsOf(hire)

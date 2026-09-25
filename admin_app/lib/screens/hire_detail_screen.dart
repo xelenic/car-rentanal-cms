@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/hire.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
+import '../widgets/hire_card.dart';
 
 class HireDetailScreen extends StatefulWidget {
   const HireDetailScreen({super.key, required this.hireId});
@@ -112,17 +113,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
   }
 
   Widget _headerCard(Hire hire) {
-    Color statusColor;
-    switch (hire.status) {
-      case 'completed':
-        statusColor = AppColors.success;
-        break;
-      case 'started':
-        statusColor = AppColors.info;
-        break;
-      default:
-        statusColor = AppColors.warning;
-    }
+    final statusColor = hireStatusColor(hire.status);
 
     return Card(
       child: Padding(
@@ -162,6 +153,14 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
               _infoRow(Icons.event_available_rounded, 'Ends ${_dateFormat.format(hire.endTime!)}'),
             if (hire.createdAt != null)
               _infoRow(Icons.add_circle_outline_rounded, 'Created ${_dateFormat.format(hire.createdAt!)}'),
+            if (hire.isCancelled) ...[
+              _infoRow(
+                Icons.block_rounded,
+                hire.cancelledAt != null ? 'Cancelled ${_dateFormat.format(hire.cancelledAt!)}' : 'Cancelled',
+              ),
+              if ((hire.cancelReason ?? '').trim().isNotEmpty)
+                _infoRow(Icons.notes_rounded, 'Reason: ${hire.cancelReason!.trim()}'),
+            ],
           ],
         ),
       ),

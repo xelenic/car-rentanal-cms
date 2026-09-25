@@ -21,6 +21,7 @@ class TrackingStatus {
   final bool isTracking;
   final DateTime? trackingStartedAt;
   final DateTime? trackingStoppedAt;
+  final DateTime? cancelledAt;
   final double totalDistanceKm;
   final List<TrackPoint> points;
 
@@ -30,6 +31,7 @@ class TrackingStatus {
     required this.isTracking,
     this.trackingStartedAt,
     this.trackingStoppedAt,
+    this.cancelledAt,
     required this.totalDistanceKm,
     this.points = const [],
   });
@@ -45,6 +47,7 @@ class TrackingStatus {
       trackingStoppedAt: json['tracking_stopped_at'] != null
           ? DateTime.tryParse(json['tracking_stopped_at'] as String)
           : null,
+      cancelledAt: json['cancelled_at'] != null ? DateTime.tryParse(json['cancelled_at'] as String) : null,
       totalDistanceKm: (json['total_distance_km'] as num?)?.toDouble() ?? 0,
       points: (json['points'] as List<dynamic>? ?? [])
           .map((e) => TrackPoint.fromJson(Map<String, dynamic>.from(e as Map)))
@@ -60,6 +63,7 @@ class TrackingStatus {
         'is_tracking': isTracking,
         'tracking_started_at': trackingStartedAt?.toIso8601String(),
         'tracking_stopped_at': trackingStoppedAt?.toIso8601String(),
+        'cancelled_at': cancelledAt?.toIso8601String(),
         'total_distance_km': totalDistanceKm,
         'points': points.map((p) => p.toJson()).toList(),
       };

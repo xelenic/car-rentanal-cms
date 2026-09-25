@@ -133,6 +133,7 @@
                                     $statusColor = match ($hire->status) {
                                         'started' => 'primary',
                                         'completed' => 'success',
+                                        'cancelled' => 'danger',
                                         default => 'secondary',
                                     };
                                 @endphp

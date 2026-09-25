@@ -67,6 +67,8 @@ class Hire {
     this.description,
     required this.isTracking,
     required this.totalDistanceKm,
+    this.cancelledAt,
+    this.cancelReason,
     this.createdAt,
   });
 
@@ -97,8 +99,11 @@ class Hire {
   final String? description;
   final bool isTracking;
   final double totalDistanceKm;
+  final DateTime? cancelledAt;
+  final String? cancelReason;
   final DateTime? createdAt;
 
+  bool get isCancelled => status == 'cancelled';
   bool get isCredit => paymentType == 'credit';
   bool get isFullyPaid => paymentStatus == 'paid';
 
@@ -141,6 +146,8 @@ class Hire {
       description: json['description'] as String?,
       isTracking: json['is_tracking'] as bool? ?? false,
       totalDistanceKm: _parseDouble(json['total_distance_km']),
+      cancelledAt: _parseDate(json['cancelled_at']),
+      cancelReason: json['cancel_reason'] as String?,
       createdAt: _parseDate(json['created_at']),
     );
   }

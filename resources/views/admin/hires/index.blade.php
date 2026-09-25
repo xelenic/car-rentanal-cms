@@ -115,10 +115,16 @@
                                     $statusColor = match ($hire->status) {
                                         'started' => 'primary',
                                         'completed' => 'success',
+                                        'cancelled' => 'danger',
                                         default => 'secondary',
                                     };
                                 @endphp
                                 <span class="badge rounded-pill bg-{{ $statusColor }}-subtle text-{{ $statusColor }}-emphasis">{{ $hire->status_label }}</span>
+                                @if ($hire->is_cancelled)
+                                    <div class="text-muted mt-1" style="font-size: .68rem; max-width: 150px; white-space: normal; line-height: 1.3;">
+                                        {{ $hire->cancelled_at?->format('M j, g:i A') }}@if ($hire->cancel_reason) &middot; {{ \Illuminate\Support\Str::limit($hire->cancel_reason, 60) }}@endif
+                                    </div>
+                                @endif
                             </td>
                             <td class="text-muted" style="font-size: .78rem;">
                                 @if ($hire->start_time)
@@ -915,7 +921,7 @@
             if (statusEl) {
                 statusEl.innerHTML = data.is_tracking
                     ? '<span class="text-success"><i class="bi bi-record-circle"></i> Active</span>'
-                    : (data.status === 'pending' ? 'Not started' : 'Stopped');
+                    : (data.status === 'cancelled' ? 'Cancelled' : (data.status === 'pending' ? 'Not started' : 'Stopped'));
             }
             const countEl = modal.querySelector('.track-points-count');
             if (countEl) countEl.textContent = data.points.length;
@@ -932,9 +938,9 @@
                 updateHireTrackStats(hireId, data);
                 renderHireTrackPoints(hireId, data.points, data.total_distance_km);
 
-                // Nothing more will ever change for a completed hire —
-                // stop polling it.
-                if (data.status === 'completed' && window.__hireTrackPollers[hireId]) {
+                // Nothing more will ever change for a completed or cancelled
+                // hire — stop polling it.
+                if ((data.status === 'completed' || data.status === 'cancelled') && window.__hireTrackPollers[hireId]) {
                     clearInterval(window.__hireTrackPollers[hireId]);
                     delete window.__hireTrackPollers[hireId];
                 }

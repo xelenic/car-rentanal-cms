@@ -1,14 +1,16 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
+import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode, visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/admin_user.dart';
 import '../models/hire.dart';
+import '../models/hire_tab.dart';
 import '../models/place_suggestion.dart';
 import '../models/reference_data.dart';
+import '../models/vehicle.dart';
 
 class ApiException implements Exception {
   final String message;
@@ -44,6 +46,12 @@ class ApiClient {
     }
     return 'http://localhost:8000/api';
   }
+
+  http.Client _http = http.Client();
+
+  /// Lets a test answer requests itself (package:http's MockClient).
+  @visibleForTesting
+  void useHttpClient(http.Client client) => _http = client;
 
   final _storage = const FlutterSecureStorage();
   static const _tokenKey = 'admin_app_token';
@@ -82,7 +90,7 @@ class ApiClient {
   }
 
   Future<AdminUser> login(String email, String password) async {
-    final response = await http.post(
+    final response = await _http.post(
       Uri.parse('$baseUrl/admin/auth/login'),
       headers: await _headers(),
       body: jsonEncode({'email': email, 'password': password}),
@@ -101,7 +109,7 @@ class ApiClient {
 
   Future<void> logout() async {
     try {
-      await http.post(
+      await _http.post(
         Uri.parse('$baseUrl/admin/auth/logout'),
         headers: await _headers(auth: true),
       );
@@ -112,7 +120,7 @@ class ApiClient {
   }
 
   Future<AdminUser> fetchMe() async {
-    final response = await http.get(
+    final response = await _http.get(
       Uri.parse('$baseUrl/admin/me'),
       headers: await _headers(auth: true),
     );
@@ -132,7 +140,7 @@ class ApiClient {
         'page': '$page',
       },
     );
-    final response = await http.get(uri, headers: await _headers(auth: true));
+    final response = await _http.get(uri, headers: await _headers(auth: true));
 
     if (response.statusCode == 200) {
       return HirePage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
@@ -142,7 +150,7 @@ class ApiClient {
   }
 
   Future<Hire> fetchHire(int id) async {
-    final response = await http.get(
+    final response = await _http.get(
       Uri.parse('$baseUrl/admin/hires/$id'),
       headers: await _headers(auth: true),
     );
@@ -155,8 +163,80 @@ class ApiClient {
     throw ApiException(_extractError(response));
   }
 
+  /// The fleet, a page at a time, each vehicle with its hire numbers.
+  Future<VehiclePage> fetchVehicles({String? search, int page = 1}) async {
+    final uri = Uri.parse('$baseUrl/admin/vehicles').replace(
+      queryParameters: {
+        if (search != null && search.isNotEmpty) 'search': search,
+        'page': '$page',
+      },
+    );
+    final response = await _http.get(uri, headers: await _headers(auth: true));
+
+    if (response.statusCode == 200) {
+      return VehiclePage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  Future<Vehicle> fetchVehicle(int id) async {
+    final response = await _http.get(
+      Uri.parse('$baseUrl/admin/vehicles/$id'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return Vehicle.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  Future<Vehicle> createVehicle({
+    required String model,
+    required String condition,
+    required int seats,
+    required int pax,
+    String? description,
+  }) async {
+    final response = await _http.post(
+      Uri.parse('$baseUrl/admin/vehicles'),
+      headers: await _headers(auth: true),
+      body: jsonEncode({
+        'model': model,
+        'condition': condition,
+        'seats': seats,
+        'pax': pax,
+        'description': (description ?? '').trim().isEmpty ? null : description!.trim(),
+      }),
+    );
+
+    if (response.statusCode == 201) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return Vehicle.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// One vehicle's hires under one tab, a page at a time.
+  Future<HirePage> fetchVehicleHires(int vehicleId, {HireTab tab = HireTab.all, int page = 1}) async {
+    final uri = Uri.parse('$baseUrl/admin/vehicles/$vehicleId/hires').replace(
+      queryParameters: {'tab': tab.apiValue, 'page': '$page'},
+    );
+    final response = await _http.get(uri, headers: await _headers(auth: true));
+
+    if (response.statusCode == 200) {
+      return HirePage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
   Future<ReferenceData> fetchReferenceData() async {
-    final response = await http.get(
+    final response = await _http.get(
       Uri.parse('$baseUrl/admin/hires/reference-data'),
       headers: await _headers(auth: true),
     );
@@ -172,7 +252,7 @@ class ApiClient {
   /// its shape matches HireService::rules(), built by the Create Hire
   /// screen per tour type (see build_hire_payload in that screen).
   Future<Hire> createHire(Map<String, dynamic> data) async {
-    final response = await http.post(
+    final response = await _http.post(
       Uri.parse('$baseUrl/admin/hires'),
       headers: await _headers(auth: true),
       body: jsonEncode(data),
@@ -197,7 +277,7 @@ class ApiClient {
         .replace(queryParameters: {'input': input});
 
     try {
-      final response = await http.get(uri, headers: await _headers(auth: true));
+      final response = await _http.get(uri, headers: await _headers(auth: true));
       if (response.statusCode != 200) return const [];
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -216,7 +296,7 @@ class ApiClient {
         .replace(queryParameters: {'place_id': placeId});
 
     try {
-      final response = await http.get(uri, headers: await _headers(auth: true));
+      final response = await _http.get(uri, headers: await _headers(auth: true));
       if (response.statusCode != 200) return const PlaceDetails();
 
       return PlaceDetails.fromJson(jsonDecode(response.body) as Map<String, dynamic>);

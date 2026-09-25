@@ -551,6 +551,7 @@
                                                 $hireStatusColor = match ($hire->status) {
                                                     'completed' => 'success',
                                                     'started' => 'info',
+                                                    'cancelled' => 'danger',
                                                     default => 'secondary',
                                                 };
                                             @endphp

@@ -59,6 +59,8 @@ class AuthController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'can_create_hires' => $user->can('hires.create'),
+            'can_view_vehicles' => $user->can('vehicles.view'),
+            'can_create_vehicles' => $user->can('vehicles.create'),
         ];
     }
 }

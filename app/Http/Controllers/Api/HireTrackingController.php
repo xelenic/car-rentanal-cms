@@ -25,7 +25,7 @@ class HireTrackingController extends Controller
     public function start(Request $request, Hire $hire): JsonResponse
     {
         $this->authorizeDriver($request, $hire);
-        $this->assertNotCompleted($hire);
+        $this->assertNotFinished($hire);
         $this->assertScheduleReached($hire);
 
         $hire->update([
@@ -40,7 +40,7 @@ class HireTrackingController extends Controller
     public function stop(Request $request, Hire $hire): JsonResponse
     {
         $this->authorizeDriver($request, $hire);
-        $this->assertNotCompleted($hire);
+        $this->assertNotFinished($hire);
 
         $hire->update(['tracking_stopped_at' => now()]);
 
@@ -50,7 +50,7 @@ class HireTrackingController extends Controller
     public function complete(Request $request, Hire $hire): JsonResponse
     {
         $this->authorizeDriver($request, $hire);
-        $this->assertNotCompleted($hire);
+        $this->assertNotFinished($hire);
         $this->assertScheduleReached($hire);
 
         $hire->update([
@@ -61,9 +61,37 @@ class HireTrackingController extends Controller
         return $this->statusResponse($hire);
     }
 
+    /**
+     * The driver cancels the hire — a no-show, a breakdown, a change of plan.
+     * It ends the hire for good: status "cancelled", tracking stopped, and the
+     * start/stop/complete/point endpoints all refuse it from then on. Allowed at
+     * any point before it has been completed, whether or not it was started.
+     */
+    public function cancel(Request $request, Hire $hire): JsonResponse
+    {
+        $this->authorizeDriver($request, $hire);
+        $this->assertNotFinished($hire);
+
+        $data = $request->validate(['reason' => ['nullable', 'string', 'max:500']]);
+
+        $hire->update([
+            'status' => Hire::STATUS_CANCELLED,
+            'cancelled_at' => now(),
+            'cancel_reason' => filled($data['reason'] ?? null) ? trim($data['reason']) : null,
+            // Tracking ends with the hire — but only a hire that was tracking has anything to stop.
+            'tracking_stopped_at' => $hire->tracking_started_at !== null && $hire->tracking_stopped_at === null
+                ? now()
+                : $hire->tracking_stopped_at,
+        ]);
+
+        return $this->statusResponse($hire);
+    }
+
     public function storePoint(Request $request, Hire $hire): JsonResponse
     {
         $this->authorizeDriver($request, $hire);
+
+        abort_if($hire->is_cancelled, 422, 'This hire was cancelled.');
 
         if (! $hire->is_tracking) {
             abort(422, 'Tracking is not active for this hire.');
@@ -92,11 +120,11 @@ class HireTrackingController extends Controller
         abort_if(! $driver || $hire->driver_id !== $driver->id, 403);
     }
 
-    private function assertNotCompleted(Hire $hire): void
+    /** A completed or cancelled hire is over — nothing can be started, stopped or recorded on it. */
+    private function assertNotFinished(Hire $hire): void
     {
-        if ($hire->is_completed) {
-            abort(422, 'This hire has already been completed and cannot be started again.');
-        }
+        abort_if($hire->is_cancelled, 422, 'This hire was cancelled.');
+        abort_if($hire->is_completed, 422, 'This hire has already been completed and cannot be started again.');
     }
 
     /**
@@ -122,6 +150,7 @@ class HireTrackingController extends Controller
             'is_tracking' => $hire->is_tracking,
             'tracking_started_at' => $hire->tracking_started_at?->toIso8601String(),
             'tracking_stopped_at' => $hire->tracking_stopped_at?->toIso8601String(),
+            'cancelled_at' => $hire->cancelled_at?->toIso8601String(),
             'total_distance_km' => $hire->total_distance_km,
             // The full path recorded so far — lets the driver app open it
             // as a route in Google Maps (see the "View Path" button) even

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../models/hire.dart';
 import '../screens/hire_detail_screen.dart';
@@ -10,7 +11,24 @@ import '../theme/app_theme.dart';
 class HireRouteCard extends StatelessWidget {
   final Hire hire;
 
-  const HireRouteCard({super.key, required this.hire});
+  /// Called when the driver comes back from the hire's screen — a list uses it
+  /// to reload, since the hire may have been started, completed or cancelled.
+  final VoidCallback? onReturn;
+
+  const HireRouteCard({super.key, required this.hire, this.onReturn});
+
+  /// When it is scheduled for, or — for a cancelled hire — when it was
+  /// cancelled: what a driver scanning a tab wants to see at a glance.
+  String? get _when {
+    final format = DateFormat('MMM d, h:mm a');
+
+    if (hire.isCancelled) {
+      return hire.cancelledAt != null ? 'Cancelled ${format.format(hire.cancelledAt!.toLocal())}' : 'Cancelled';
+    }
+    if (hire.isCompleted || hire.startTime == null) return null;
+
+    return 'Scheduled ${format.format(hire.startTime!.toLocal())}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,9 +38,9 @@ class HireRouteCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => HireDetailScreen(hire: hire)),
-          );
+          Navigator.of(context)
+              .push(MaterialPageRoute<void>(builder: (_) => HireDetailScreen(hire: hire)))
+              .then((_) => onReturn?.call());
         },
         child: Container(
           padding: const EdgeInsets.all(14),
@@ -71,6 +89,18 @@ class HireRouteCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    if (_when != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        _when!,
+                        style: TextStyle(
+                          color: hire.isCancelled ? AppColors.danger : AppColors.textMuted,
+                          fontSize: 11,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -97,6 +127,9 @@ class HireStatusPill extends StatelessWidget {
         break;
       case 'completed':
         color = AppColors.info;
+        break;
+      case 'cancelled':
+        color = AppColors.danger;
         break;
       default:
         color = AppColors.textMuted;

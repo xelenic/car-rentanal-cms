@@ -48,6 +48,7 @@ class VehicleRevenueController extends Controller implements HasMiddleware
 
         $hireTotalsByVehicle = Hire::query()
             ->whereIn('vehicle_id', $vehicleIds)
+            ->counted()
             ->inMonth($selectedYear, $selectedMonth)
             ->get(['vehicle_id', 'hire_full_value', 'our_hire_value'])
             ->groupBy('vehicle_id')
