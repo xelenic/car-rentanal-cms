@@ -1,3 +1,4 @@
+import 'package:admin_app/models/admin_user.dart';
 import 'package:admin_app/models/vehicle.dart';
 import 'package:admin_app/screens/vehicle_detail_screen.dart';
 import 'package:admin_app/theme/app_theme.dart';
@@ -40,8 +41,17 @@ FakeServer _vanWithHires({int pageSize = 20, bool canCreateHires = true}) {
 
 /// [settle] false is for a list with more pages to come: its bottom spinner
 /// never stops, so waiting for the screen to go quiet would wait forever.
+AdminUser _user({bool canCreateHires = true}) => AdminUser(
+      id: 1,
+      name: 'ZZZ Test Admin',
+      email: 'zzz@example.test',
+      canCreateHires: canCreateHires,
+      canUpdateHires: true,
+      canDeleteHires: true,
+    );
+
 Future<void> _show(WidgetTester tester, FakeServer server, {bool canCreateHires = true, bool settle = true}) async {
-  tester.view.physicalSize = const Size(412, 900);
+  tester.view.physicalSize = const Size(412, 1200);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 
@@ -50,7 +60,7 @@ Future<void> _show(WidgetTester tester, FakeServer server, {bool canCreateHires 
     theme: buildAdminAppTheme(),
     home: VehicleDetailScreen(
       vehicle: Vehicle.fromJson(server.vehicles.first),
-      canCreateHires: canCreateHires,
+      user: _user(canCreateHires: canCreateHires),
     ),
   ));
   await _quiet(tester, settle);
@@ -265,7 +275,7 @@ void main() {
       await server.install();
       await tester.pumpWidget(MaterialApp(
         theme: buildAdminAppTheme(),
-        home: VehicleDetailScreen(vehicle: Vehicle.fromJson(server.vehicles.first), canCreateHires: true),
+        home: VehicleDetailScreen(vehicle: Vehicle.fromJson(server.vehicles.first), user: _user()),
       ));
       await tester.pumpAndSettle();
 
@@ -287,7 +297,7 @@ void main() {
       await server.install();
       await tester.pumpWidget(MaterialApp(
         theme: buildAdminAppTheme(),
-        home: VehicleDetailScreen(vehicle: Vehicle.fromJson(server.vehicles.first), canCreateHires: true),
+        home: VehicleDetailScreen(vehicle: Vehicle.fromJson(server.vehicles.first), user: _user()),
       ));
       await tester.pumpAndSettle();
       await _openTab(tester, 'completed'); // somewhere other than where the new hire will land

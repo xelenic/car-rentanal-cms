@@ -5,14 +5,26 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_server.dart';
 
-Future<void> _show(WidgetTester tester, FakeServer server) async {
+/// [settle] false is for a fleet with more pages to come: its bottom spinner
+/// never stops, so waiting for the screen to go quiet would wait forever.
+Future<void> _show(WidgetTester tester, FakeServer server, {bool settle = true}) async {
   tester.view.physicalSize = const Size(412, 900);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 
   await server.install();
   await tester.pumpWidget(MaterialApp(theme: buildAdminAppTheme(), home: const VehiclesDashboardScreen()));
-  await tester.pumpAndSettle();
+  await _quiet(tester, settle);
+}
+
+Future<void> _quiet(WidgetTester tester, bool settle) async {
+  if (settle) {
+    await tester.pumpAndSettle();
+    return;
+  }
+  for (var i = 0; i < 6; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }
 
 FakeServer _fleet() => FakeServer(vehicles: [
@@ -22,59 +34,59 @@ FakeServer _fleet() => FakeServer(vehicles: [
         condition: 'Excellent',
         seats: 9,
         pax: 8,
-        stats: vehicleStatsJson(
-          hireCount: 6,
-          full: 120000,
-          our: 80000,
-          monthCount: 2,
-          monthFull: 30000,
-          all: 8,
-          today: 2,
-          scheduled: 1,
-          completed: 4,
-          cancelled: 1,
-          running: 1,
-        ),
+        stats: vehicleStatsJson(hireCount: 6, full: 120000, our: 80000, all: 8, today: 2, scheduled: 1, completed: 4, cancelled: 1, running: 1),
       ),
       vehicleJson(id: 2, model: 'ZZZ Test Car', condition: 'Poor', seats: 1, pax: 1),
+      vehicleJson(id: 3, model: 'ZZZ Test Bus', condition: 'Good', seats: 30, pax: 28),
     ]);
 
+/// The chip row scrolls sideways when the labels don't all fit (the test font
+/// is much wider than a phone's), so bring a chip into view before tapping it.
+Future<void> _pickCondition(WidgetTester tester, String condition) async {
+  final chip = find.byKey(Key('condition-$condition'));
+  await tester.ensureVisible(chip);
+  await tester.pumpAndSettle();
+  await tester.tap(chip);
+  await tester.pumpAndSettle();
+}
+
 void main() {
-  testWidgets('shows the fleet as cards with each vehicle\'s numbers', (tester) async {
+  testWidgets('shows each vehicle as a tile with just its icon and name', (tester) async {
     await _show(tester, _fleet());
 
-    expect(find.text('Vehicles'), findsWidgets); // title + the summary's tile
-    expect(find.text('ZZZ Test Van'), findsOneWidget);
-    expect(find.text('ZZZ Test Car'), findsOneWidget);
-    expect(find.text('9 seats · 8 passengers'), findsOneWidget);
-    expect(find.text('1 seat · 1 passenger'), findsOneWidget);
-    expect(find.text('Excellent'), findsOneWidget);
-    expect(find.text('Poor'), findsOneWidget);
-
-    final van = find.byKey(const Key('vehicle-card-1'));
-    expect(find.descendant(of: van, matching: find.text('Rs. 120,000')), findsOneWidget);
-    expect(find.descendant(of: van, matching: find.text('Rs. 40,000')), findsOneWidget); // commission
-    expect(find.descendant(of: van, matching: find.text('This month · 2 hires · Rs. 30,000')), findsOneWidget);
-    expect(find.descendant(of: van, matching: find.text('6')), findsOneWidget); // hires
-    expect(find.descendant(of: van, matching: find.text('1 running now')), findsOneWidget);
-    expect(find.descendant(of: van, matching: find.text('Today 2')), findsOneWidget);
-    expect(find.descendant(of: van, matching: find.text('Scheduled 1')), findsOneWidget);
-    expect(find.descendant(of: van, matching: find.text('Completed 4')), findsOneWidget);
-    expect(find.descendant(of: van, matching: find.text('Cancelled 1')), findsOneWidget);
-
-    final car = find.byKey(const Key('vehicle-card-2'));
-    expect(find.descendant(of: car, matching: find.text('Today 0')), findsOneWidget);
-    expect(find.descendant(of: car, matching: find.text('1 running now')), findsNothing);
+    for (final entry in {1: 'ZZZ Test Van', 2: 'ZZZ Test Car', 3: 'ZZZ Test Bus'}.entries) {
+      final tile = find.byKey(Key('vehicle-card-${entry.key}'));
+      expect(tile, findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.text(entry.value)), findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.byIcon(Icons.directions_car_filled_rounded)), findsOneWidget);
+    }
   });
 
-  testWidgets('leads with the whole-fleet totals', (tester) async {
+  testWidgets('keeps the details off the tiles — they are on the vehicle\'s page', (tester) async {
     await _show(tester, _fleet());
 
-    final summary = find.byKey(const Key('fleet-summary'));
-    expect(find.descendant(of: summary, matching: find.text('2')), findsOneWidget); // vehicles
-    expect(find.descendant(of: summary, matching: find.text('7')), findsOneWidget); // hires
-    expect(find.descendant(of: summary, matching: find.text('Rs. 1.25M')), findsOneWidget);
-    expect(find.descendant(of: summary, matching: find.text('Rs. 250,000')), findsOneWidget);
+    // Nothing but the name and the icon: no seats, condition, money or hire counts.
+    for (final id in [1, 2, 3]) {
+      final texts = find.descendant(of: find.byKey(Key('vehicle-card-$id')), matching: find.byType(Text));
+      expect(texts, findsOneWidget, reason: 'tile $id');
+    }
+    for (final detail in ['9 seats · 8 passengers', 'Rs. 120,000', 'Hire value', 'Commission', 'Today 2', '1 running now']) {
+      expect(find.text(detail), findsNothing, reason: detail);
+    }
+    expect(find.byKey(const Key('fleet-summary')), findsNothing);
+  });
+
+  testWidgets('lays the tiles out in a grid, two to a row on a phone', (tester) async {
+    await _show(tester, _fleet());
+
+    final van = tester.getTopLeft(find.byKey(const Key('vehicle-card-1')));
+    final car = tester.getTopLeft(find.byKey(const Key('vehicle-card-2')));
+    final bus = tester.getTopLeft(find.byKey(const Key('vehicle-card-3')));
+
+    expect(car.dy, van.dy); // side by side
+    expect(car.dx, greaterThan(van.dx));
+    expect(bus.dy, greaterThan(van.dy)); // the third wraps to the next row
+    expect(bus.dx, van.dx);
   });
 
   testWidgets('does not list any hires — only vehicles', (tester) async {
@@ -83,7 +95,6 @@ void main() {
 
     expect(server.paths, isNot(contains('/api/admin/hires')));
     expect(server.paths.where((p) => p.contains('/hires')), isEmpty);
-    expect(find.byKey(const Key('vehicle-card-1')), findsOneWidget);
   });
 
   testWidgets('offers Add Vehicle to someone allowed to add one', (tester) async {
@@ -98,6 +109,84 @@ void main() {
     expect(find.byKey(const Key('add-vehicle')), findsNothing);
   });
 
+  group('the condition filter', () {
+    testWidgets('offers All and every condition', (tester) async {
+      await _show(tester, _fleet());
+
+      for (final key in ['all', 'New', 'Excellent', 'Good', 'Fair', 'Poor']) {
+        expect(find.byKey(Key('condition-$key')), findsOneWidget, reason: key);
+      }
+    });
+
+    testWidgets('starts on All, showing every vehicle', (tester) async {
+      final server = _fleet();
+      await _show(tester, server);
+
+      expect(tester.widget<ChoiceChip>(find.byKey(const Key('condition-all'))).selected, isTrue);
+      expect(server.requestsTo('/api/admin/vehicles').first.url.queryParameters.containsKey('condition'), isFalse);
+    });
+
+    testWidgets('narrows the fleet to one condition, asking the server for it', (tester) async {
+      final server = _fleet();
+      await _show(tester, server);
+
+      await _pickCondition(tester, 'Poor');
+
+      expect(server.requestsTo('/api/admin/vehicles').last.url.queryParameters['condition'], 'Poor');
+      expect(find.text('ZZZ Test Car'), findsOneWidget);
+      expect(find.text('ZZZ Test Van'), findsNothing);
+      expect(find.text('ZZZ Test Bus'), findsNothing);
+      expect(tester.widget<ChoiceChip>(find.byKey(const Key('condition-Poor'))).selected, isTrue);
+      expect(tester.widget<ChoiceChip>(find.byKey(const Key('condition-all'))).selected, isFalse);
+    });
+
+    testWidgets('All brings every vehicle back', (tester) async {
+      final server = _fleet();
+      await _show(tester, server);
+
+      await _pickCondition(tester, 'Poor');
+      await _pickCondition(tester, 'all');
+
+      expect(server.requestsTo('/api/admin/vehicles').last.url.queryParameters.containsKey('condition'), isFalse);
+      expect(find.text('ZZZ Test Van'), findsOneWidget);
+      expect(find.text('ZZZ Test Car'), findsOneWidget);
+      expect(find.text('ZZZ Test Bus'), findsOneWidget);
+    });
+
+    testWidgets('works together with the search', (tester) async {
+      final server = _fleet();
+      await _show(tester, server);
+
+      await _pickCondition(tester, 'Good');
+      await tester.enterText(find.byKey(const Key('vehicle-search')), 'bus');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      final last = server.requestsTo('/api/admin/vehicles').last.url.queryParameters;
+      expect(last['condition'], 'Good');
+      expect(last['search'], 'bus');
+      expect(find.text('ZZZ Test Bus'), findsOneWidget);
+    });
+
+    testWidgets('says so when nothing is in that condition', (tester) async {
+      await _show(tester, _fleet());
+
+      await _pickCondition(tester, 'Fair');
+
+      expect(find.text('No vehicles match'), findsOneWidget);
+      expect(find.text('Try a different search or filter.'), findsOneWidget);
+    });
+
+    testWidgets('a filter with no matches does not invite adding the first vehicle', (tester) async {
+      await _show(tester, _fleet());
+
+      await _pickCondition(tester, 'Fair');
+
+      expect(find.text('No vehicles yet'), findsNothing);
+      expect(find.widgetWithText(ElevatedButton, 'Add Vehicle'), findsNothing);
+    });
+  });
+
   testWidgets('searches the fleet as you type', (tester) async {
     final server = _fleet();
     await _show(tester, server);
@@ -109,8 +198,6 @@ void main() {
     expect(server.requestsTo('/api/admin/vehicles').last.url.queryParameters['search'], 'car');
     expect(find.text('ZZZ Test Car'), findsOneWidget);
     expect(find.text('ZZZ Test Van'), findsNothing);
-    // The fleet totals are for the whole fleet, so they step aside while filtering.
-    expect(find.byKey(const Key('fleet-summary')), findsNothing);
   });
 
   testWidgets('says so when a search matches nothing', (tester) async {
@@ -145,30 +232,35 @@ void main() {
 
   testWidgets('pages the fleet: the next page loads when you reach the end', (tester) async {
     final server = FakeServer(
-      pageSize: 5,
-      vehicles: [for (var i = 1; i <= 8; i++) vehicleJson(id: i, model: 'ZZZ Test Vehicle $i')],
+      pageSize: 6,
+      vehicles: [for (var i = 1; i <= 9; i++) vehicleJson(id: i, model: 'ZZZ Test Vehicle $i')],
     );
-    await _show(tester, server);
+    await _show(tester, server, settle: false);
 
     expect(server.requestsTo('/api/admin/vehicles').map((r) => r.url.queryParameters['page']), ['1']);
-    expect(find.text('ZZZ Test Vehicle 8', skipOffstage: false), findsNothing);
+    expect(find.text('ZZZ Test Vehicle 9', skipOffstage: false), findsNothing);
 
-    await tester.drag(find.byType(ListView), const Offset(0, -3000));
-    await tester.pumpAndSettle();
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -3000));
+    await _quiet(tester, false);
 
     expect(server.requestsTo('/api/admin/vehicles').map((r) => r.url.queryParameters['page']), ['1', '2']);
-    await tester.drag(find.byType(ListView), const Offset(0, -3000));
-    await tester.pumpAndSettle();
-    expect(find.text('ZZZ Test Vehicle 8'), findsOneWidget);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -3000));
+    await _quiet(tester, true); // page 2 was the last, so the spinner is gone
+    expect(find.text('ZZZ Test Vehicle 9'), findsOneWidget);
   });
 
-  testWidgets('a vehicle card opens that vehicle\'s page', (tester) async {
+  testWidgets('a tile opens that vehicle\'s page with the full details', (tester) async {
     await _show(tester, _fleet());
 
-    await tester.tap(find.byKey(const Key('vehicle-card-2')));
+    await tester.tap(find.byKey(const Key('vehicle-card-1')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('vehicle-header')), findsOneWidget);
-    expect(find.text('ZZZ Test Car'), findsOneWidget); // app bar
+    final header = find.byKey(const Key('vehicle-header'));
+    expect(header, findsOneWidget);
+    expect(find.descendant(of: header, matching: find.text('9 seats · 8 passengers')), findsOneWidget);
+    expect(find.descendant(of: header, matching: find.text('Excellent')), findsOneWidget);
+    expect(find.descendant(of: header, matching: find.text('Rs. 120,000')), findsOneWidget);
+    expect(find.descendant(of: header, matching: find.text('1 running now')), findsOneWidget);
+    expect(find.text('ZZZ Test Van'), findsOneWidget); // the page's title
   });
 }

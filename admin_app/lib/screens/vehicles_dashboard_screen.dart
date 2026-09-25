@@ -6,15 +6,15 @@ import '../models/admin_user.dart';
 import '../models/vehicle.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
-import '../util/format.dart';
 import '../widgets/state_views.dart';
-import '../widgets/vehicle_card.dart';
+import '../widgets/vehicle_tile.dart';
 import 'add_vehicle_screen.dart';
 import 'login_screen.dart';
 import 'vehicle_detail_screen.dart';
 
-/// The app's home: the fleet as cards — each with its hire numbers — and a
-/// header of whole-fleet totals. Hires themselves live on a vehicle's page.
+/// The app's home: the fleet as a grid of icon-and-name tiles, narrowed by
+/// search or by condition. Everything about a vehicle — and its hires — is on
+/// its own page, one tap away.
 class VehiclesDashboardScreen extends StatefulWidget {
   const VehiclesDashboardScreen({super.key});
 
@@ -28,18 +28,21 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
 
   AdminUser? _user;
   List<Vehicle> _vehicles = [];
-  FleetSummary _summary = const FleetSummary();
   bool _loading = true;
   bool _loadingMore = false;
   String? _error;
   int _page = 1;
   bool _hasMore = false;
 
-  /// Bumped on every fresh load, so a slow answer to an old search can't
-  /// overwrite a newer one.
+  /// The condition being filtered to, or null for every vehicle.
+  String? _condition;
+
+  /// Bumped on every fresh load, so a slow answer to an old search or filter
+  /// can't overwrite a newer one.
   int _generation = 0;
 
   bool get _searching => _searchController.text.trim().isNotEmpty;
+  bool get _filtering => _searching || _condition != null;
   bool get _canAdd => _user?.canCreateVehicles ?? false;
 
   @override
@@ -64,9 +67,10 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
 
     try {
       final results = await Future.wait<Object?>([
-        ApiClient.instance.fetchVehicles(search: _searchController.text.trim(), page: 1),
-        // Who is signed in decides whether "Add vehicle" shows. Not worth
-        // failing the whole screen over, so a failed lookup just hides it.
+        ApiClient.instance.fetchVehicles(search: _searchController.text.trim(), condition: _condition, page: 1),
+        // Who is signed in decides what is offered (Add Vehicle, and on the
+        // pages after this one Edit/Delete). Not worth failing the whole
+        // screen over, so a failed lookup just offers less.
         if (_user == null) ApiClient.instance.fetchMe().then<AdminUser?>((u) => u, onError: (_) => null),
       ]);
       if (!mounted || generation != _generation) return;
@@ -75,7 +79,6 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
       setState(() {
         if (results.length > 1) _user = results[1] as AdminUser?;
         _vehicles = page.vehicles;
-        _summary = page.summary;
         _hasMore = page.hasMore;
         _page = page.currentPage;
       });
@@ -98,6 +101,7 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
     try {
       final page = await ApiClient.instance.fetchVehicles(
         search: _searchController.text.trim(),
+        condition: _condition,
         page: _page + 1,
       );
       if (!mounted || generation != _generation) return;
@@ -119,6 +123,12 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
     _debounce = Timer(const Duration(milliseconds: 400), _load);
   }
 
+  void _setCondition(String? condition) {
+    if (condition == _condition) return;
+    setState(() => _condition = condition);
+    _load();
+  }
+
   Future<void> _addVehicle() async {
     final added = await Navigator.of(context).push<Vehicle>(
       MaterialPageRoute(builder: (_) => const AddVehicleScreen()),
@@ -131,14 +141,8 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
 
   Future<void> _openVehicle(Vehicle vehicle) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => VehicleDetailScreen(
-          vehicle: vehicle,
-          canCreateHires: _user?.canCreateHires ?? false,
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => VehicleDetailScreen(vehicle: vehicle, user: _user)),
     );
-    // Hires may have been created there — the cards' numbers with them.
     if (mounted) _load(silent: true);
   }
 
@@ -175,13 +179,13 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: TextField(
               key: const Key('vehicle-search'),
               controller: _searchController,
               onChanged: _onSearchChanged,
               decoration: InputDecoration(
-                hintText: 'Search by model or condition…',
+                hintText: 'Search vehicles…',
                 prefixIcon: const Icon(Icons.search_rounded, size: 20),
                 suffixIcon: _searching
                     ? IconButton(
@@ -197,6 +201,7 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
               ),
             ),
           ),
+          _ConditionFilter(selected: _condition, onSelected: _setCondition),
           const Divider(height: 1),
           Expanded(child: _buildBody()),
         ],
@@ -221,11 +226,11 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
         onRefresh: () => _load(silent: true),
         child: EmptyState(
           icon: Icons.directions_car_outlined,
-          title: _searching ? 'No vehicles match' : 'No vehicles yet',
-          message: _searching
-              ? 'Try a different search.'
+          title: _filtering ? 'No vehicles match' : 'No vehicles yet',
+          message: _filtering
+              ? 'Try a different search or filter.'
               : (_canAdd ? 'Add your first vehicle to start tracking its hires.' : 'Vehicles will show up here.'),
-          action: !_searching && _canAdd
+          action: !_filtering && _canAdd
               ? ElevatedButton.icon(
                   onPressed: _addVehicle,
                   icon: const Icon(Icons.add_rounded, size: 18),
@@ -245,22 +250,33 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
           }
           return false;
         },
-        child: ListView(
+        child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 96),
-          children: [
-            if (!_searching) ...[
-              _FleetSummaryCard(summary: _summary),
-              const SizedBox(height: 16),
-            ],
-            for (final vehicle in _vehicles) ...[
-              VehicleCard(vehicle: vehicle, onTap: () => _openVehicle(vehicle)),
-              const SizedBox(height: 10),
-            ],
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 96),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 200,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1.15,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final vehicle = _vehicles[index];
+                    return VehicleTile(vehicle: vehicle, onTap: () => _openVehicle(vehicle));
+                  },
+                  childCount: _vehicles.length,
+                ),
+              ),
+            ),
             if (_hasMore)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 96),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                ),
               ),
           ],
         ),
@@ -269,47 +285,55 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
   }
 }
 
-/// Whole-fleet totals — the first thing on the dashboard.
-class _FleetSummaryCard extends StatelessWidget {
-  const _FleetSummaryCard({required this.summary});
+/// "All · New · Excellent · Good · Fair · Poor" — one tap narrows the fleet
+/// to a condition.
+class _ConditionFilter extends StatelessWidget {
+  const _ConditionFilter({required this.selected, required this.onSelected});
 
-  final FleetSummary summary;
+  final String? selected;
+  final ValueChanged<String?> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      key: const Key('fleet-summary'),
-      color: AppColors.primary,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    // A plain scrolling row rather than a lazy list: there are only six chips,
+    // and each should exist even while scrolled out of view.
+    return SizedBox(
+      height: 44,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: Row(
           children: [
-            _tile('Vehicles', '${summary.vehicleCount}'),
-            _tile('Hires', '${summary.hireCount}'),
-            _tile('Hire value', formatRsShort(summary.hireFullValueTotal)),
-            _tile('Commission', formatRsShort(summary.commissionTotal)),
+            _chip('All', null),
+            for (final condition in vehicleConditions) _chip(condition, condition),
           ],
         ),
       ),
     );
   }
 
-  Widget _tile(String label, String value) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: TextStyle(fontSize: 11.5, color: Colors.white.withValues(alpha: 0.75))),
-          const SizedBox(height: 3),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Colors.white),
-            ),
-          ),
-        ],
+  Widget _chip(String label, String? value) {
+    final isSelected = selected == value;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: ChoiceChip(
+        key: Key('condition-${value ?? 'all'}'),
+        label: Text(label),
+        // Snug enough that all six fit across a phone without scrolling.
+        labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+        visualDensity: VisualDensity.compact,
+        selected: isSelected,
+        onSelected: (_) => onSelected(value),
+        showCheckmark: false,
+        selectedColor: AppColors.surfaceElevated,
+        backgroundColor: AppColors.surface,
+        side: BorderSide(color: isSelected ? AppColors.primary : AppColors.border),
+        labelStyle: TextStyle(
+          color: isSelected ? AppColors.primary : AppColors.textSecondary,
+          fontWeight: FontWeight.w600,
+          fontSize: 12.5,
+        ),
       ),
     );
   }

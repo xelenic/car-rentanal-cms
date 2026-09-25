@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../models/admin_user.dart';
 import '../models/hire.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/hire_card.dart';
+import 'hire_form_screen.dart';
 
 class HireDetailScreen extends StatefulWidget {
-  const HireDetailScreen({super.key, required this.hireId});
+  const HireDetailScreen({super.key, required this.hireId, this.user});
 
   final int hireId;
+
+  /// Who is looking — decides whether Edit and Delete are offered. (The server
+  /// checks the permission again either way.)
+  final AdminUser? user;
 
   @override
   State<HireDetailScreen> createState() => _HireDetailScreenState();
@@ -18,6 +24,7 @@ class HireDetailScreen extends StatefulWidget {
 class _HireDetailScreenState extends State<HireDetailScreen> {
   Hire? _hire;
   bool _loading = true;
+  bool _deleting = false;
   String? _error;
 
   static final _currency = NumberFormat.currency(locale: 'en_LK', symbol: 'Rs. ', decimalDigits: 2);
@@ -50,10 +57,85 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
     }
   }
 
+  Future<void> _edit() async {
+    final saved = await Navigator.of(context).push<Hire>(
+      MaterialPageRoute(builder: (_) => HireFormScreen(hire: _hire)),
+    );
+    if (saved != null && mounted) setState(() => _hire = saved);
+  }
+
+  Future<void> _confirmDelete() async {
+    final hire = _hire!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete hire #${hire.id}?'),
+        content: Text(
+          '${hire.customer?.name ?? 'This hire'} will be deleted for good, along with its '
+          'payments, expenses and tracking history. This can\'t be undone.'
+          '${hire.status == 'started' ? '\n\nThis hire is running right now — the driver\'s tracking will stop.' : ''}',
+        ),
+        actions: [
+          TextButton(
+            key: const Key('keep-hire'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep hire'),
+          ),
+          TextButton(
+            key: const Key('confirm-delete-hire'),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete hire'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    try {
+      await ApiClient.instance.deleteHire(hire.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hire #${hire.id} deleted.')));
+      Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not reach the server. The hire was not deleted.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final canEdit = _hire != null && !_deleting && (widget.user?.canUpdateHires ?? false);
+    final canDelete = _hire != null && !_deleting && (widget.user?.canDeleteHires ?? false);
+
     return Scaffold(
-      appBar: AppBar(title: Text(_hire != null ? 'Hire #${_hire!.id}' : 'Hire Details')),
+      appBar: AppBar(
+        title: Text(_hire != null ? 'Hire #${_hire!.id}' : 'Hire Details'),
+        actions: [
+          if (canEdit)
+            IconButton(
+              key: const Key('edit-hire'),
+              tooltip: 'Edit hire',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: _edit,
+            ),
+          if (canDelete)
+            IconButton(
+              key: const Key('delete-hire'),
+              tooltip: 'Delete hire',
+              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+              onPressed: _confirmDelete,
+            ),
+        ],
+      ),
       body: _buildBody(),
     );
   }

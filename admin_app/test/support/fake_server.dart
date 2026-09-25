@@ -15,9 +15,15 @@ class FakeServer {
     Map<int, List<Map<String, dynamic>>>? hires,
     this.canCreateVehicles = true,
     this.canCreateHires = true,
+    this.canUpdateHires = true,
+    this.canDeleteHires = true,
     this.pageSize = 20,
+    Map<int, Map<String, dynamic>>? periods,
+    Map<String, Map<String, dynamic>>? statsByPeriod,
   })  : vehicles = vehicles ?? [],
-        hires = hires ?? {};
+        hires = hires ?? {},
+        periods = periods ?? {},
+        statsByPeriod = statsByPeriod ?? {};
 
   final List<Map<String, dynamic>> vehicles;
 
@@ -27,11 +33,24 @@ class FakeServer {
 
   bool canCreateVehicles;
   bool canCreateHires;
+  bool canUpdateHires;
+  bool canDeleteHires;
   int pageSize;
+
+  /// Per vehicle id: the {years, months_by_year} the periods endpoint answers with.
+  final Map<int, Map<String, dynamic>> periods;
+
+  /// "year-month" (or just "year") -> the stats a vehicle shows when viewed for that period.
+  final Map<String, Map<String, dynamic>> statsByPeriod;
+
+  /// Fail only requests of this HTTP method, e.g. {'DELETE': 403}.
+  final Map<String, int> failMethods = {};
 
   final List<http.Request> requests = [];
   final List<Map<String, dynamic>> createdVehicles = [];
   final List<Map<String, dynamic>> createdHires = [];
+  final List<({int id, Map<String, dynamic> body})> updatedHires = [];
+  final List<int> deletedHires = [];
 
   /// When set, every request fails with this HTTP status and message.
   int? failWith;
@@ -62,6 +81,9 @@ class FakeServer {
     final path = request.url.path.replaceFirst(RegExp(r'^/api'), '');
 
     if (failWith != null) return _json({'message': 'The server said no.'}, failWith!);
+    if (failMethods[request.method] != null) {
+      return _json({'message': 'The server said no.'}, failMethods[request.method]!);
+    }
 
     if (path == '/admin/me') {
       return _json({
@@ -69,6 +91,8 @@ class FakeServer {
         'name': 'ZZZ Test Admin',
         'email': 'zzz@example.test',
         'can_create_hires': canCreateHires,
+        'can_update_hires': canUpdateHires,
+        'can_delete_hires': canDeleteHires,
         'can_view_vehicles': true,
         'can_create_vehicles': canCreateVehicles,
       });
@@ -76,22 +100,17 @@ class FakeServer {
 
     if (path == '/admin/vehicles' && request.method == 'GET') {
       final search = (request.url.queryParameters['search'] ?? '').toLowerCase();
+      final condition = request.url.queryParameters['condition'];
       final page = int.parse(request.url.queryParameters['page'] ?? '1');
       final matching = vehicles
           .where((v) => search.isEmpty || '${v['model']} ${v['condition']}'.toLowerCase().contains(search))
+          .where((v) => condition == null || v['condition'] == condition)
           .toList();
       final start = (page - 1) * pageSize;
       final slice = matching.skip(start).take(pageSize).toList();
       return _json({
         'data': slice,
         'meta': {'current_page': page, 'last_page': (matching.length / pageSize).ceil().clamp(1, 999)},
-        'summary': {
-          'vehicle_count': vehicles.length,
-          'hire_count': 7,
-          'hire_full_value_total': 1250000,
-          'our_hire_value_total': 1000000,
-          'commission_total': 250000,
-        },
       });
     }
 
@@ -115,12 +134,27 @@ class FakeServer {
       final id = int.parse(vehicleHires.group(1)!);
       final tab = request.url.queryParameters['tab'] ?? 'all';
       final page = int.parse(request.url.queryParameters['page'] ?? '1');
-      final all = (hires[id] ?? []).where((h) => tab == 'all' || h['_tab'] == tab).toList();
+      final year = request.url.queryParameters['year'];
+      final month = request.url.queryParameters['month'];
+      bool inPeriod(Map<String, dynamic> h) {
+        if (year == null) return true;
+        final tag = h['_month'] as String?; // "2026-09", from the hire's start time
+        if (tag == null) return false;
+        return month == null ? tag.startsWith('$year-') : tag == '$year-${month.padLeft(2, '0')}';
+      }
+
+      final all = (hires[id] ?? []).where((h) => tab == 'all' || h['_tab'] == tab).where(inPeriod).toList();
       final start = (page - 1) * pageSize;
       return _json({
-        'data': all.skip(start).take(pageSize).map((h) => {...h}..remove('_tab')).toList(),
+        'data': all.skip(start).take(pageSize).map((h) => {...h}..remove('_tab')..remove('_month')).toList(),
         'meta': {'current_page': page, 'last_page': (all.length / pageSize).ceil().clamp(1, 999)},
       });
+    }
+
+    final vehiclePeriods = RegExp(r'^/admin/vehicles/(\d+)/periods$').firstMatch(path);
+    if (vehiclePeriods != null) {
+      final id = int.parse(vehiclePeriods.group(1)!);
+      return _json(periods[id] ?? {'years': [], 'months_by_year': {}});
     }
 
     final vehicleOne = RegExp(r'^/admin/vehicles/(\d+)$').firstMatch(path);
@@ -128,6 +162,12 @@ class FakeServer {
       final id = int.parse(vehicleOne.group(1)!);
       final vehicle = vehicles.where((v) => v['id'] == id).firstOrNull;
       if (vehicle == null) return _json({'message': 'Not found.'}, 404);
+      final year = request.url.queryParameters['year'];
+      final month = request.url.queryParameters['month'];
+      final key = year == null ? null : (month == null ? year : '$year-$month');
+      if (key != null && statsByPeriod[key] != null) {
+        return _json({'data': {...vehicle, 'stats': statsByPeriod[key]}});
+      }
       return _json({'data': vehicle});
     }
 
@@ -172,7 +212,45 @@ class FakeServer {
           counts[hire['_tab']] = (counts[hire['_tab']] as int) + 1;
         }
       }
-      return _json({'data': {...hire}..remove('_tab')}, 201);
+      return _json({'data': {...hire}..remove('_tab')..remove('_month')}, 201);
+    }
+
+    final hireWrite = RegExp(r'^/admin/hires/(\d+)$').firstMatch(path);
+    if (hireWrite != null && request.method == 'PUT') {
+      final id = int.parse(hireWrite.group(1)!);
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      updatedHires.add((id: id, body: body));
+      for (final list in hires.values) {
+        final found = list.where((h) => h['id'] == id).firstOrNull;
+        if (found == null) continue;
+        found
+          ..['description'] = body['description']
+          ..['hire_full_value'] = num.parse('${body['hire_full_value']}')
+          ..['our_hire_value'] = num.parse('${body['our_hire_value']}')
+          ..['from_location'] = body['from_location_name'] ?? found['from_location']
+          ..['to_location'] = body['to_location_name'] ?? found['to_location']
+          ..['start_time'] = body['start_time'];
+        return _json({'data': {...found}..remove('_tab')..remove('_month')});
+      }
+      return _json({'message': 'Not found.'}, 404);
+    }
+
+    if (hireWrite != null && request.method == 'DELETE') {
+      final id = int.parse(hireWrite.group(1)!);
+      deletedHires.add(id);
+      for (final entry in hires.entries) {
+        final found = entry.value.where((h) => h['id'] == id).firstOrNull;
+        if (found == null) continue;
+        entry.value.remove(found);
+        final vehicle = vehicles.where((v) => v['id'] == entry.key).firstOrNull;
+        if (vehicle != null) {
+          final counts = (vehicle['stats'] as Map<String, dynamic>)['counts'] as Map<String, dynamic>;
+          counts['all'] = (counts['all'] as int) - 1;
+          counts[found['_tab']] = (counts[found['_tab']] as int) - 1;
+        }
+        return _json({'message': 'Hire #$id was deleted.'});
+      }
+      return _json({'message': 'Not found.'}, 404);
     }
 
     final hireOne = RegExp(r'^/admin/hires/(\d+)$').firstMatch(path);
@@ -180,7 +258,7 @@ class FakeServer {
       final id = int.parse(hireOne.group(1)!);
       for (final list in hires.values) {
         final found = list.where((h) => h['id'] == id).firstOrNull;
-        if (found != null) return _json({'data': {...found}..remove('_tab')});
+        if (found != null) return _json({'data': {...found}..remove('_tab')..remove('_month')});
       }
       return _json({'message': 'Not found.'}, 404);
     }
@@ -239,25 +317,41 @@ Map<String, dynamic> vehicleJson({
       'stats': stats ?? zeroStats(),
     };
 
-/// A hire in the API's shape. [tab] is the fake's own routing tag.
+/// A hire in the API's shape. [tab] is the fake's own routing tag, and so is
+/// the month tag it derives from [startTime].
 Map<String, dynamic> hireJson({
   required int id,
   int? vehicleId,
   String tab = 'today',
   String customer = 'ZZZ Test Customer',
+  int customerId = 1,
   String status = 'pending',
+  String tourType = 'drop_pickup',
   String? startTime,
+  String? endTime,
   String? from = 'ZZZ From',
   String? to = 'ZZZ To',
+  List<String> stayLocations = const [],
+  List<List<String>> dayLocations = const [],
+  int? packageId,
+  int? driverId,
   String? driver,
+  String? description,
   String? cancelReason,
   num full = 1000,
+  num? our,
 }) =>
     {
       '_tab': tab,
+      '_month': startTime?.substring(0, 7),
       'id': id,
-      'tour_type': 'drop_pickup',
-      'tour_type_label': 'Drop and Pickup',
+      'tour_type': tourType,
+      'tour_type_label': switch (tourType) {
+        'day_tour' => 'Day Tour',
+        'multi_day' => 'Multi Day Tour',
+        'package' => 'Package',
+        _ => 'Drop and Pickup',
+      },
       'status': status,
       'status_label': switch (status) {
         'started' => 'Driver Hire Started',
@@ -267,24 +361,25 @@ Map<String, dynamic> hireJson({
       },
       'is_upcoming': false,
       'start_time': startTime,
-      'end_time': null,
+      'end_time': endTime,
       'from_location': from,
       'to_location': to,
-      'stay_locations': [],
-      'day_locations': [],
-      'package': null,
+      'stay_locations': stayLocations,
+      'day_locations': dayLocations,
+      'package_id': packageId,
+      'package': packageId == null ? null : 'ZZZ Test Package',
       'hire_full_value': full,
-      'our_hire_value': full * 0.8,
-      'commission': full * 0.2,
+      'our_hire_value': our ?? full * 0.8,
+      'commission': full - (our ?? full * 0.8),
       'payment_type': 'cash',
       'payment_type_label': 'Cash',
       'paid_amount': 0,
       'balance_remaining': full,
       'payment_status': 'unpaid',
-      'customer': {'id': 1, 'name': customer, 'phone': '0770000000'},
-      'driver': driver == null ? null : {'id': 1, 'name': driver},
+      'customer': {'id': customerId, 'name': customer, 'phone': '0770000000'},
+      'driver': driver == null ? null : {'id': driverId ?? 1, 'name': driver},
       'vehicle': vehicleId == null ? null : {'id': vehicleId, 'model': 'ZZZ Test Van'},
-      'description': null,
+      'description': description,
       'is_tracking': false,
       'total_distance_km': 0,
       'cancelled_at': null,

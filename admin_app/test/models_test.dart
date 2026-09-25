@@ -1,5 +1,6 @@
 import 'package:admin_app/models/admin_user.dart';
 import 'package:admin_app/models/hire.dart';
+import 'package:admin_app/models/hire_period.dart';
 import 'package:admin_app/models/hire_tab.dart';
 import 'package:admin_app/models/vehicle.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -80,30 +81,116 @@ void main() {
     });
   });
 
-  test('VehiclePage reads the paging and the fleet summary', () {
+  test('VehiclePage reads the vehicles and the paging', () {
     final page = VehiclePage.fromJson({
       'data': [vehicleJson(id: 1)],
       'meta': {'current_page': 1, 'last_page': 3},
-      'summary': {'vehicle_count': 21, 'hire_count': 7, 'hire_full_value_total': 5000, 'our_hire_value_total': 4000, 'commission_total': 1000},
     });
 
     expect(page.vehicles, hasLength(1));
     expect(page.hasMore, isTrue);
-    expect(page.summary.vehicleCount, 21);
-    expect(page.summary.commissionTotal, 1000);
   });
 
-  test('AdminUser reads the vehicle permissions, and defaults them off for an older server', () {
+  test('AdminUser reads what the user may do, and defaults it off for an older server', () {
     final newer = AdminUser.fromJson({
       'id': 1, 'name': 'A', 'email': 'a@x.test',
-      'can_create_hires': true, 'can_view_vehicles': true, 'can_create_vehicles': true,
+      'can_create_hires': true, 'can_update_hires': true, 'can_delete_hires': true,
+      'can_view_vehicles': true, 'can_create_vehicles': true,
     });
     final older = AdminUser.fromJson({'id': 1, 'name': 'A', 'email': 'a@x.test', 'can_create_hires': true});
 
     expect(newer.canCreateVehicles, isTrue);
     expect(newer.canViewVehicles, isTrue);
+    expect(newer.canUpdateHires, isTrue);
+    expect(newer.canDeleteHires, isTrue);
     expect(older.canCreateVehicles, isFalse);
     expect(older.canViewVehicles, isFalse);
+    expect(older.canUpdateHires, isFalse);
+    expect(older.canDeleteHires, isFalse);
+  });
+
+  group('a hire\'s times', () {
+    test('start and end are read as the clock time that was entered, whatever zone the phone is in', () {
+      final hire = Hire.fromJson({
+        ...hireJson(id: 1),
+        'start_time': '2026-09-29T18:09:00+00:00',
+        'end_time': '2026-10-01T07:30:00.000000Z',
+      });
+
+      expect(hire.startTime, DateTime(2026, 9, 29, 18, 9));
+      expect(hire.endTime, DateTime(2026, 10, 1, 7, 30));
+      expect(hire.startTime!.isUtc, isFalse);
+    });
+
+    test('also read a time without an offset or seconds', () {
+      final hire = Hire.fromJson({...hireJson(id: 1), 'start_time': '2026-09-29 18:09'});
+
+      expect(hire.startTime, DateTime(2026, 9, 29, 18, 9));
+    });
+
+    test('an unset time stays unset', () {
+      expect(Hire.fromJson(hireJson(id: 1)).startTime, isNull);
+    });
+
+    test('a real instant, like when a hire was cancelled, is still shown in the phone\'s zone', () {
+      final hire = Hire.fromJson({...hireJson(id: 1), 'cancelled_at': '2026-09-24T12:31:00+00:00'});
+
+      expect(hire.cancelledAt, DateTime.utc(2026, 9, 24, 12, 31).toLocal());
+    });
+
+    test('a saved-then-reloaded time does not drift', () {
+      // What the form sends is the local clock time without an offset; the
+      // server hands back the same digits labelled UTC.
+      final entered = DateTime(2026, 9, 29, 18, 9);
+      final sent = entered.toIso8601String(); // 2026-09-29T18:09:00.000
+      final reloaded = Hire.fromJson({...hireJson(id: 1), 'start_time': '${sent.substring(0, 19)}+00:00'});
+
+      expect(reloaded.startTime, entered);
+    });
+  });
+
+  test('a hire carries its package id for the edit form', () {
+    expect(Hire.fromJson(hireJson(id: 1, packageId: 4)).packageId, 4);
+    expect(Hire.fromJson(hireJson(id: 1)).packageId, isNull);
+  });
+
+  group('HirePeriod', () {
+    test('is labelled by month and year, or just the year', () {
+      expect(const HirePeriod(2026, 9).label, 'September 2026');
+      expect(const HirePeriod(2026).label, '2026');
+    });
+
+    test('becomes the API\'s query parameters', () {
+      expect(const HirePeriod(2026, 9).query, {'year': '2026', 'month': '9'});
+      expect(const HirePeriod(2026).query, {'year': '2026'});
+    });
+
+    test('is equal to the same period', () {
+      expect(const HirePeriod(2026, 9), const HirePeriod(2026, 9));
+      expect(const HirePeriod(2026, 9), isNot(const HirePeriod(2026, 8)));
+      expect(const HirePeriod(2026, 9), isNot(const HirePeriod(2026)));
+    });
+  });
+
+  group('PeriodOptions', () {
+    test('reads the years and each year\'s months', () {
+      final options = PeriodOptions.fromJson({
+        'years': [2026, 2025],
+        'months_by_year': {'2026': [9, 8], '2025': [12]},
+      });
+
+      expect(options.years, [2026, 2025]);
+      expect(options.monthsOf(2026), [9, 8]);
+      expect(options.monthsOf(2025), [12]);
+      expect(options.monthsOf(2024), isEmpty);
+    });
+
+    test('reads a vehicle with no hires', () {
+      final options = PeriodOptions.fromJson({'years': [], 'months_by_year': {}});
+
+      expect(options.years, isEmpty);
+      expect(options.monthsByYear, isEmpty);
+    });
   });
 
   group('Hire cancellation fields', () {

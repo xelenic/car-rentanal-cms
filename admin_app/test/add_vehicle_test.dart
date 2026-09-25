@@ -59,8 +59,8 @@ void main() {
     ]);
     expect(find.byKey(const Key('vehicle-model')), findsNothing); // back on the dashboard
     expect(find.text('ZZZ Test Bus added.'), findsOneWidget);
-    expect(find.text('ZZZ Test Bus'), findsOneWidget); // the new card
-    expect(find.text('30 seats · 28 passengers'), findsOneWidget);
+    expect(find.byKey(const Key('vehicle-card-101')), findsOneWidget); // the new tile
+    expect(find.descendant(of: find.byKey(const Key('vehicle-card-101')), matching: find.text('ZZZ Test Bus')), findsOneWidget);
   });
 
   testWidgets('sends no description when it is left blank', (tester) async {

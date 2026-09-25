@@ -192,23 +192,6 @@ describe('the fleet list', function () {
             ->and($stats['counts']['all'])->toBe(0);
     });
 
-    it('summarises the whole fleet, leaving out cancelled and unassigned hires', function () {
-        signedInAdmin();
-        $van = fleetVehicle('ZZZ Test Van');
-        $car = fleetVehicle('ZZZ Test Car');
-        vehicleHire($van, ['hire_full_value' => 1000, 'our_hire_value' => 800]);
-        vehicleHire($car, ['hire_full_value' => 400, 'our_hire_value' => 300]);
-        vehicleHire($car, ['hire_full_value' => 5000, 'our_hire_value' => 100, 'status' => 'cancelled']);
-        vehicleHire($car, ['hire_full_value' => 6000, 'our_hire_value' => 100, 'vehicle_id' => null]);
-
-        $this->getJson('/api/admin/vehicles')
-            ->assertOk()
-            ->assertJsonPath('summary', [
-                'vehicle_count' => 2, 'hire_count' => 2,
-                'hire_full_value_total' => 1400, 'our_hire_value_total' => 1100, 'commission_total' => 300,
-            ]);
-    });
-
     it('searches by model or condition', function () {
         signedInAdmin();
         fleetVehicle('ZZZ Test Van', ['condition' => 'Good']);
@@ -478,5 +461,141 @@ describe('the tab scope', function () {
         expect(Hire::tab('today')->count())->toBe(0)
             ->and(Hire::tab('scheduled')->count())->toBe(0)
             ->and(Hire::tab('all')->count())->toBe(2);
+    });
+});
+
+describe('the condition filter', function () {
+    it('lists only vehicles in that condition', function () {
+        signedInAdmin();
+        fleetVehicle('ZZZ Test Van', ['condition' => 'Good']);
+        fleetVehicle('ZZZ Test Car', ['condition' => 'Poor']);
+        fleetVehicle('ZZZ Test Bus', ['condition' => 'Good']);
+
+        $good = $this->getJson('/api/admin/vehicles?condition=Good')->assertOk()->json('data');
+
+        expect(collect($good)->pluck('model')->all())->toBe(['ZZZ Test Bus', 'ZZZ Test Van']);
+    });
+
+    it('combines with the search', function () {
+        signedInAdmin();
+        fleetVehicle('ZZZ Test Van', ['condition' => 'Good']);
+        fleetVehicle('ZZZ Test Bus', ['condition' => 'Good']);
+        fleetVehicle('ZZZ Test Van Two', ['condition' => 'Poor']);
+
+        $found = $this->getJson('/api/admin/vehicles?condition=Good&search=Van')->json('data');
+
+        expect(collect($found)->pluck('model')->all())->toBe(['ZZZ Test Van']);
+    });
+
+    it('rejects a condition that does not exist', function () {
+        signedInAdmin();
+
+        $this->getJson('/api/admin/vehicles?condition=Shiny')->assertUnprocessable();
+    });
+});
+
+describe('the period filter on one vehicle', function () {
+    function periodVehicle(): Vehicle
+    {
+        $vehicle = fleetVehicle();
+        vehicleHire($vehicle, ['description' => 'ZZZ sep 1', 'start_time' => '2026-09-03 09:00:00', 'status' => 'completed', 'hire_full_value' => 1000, 'our_hire_value' => 700]);
+        vehicleHire($vehicle, ['description' => 'ZZZ sep 2', 'start_time' => '2026-09-25 09:00:00', 'hire_full_value' => 500, 'our_hire_value' => 400]);
+        vehicleHire($vehicle, ['description' => 'ZZZ aug', 'start_time' => '2026-08-30 09:00:00', 'status' => 'completed', 'hire_full_value' => 9000, 'our_hire_value' => 8000]);
+        vehicleHire($vehicle, ['description' => 'ZZZ aug off', 'start_time' => '2026-08-12 09:00:00', 'status' => 'cancelled']);
+        vehicleHire($vehicle, ['description' => 'ZZZ last year', 'start_time' => '2025-12-20 09:00:00', 'status' => 'completed']);
+
+        return $vehicle;
+    }
+
+    it('lists only that month\'s hires, on any tab', function () {
+        signedInAdmin();
+        $vehicle = periodVehicle();
+
+        $sept = collect($this->getJson("/api/admin/vehicles/{$vehicle->id}/hires?year=2026&month=9")->json('data'))->pluck('description')->all();
+        $augCompleted = collect($this->getJson("/api/admin/vehicles/{$vehicle->id}/hires?tab=completed&year=2026&month=8")->json('data'))->pluck('description')->all();
+        $augCancelled = collect($this->getJson("/api/admin/vehicles/{$vehicle->id}/hires?tab=cancelled&year=2026&month=8")->json('data'))->pluck('description')->all();
+
+        expect($sept)->toBe(['ZZZ sep 2', 'ZZZ sep 1'])
+            ->and($augCompleted)->toBe(['ZZZ aug'])
+            ->and($augCancelled)->toBe(['ZZZ aug off']);
+    });
+
+    it('lists a whole year when no month is given', function () {
+        signedInAdmin();
+        $vehicle = periodVehicle();
+
+        $year = collect($this->getJson("/api/admin/vehicles/{$vehicle->id}/hires?year=2026")->json('data'))->pluck('description');
+        $lastYear = collect($this->getJson("/api/admin/vehicles/{$vehicle->id}/hires?year=2025")->json('data'))->pluck('description')->all();
+
+        expect($year)->toHaveCount(4)->and($lastYear)->toBe(['ZZZ last year']);
+    });
+
+    it('makes the vehicle\'s numbers follow the period', function () {
+        signedInAdmin();
+        $vehicle = periodVehicle();
+
+        $august = $this->getJson("/api/admin/vehicles/{$vehicle->id}?year=2026&month=8")->assertOk()->json('data.stats');
+        $september = $this->getJson("/api/admin/vehicles/{$vehicle->id}?year=2026&month=9")->json('data.stats');
+        $allTime = $this->getJson("/api/admin/vehicles/{$vehicle->id}")->json('data.stats');
+
+        expect($august['hire_count'])->toBe(1)
+            ->and($august['hire_full_value_total'])->toEqual(9000)
+            ->and($august['commission_total'])->toEqual(1000)
+            ->and($august['counts'])->toBe(['all' => 2, 'today' => 0, 'scheduled' => 0, 'completed' => 1, 'cancelled' => 1, 'running' => 0])
+            ->and($september['hire_count'])->toBe(2)
+            ->and($september['hire_full_value_total'])->toEqual(1500)
+            ->and($september['counts']['all'])->toBe(2)
+            ->and($allTime['counts']['all'])->toBe(5);
+    });
+
+    it('leaves the "this month" figures relative to now', function () {
+        signedInAdmin();
+        $vehicle = periodVehicle();
+
+        $stats = $this->getJson("/api/admin/vehicles/{$vehicle->id}?year=2025&month=12")->json('data.stats');
+
+        expect($stats['month']['hire_count'])->toBe(2); // September 2026, whatever period is being viewed
+    });
+
+    it('needs a year when a month is given, and rejects nonsense', function (string $query) {
+        signedInAdmin();
+        $vehicle = fleetVehicle();
+
+        $this->getJson("/api/admin/vehicles/{$vehicle->id}/hires?{$query}")->assertUnprocessable();
+        $this->getJson("/api/admin/vehicles/{$vehicle->id}?{$query}")->assertUnprocessable();
+    })->with(['month=9', 'year=2026&month=13', 'year=2026&month=0', 'year=abc']);
+
+    it('offers the years and months this vehicle has hires in, latest first', function () {
+        signedInAdmin();
+        $vehicle = periodVehicle();
+
+        $this->getJson("/api/admin/vehicles/{$vehicle->id}/periods")
+            ->assertOk()
+            ->assertExactJson(['years' => [2026, 2025], 'months_by_year' => ['2026' => [9, 8], '2025' => [12]]]);
+    });
+
+    it('offers no periods for a vehicle without hires — and an object, not a list', function () {
+        signedInAdmin();
+        $vehicle = fleetVehicle();
+
+        $response = $this->get("/api/admin/vehicles/{$vehicle->id}/periods", ['Accept' => 'application/json'])->assertOk();
+
+        expect($response->getContent())->toBe('{"years":[],"months_by_year":{}}');
+    });
+
+    it('does not offer another vehicle\'s periods', function () {
+        signedInAdmin();
+        $vehicle = fleetVehicle('ZZZ Test Van');
+        $other = fleetVehicle('ZZZ Test Car');
+        vehicleHire($other, ['start_time' => '2024-01-05 09:00:00']);
+
+        $this->getJson("/api/admin/vehicles/{$vehicle->id}/periods")->assertExactJson(['years' => [], 'months_by_year' => []]);
+    });
+
+    it('needs hires.view to see periods', function () {
+        $vehicle = fleetVehicle();
+        signedInAdmin(['vehicles.view']);
+
+        $this->getJson("/api/admin/vehicles/{$vehicle->id}/periods")->assertForbidden();
     });
 });

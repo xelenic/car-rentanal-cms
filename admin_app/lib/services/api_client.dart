@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/admin_user.dart';
 import '../models/hire.dart';
+import '../models/hire_period.dart';
 import '../models/hire_tab.dart';
 import '../models/place_suggestion.dart';
 import '../models/reference_data.dart';
@@ -164,10 +165,11 @@ class ApiClient {
   }
 
   /// The fleet, a page at a time, each vehicle with its hire numbers.
-  Future<VehiclePage> fetchVehicles({String? search, int page = 1}) async {
+  Future<VehiclePage> fetchVehicles({String? search, String? condition, int page = 1}) async {
     final uri = Uri.parse('$baseUrl/admin/vehicles').replace(
       queryParameters: {
         if (search != null && search.isNotEmpty) 'search': search,
+        if (condition != null && condition.isNotEmpty) 'condition': condition,
         'page': '$page',
       },
     );
@@ -180,9 +182,10 @@ class ApiClient {
     throw ApiException(_extractError(response));
   }
 
-  Future<Vehicle> fetchVehicle(int id) async {
+  /// One vehicle with its numbers — for all time, or just [period].
+  Future<Vehicle> fetchVehicle(int id, {HirePeriod? period}) async {
     final response = await _http.get(
-      Uri.parse('$baseUrl/admin/vehicles/$id'),
+      Uri.parse('$baseUrl/admin/vehicles/$id').replace(queryParameters: period?.query),
       headers: await _headers(auth: true),
     );
 
@@ -222,14 +225,33 @@ class ApiClient {
   }
 
   /// One vehicle's hires under one tab, a page at a time.
-  Future<HirePage> fetchVehicleHires(int vehicleId, {HireTab tab = HireTab.all, int page = 1}) async {
+  Future<HirePage> fetchVehicleHires(
+    int vehicleId, {
+    HireTab tab = HireTab.all,
+    int page = 1,
+    HirePeriod? period,
+  }) async {
     final uri = Uri.parse('$baseUrl/admin/vehicles/$vehicleId/hires').replace(
-      queryParameters: {'tab': tab.apiValue, 'page': '$page'},
+      queryParameters: {'tab': tab.apiValue, 'page': '$page', ...?period?.query},
     );
     final response = await _http.get(uri, headers: await _headers(auth: true));
 
     if (response.statusCode == 200) {
       return HirePage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// The years and months this vehicle has hires in.
+  Future<PeriodOptions> fetchVehiclePeriods(int vehicleId) async {
+    final response = await _http.get(
+      Uri.parse('$baseUrl/admin/vehicles/$vehicleId/periods'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      return PeriodOptions.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     }
 
     throw ApiException(_extractError(response));
@@ -262,6 +284,34 @@ class ApiClient {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       return Hire.fromJson(data['data'] as Map<String, dynamic>);
     }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// Saves an edited hire. [data] has the same shape as for [createHire].
+  Future<Hire> updateHire(int id, Map<String, dynamic> data) async {
+    final response = await _http.put(
+      Uri.parse('$baseUrl/admin/hires/$id'),
+      headers: await _headers(auth: true),
+      body: jsonEncode(data),
+    );
+
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      return Hire.fromJson(body['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// Deletes a hire for good, with its payments, expenses and tracking history.
+  Future<void> deleteHire(int id) async {
+    final response = await _http.delete(
+      Uri.parse('$baseUrl/admin/hires/$id'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 204) return;
 
     throw ApiException(_extractError(response));
   }

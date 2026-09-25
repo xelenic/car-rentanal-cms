@@ -124,47 +124,17 @@ class Vehicle {
   }
 }
 
-/// Whole-fleet totals shown at the top of the dashboard.
-class FleetSummary {
-  const FleetSummary({
-    this.vehicleCount = 0,
-    this.hireCount = 0,
-    this.hireFullValueTotal = 0,
-    this.ourHireValueTotal = 0,
-    this.commissionTotal = 0,
-  });
-
-  final int vehicleCount;
-  final int hireCount;
-  final double hireFullValueTotal;
-  final double ourHireValueTotal;
-  final double commissionTotal;
-
-  factory FleetSummary.fromJson(Map<String, dynamic>? json) {
-    if (json == null) return const FleetSummary();
-    return FleetSummary(
-      vehicleCount: _int(json['vehicle_count']),
-      hireCount: _int(json['hire_count']),
-      hireFullValueTotal: _number(json['hire_full_value_total']),
-      ourHireValueTotal: _number(json['our_hire_value_total']),
-      commissionTotal: _number(json['commission_total']),
-    );
-  }
-}
-
 /// A page of the fleet from GET /admin/vehicles.
 class VehiclePage {
   const VehiclePage({
     required this.vehicles,
     required this.currentPage,
     required this.lastPage,
-    required this.summary,
   });
 
   final List<Vehicle> vehicles;
   final int currentPage;
   final int lastPage;
-  final FleetSummary summary;
 
   bool get hasMore => currentPage < lastPage;
 
@@ -176,7 +146,6 @@ class VehiclePage {
           .toList(),
       currentPage: (meta?['current_page'] as int?) ?? 1,
       lastPage: (meta?['last_page'] as int?) ?? 1,
-      summary: FleetSummary.fromJson(json['summary'] as Map<String, dynamic>?),
     );
   }
 }

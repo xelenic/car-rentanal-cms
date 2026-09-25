@@ -25,6 +25,7 @@ class HireResource extends JsonResource
             'day_locations' => $this->stayLocationsByDay()
                 ->map(fn ($group) => $group->pluck('location.name')->values())
                 ->values(),
+            'package_id' => $this->package_id,
             'package' => $this->package?->name,
             'hire_full_value' => (float) $this->hire_full_value,
             'our_hire_value' => (float) $this->our_hire_value,

@@ -64,11 +64,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/admin/hires/reference-data', [AdminHireController::class, 'referenceData']);
     Route::get('/admin/hires/{hire}', [AdminHireController::class, 'show']);
     Route::post('/admin/hires', [AdminHireController::class, 'store']);
+    Route::put('/admin/hires/{hire}', [AdminHireController::class, 'update']);
+    Route::delete('/admin/hires/{hire}', [AdminHireController::class, 'destroy']);
 
     Route::get('/admin/vehicles', [AdminVehicleController::class, 'index']);
     Route::post('/admin/vehicles', [AdminVehicleController::class, 'store']);
     Route::get('/admin/vehicles/{vehicle}', [AdminVehicleController::class, 'show']);
     Route::get('/admin/vehicles/{vehicle}/hires', [AdminVehicleController::class, 'hires']);
+    Route::get('/admin/vehicles/{vehicle}/periods', [AdminVehicleController::class, 'periods']);
 
     Route::get('/admin/places/autocomplete', [AdminPlaceController::class, 'autocomplete']);
     Route::get('/admin/places/details', [AdminPlaceController::class, 'details']);

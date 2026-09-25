@@ -53,6 +53,7 @@ class Hire {
     required this.stayLocations,
     required this.dayLocations,
     this.package,
+    this.packageId,
     required this.hireFullValue,
     required this.ourHireValue,
     required this.commission,
@@ -85,6 +86,7 @@ class Hire {
   final List<String> stayLocations;
   final List<List<String>> dayLocations;
   final String? package;
+  final int? packageId;
   final double hireFullValue;
   final double ourHireValue;
   final double commission;
@@ -115,8 +117,8 @@ class Hire {
       status: json['status'] as String? ?? 'pending',
       statusLabel: json['status_label'] as String? ?? '',
       isUpcoming: json['is_upcoming'] as bool? ?? false,
-      startTime: _parseDate(json['start_time']),
-      endTime: _parseDate(json['end_time']),
+      startTime: _parseClockTime(json['start_time']),
+      endTime: _parseClockTime(json['end_time']),
       fromLocation: json['from_location'] as String?,
       toLocation: json['to_location'] as String?,
       stayLocations: (json['stay_locations'] as List<dynamic>? ?? [])
@@ -126,6 +128,7 @@ class Hire {
           .map((day) => (day as List<dynamic>).map((e) => e as String).toList())
           .toList(),
       package: json['package'] as String?,
+      packageId: json['package_id'] as int?,
       hireFullValue: _parseDouble(json['hire_full_value']),
       ourHireValue: _parseDouble(json['our_hire_value']),
       commission: _parseDouble(json['commission']),
@@ -152,6 +155,19 @@ class Hire {
     );
   }
 
+  /// A hire's start/end time is a wall-clock time: the server stores it exactly
+  /// as it was typed and labels it UTC ("…+00:00") whatever the zone. Read it
+  /// back as that same clock time — converting to the phone's zone would show
+  /// a different time than the one entered, and editing a hire would push it
+  /// later by the offset every time it was saved.
+  static DateTime? _parseClockTime(dynamic value) {
+    if (value == null) return null;
+    final text = value as String;
+    final clock = RegExp(r'^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?').firstMatch(text)?.group(0);
+    return DateTime.tryParse(clock ?? text);
+  }
+
+  /// A real instant (when something happened) — shown in the phone's zone.
   static DateTime? _parseDate(dynamic value) {
     if (value == null) return null;
     return DateTime.tryParse(value as String)?.toLocal();

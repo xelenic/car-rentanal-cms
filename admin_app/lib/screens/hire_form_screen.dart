@@ -19,18 +19,25 @@ const _paymentTypes = {
   'credit': 'Credit',
 };
 
-class CreateHireScreen extends StatefulWidget {
-  const CreateHireScreen({super.key, this.vehicle});
+/// The hire form: books a new hire, or — given [hire] — edits an existing one.
+/// Pops with the saved [Hire].
+class HireFormScreen extends StatefulWidget {
+  const HireFormScreen({super.key, this.vehicle, this.hire});
 
-  /// Set when the hire is booked from a vehicle's page: the hire is for that
+  /// Set when a new hire is booked from a vehicle's page: the hire is for that
   /// vehicle, so it is shown fixed rather than as a choice.
   final NamedOption? vehicle;
 
+  /// The hire being edited; null when booking a new one.
+  final Hire? hire;
+
   @override
-  State<CreateHireScreen> createState() => _CreateHireScreenState();
+  State<HireFormScreen> createState() => _HireFormScreenState();
 }
 
-class _CreateHireScreenState extends State<CreateHireScreen> {
+class _HireFormScreenState extends State<HireFormScreen> {
+  bool get _editing => widget.hire != null;
+
   final _formKey = GlobalKey<FormState>();
 
   bool _loadingReference = true;
@@ -115,7 +122,10 @@ class _CreateHireScreenState extends State<CreateHireScreen> {
     try {
       final reference = await ApiClient.instance.fetchReferenceData();
       if (!mounted) return;
-      setState(() => _reference = reference);
+      setState(() {
+        _reference = reference;
+        if (_editing && !_prefilled) _prefill(reference, widget.hire!);
+      });
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _loadError = e.message);
@@ -127,17 +137,103 @@ class _CreateHireScreenState extends State<CreateHireScreen> {
     }
   }
 
+  bool _prefilled = false;
+
+  /// Fills the form with the hire being edited. An id is only taken if the
+  /// dropdown actually offers it (a since-deleted driver, say, would otherwise
+  /// break the dropdown).
+  void _prefill(ReferenceData reference, Hire hire) {
+    _prefilled = true;
+
+    int? offered(int? id, List<NamedOption> options) => options.any((o) => o.id == id) ? id : null;
+
+    if (_tourTypes.containsKey(hire.tourType)) _tourType = hire.tourType;
+    if (_paymentTypes.containsKey(hire.paymentType)) _paymentType = hire.paymentType;
+    _customerId = offered(hire.customer?.id, reference.customers);
+    _driverId = offered(hire.driver?.id, reference.drivers);
+    _vehicleId = offered(hire.vehicle?.id, reference.vehicles);
+    _packageId = offered(hire.packageId, reference.packages);
+
+    _hireFullValue.text = _plain(hire.hireFullValue);
+    _ourHireValue.text = _plain(hire.ourHireValue);
+    _description.text = hire.description ?? '';
+    _fromLocation.text = hire.fromLocation ?? '';
+    _toLocation.text = hire.toLocation ?? '';
+
+    // Only the names come back from the server, so the coordinates stay
+    // empty — the server keeps a known place's coordinates when it is sent
+    // by name again.
+    if (hire.tourType == 'day_tour' && hire.stayLocations.isNotEmpty) {
+      _replaceStays(hire.stayLocations);
+    }
+    if (hire.tourType == 'multi_day' && hire.dayLocations.isNotEmpty) {
+      _replaceDays(hire.dayLocations);
+    }
+
+    _startTime = hire.startTime;
+    _endTime = hire.endTime;
+  }
+
+  void _replaceStays(List<String> names) {
+    for (final c in _stayLocations) {
+      c.dispose();
+    }
+    _stayLocations
+      ..clear()
+      ..addAll(names.map((name) => TextEditingController(text: name)));
+    _stayLats
+      ..clear()
+      ..addAll(names.map((_) => null));
+    _stayLngs
+      ..clear()
+      ..addAll(names.map((_) => null));
+  }
+
+  void _replaceDays(List<List<String>> days) {
+    for (final day in _dayLocations) {
+      for (final c in day) {
+        c.dispose();
+      }
+    }
+    _dayLocations
+      ..clear()
+      ..addAll(days.map((day) => day.map((name) => TextEditingController(text: name)).toList()));
+    _dayLats
+      ..clear()
+      ..addAll(days.map((day) => day.map<double?>((_) => null).toList()));
+    _dayLngs
+      ..clear()
+      ..addAll(days.map((day) => day.map<double?>((_) => null).toList()));
+  }
+
+  /// 25000.0 -> "25000", 25000.5 -> "25000.5".
+  static String _plain(double value) => value == value.roundToDouble() ? value.toInt().toString() : value.toString();
+
   bool get _needsFromTo => _tourType == 'drop_pickup' || _tourType == 'day_tour';
   bool get _needsStays => _tourType == 'day_tour';
   bool get _needsDays => _tourType == 'multi_day';
   bool get _isPackage => _tourType == 'package';
 
+  /// A new hire can't start much before today, but an existing one may already
+  /// be in the past — the picker must still be able to show its date.
+  DateTime _earliestPickable(DateTime? current) {
+    final earliest = DateTime.now().subtract(const Duration(days: 1));
+    if (current == null || !current.isBefore(earliest)) return DateTime(earliest.year, earliest.month, earliest.day);
+    return DateTime(current.year, current.month, current.day);
+  }
+
+  DateTime _latestPickable(DateTime? current) {
+    final latest = DateTime.now().add(const Duration(days: 730));
+    if (current == null || !current.isAfter(latest)) return latest;
+    return DateTime(current.year, current.month, current.day);
+  }
+
   Future<void> _pickStartTime() async {
     final date = await showDatePicker(
       context: context,
       initialDate: _startTime ?? DateTime.now(),
-      firstDate: DateTime.now().subtract(const Duration(days: 1)),
-      lastDate: DateTime.now().add(const Duration(days: 730)),
+      firstDate: _earliestPickable(_startTime),
+      lastDate: _latestPickable(_startTime),
     );
     if (date == null || !mounted) return;
 
@@ -157,8 +253,8 @@ class _CreateHireScreenState extends State<CreateHireScreen> {
     final date = await showDatePicker(
       context: context,
       initialDate: base,
-      firstDate: _startTime ?? DateTime.now().subtract(const Duration(days: 1)),
-      lastDate: DateTime.now().add(const Duration(days: 730)),
+      firstDate: _earliestPickable(_startTime ?? _endTime),
+      lastDate: _latestPickable(base),
     );
     if (date == null || !mounted) return;
 
@@ -301,10 +397,12 @@ class _CreateHireScreenState extends State<CreateHireScreen> {
     });
 
     try {
-      final Hire hire = await ApiClient.instance.createHire(_buildPayload());
+      final Hire hire = _editing
+          ? await ApiClient.instance.updateHire(widget.hire!.id, _buildPayload())
+          : await ApiClient.instance.createHire(_buildPayload());
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hire #${hire.id} created.')),
+        SnackBar(content: Text('Hire #${hire.id} ${_editing ? 'updated' : 'created'}.')),
       );
       Navigator.of(context).pop(hire);
     } on ApiException catch (e) {
@@ -319,7 +417,7 @@ class _CreateHireScreenState extends State<CreateHireScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('New Hire')),
+      appBar: AppBar(title: Text(_editing ? 'Edit Hire' : 'New Hire')),
       body: _loadingReference
           ? const Center(child: CircularProgressIndicator())
           : _loadError != null
@@ -626,7 +724,7 @@ class _CreateHireScreenState extends State<CreateHireScreen> {
                     width: 20,
                     child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
                   )
-                : const Text('Create Hire'),
+                : Text(_editing ? 'Save Changes' : 'Create Hire'),
           ),
         ],
       ),
