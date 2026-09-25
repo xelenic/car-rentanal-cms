@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/hire.dart';
+import '../models/hire_map_targets.dart';
 import '../models/hire_stage.dart';
 import '../models/tracking_status.dart';
 import '../services/api_client.dart';
@@ -15,6 +16,7 @@ import '../services/background_tracking.dart';
 import '../services/pickup_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/background_access_prompt.dart';
+import '../widgets/hire_map.dart';
 import 'expense_entry_screen.dart';
 import 'placeholder_screen.dart';
 
@@ -51,7 +53,22 @@ class HireDetailScreen extends StatefulWidget {
   /// location. Only tests replace it (the default uses the device's GPS).
   final Stream<Position> Function()? positionStream;
 
-  const HireDetailScreen({super.key, required this.hire, this.pickupStore, this.positionStream});
+  /// Opens a Google Maps link. Only tests replace it (the default hands the
+  /// link to the Maps app or the browser).
+  final Future<bool> Function(Uri url)? launchMapsUrl;
+
+  /// Loads the path recorded so far for a hire that has been started. Only
+  /// tests replace it (the default asks the server).
+  final Future<TrackingStatus> Function(int hireId)? loadTracking;
+
+  const HireDetailScreen({
+    super.key,
+    required this.hire,
+    this.pickupStore,
+    this.positionStream,
+    this.launchMapsUrl,
+    this.loadTracking,
+  });
 
   @override
   State<HireDetailScreen> createState() => _HireDetailScreenState();
@@ -89,6 +106,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
     _hire = widget.hire;
     _pickupStore = widget.pickupStore ?? const SecurePickupStore();
     _loadPickedUp();
+    _loadPath();
     WidgetsBinding.instance.addObserver(this);
     BackgroundTracking.addListener(_onTrackingUpdate);
     if (_hire.isTracking) {
@@ -115,6 +133,24 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
 
     unawaited(BackgroundTracking.ensureRunning());
     _refreshAccess();
+  }
+
+  /// The path driven so far, for the map — fetched when the hire opens so it
+  /// shows straight away (and on a completed hire) instead of after the next
+  /// position ping. A hire that was never started has none. Failing to load it
+  /// (offline, a server without this endpoint) only means no path is drawn.
+  Future<void> _loadPath() async {
+    if (_hire.trackingStartedAt == null) return;
+
+    try {
+      final status = await (widget.loadTracking ?? ApiClient.instance.fetchTrackingStatus)(_hire.id);
+      if (!mounted) return;
+
+      // A ping may have delivered a fresher path while this was loading.
+      if (status.points.length >= _points.length) {
+        setState(() => _points = status.points);
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadPickedUp() async {
@@ -379,20 +415,9 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
     await _launchMapsUrl(url);
   }
 
-  /// The hire's own pickup/destination address, shown as a "Open in Google
-  /// Maps" button from the moment the page opens — this is the address the
-  /// customer booked, not the GPS trail (that only exists once the driver
-  /// has actually pressed Start; see [_openPathInMaps]). Falls back through
-  /// whichever location the tour type actually has.
-  String? get _navigationTarget {
-    final hire = _hire;
-    if (hire.fromLocation != null && hire.fromLocation!.isNotEmpty) return hire.fromLocation;
-    if (hire.toLocation != null && hire.toLocation!.isNotEmpty) return hire.toLocation;
-    if (hire.stayLocations.isNotEmpty) return hire.stayLocations.first;
-    if (hire.package != null && hire.package!.isNotEmpty) return hire.package;
-    return null;
-  }
-
+  /// Opens a place by name in Google Maps — the address the customer booked,
+  /// not the GPS trail (that only exists once the driver has pressed Start; see
+  /// [_openPathInMaps]).
   Future<void> _openAddressInMaps(String address) async {
     final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}');
     await _launchMapsUrl(url);
@@ -400,7 +425,9 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
 
   Future<void> _launchMapsUrl(Uri url) async {
     try {
-      final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+      final launched = widget.launchMapsUrl != null
+          ? await widget.launchMapsUrl!(url)
+          : await launchUrl(url, mode: LaunchMode.externalApplication);
       if (!launched && mounted) {
         setState(() => _trackingError = 'Could not open Google Maps.');
       }
@@ -561,6 +588,9 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
   Widget build(BuildContext context) {
     final dateFormat = DateFormat('MMM d, y  h:mm a');
     final hire = _hire;
+    final mapTargets = mapTargetsOf(hire);
+    final nextTarget = mapTargetFor(hire, _stage);
+    final route = mapRouteFor(hire, _stage);
 
     return Scaffold(
       appBar: AppBar(title: Text('Hire #${hire.id}')),
@@ -576,6 +606,8 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
             hasPath: _points.isNotEmpty,
             arrived: _arrived,
             metersToPickup: _metersToPickup,
+            mapRoute: route,
+            onOpenRoute: (route) => _launchMapsUrl(route.url),
             accessNotice: backgroundAccessNotice(_access),
             onPickup: _pickup,
             onStart: _toggleTracking,
@@ -584,6 +616,8 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
             onViewPath: _openPathInMaps,
             onFixAccess: _offerAccess,
           ),
+          const SizedBox(height: 12),
+          HireMapCard(hireId: hire.id, places: hire.mapPoints, path: _points),
           const SizedBox(height: 12),
           _QuickActionsRow(
             onOpen: _openShortcut,
@@ -609,21 +643,19 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
                 _InfoRow(label: 'Start', value: dateFormat.format(hire.startTime!.toLocal())),
               if (hire.endTime != null)
                 _InfoRow(label: 'End', value: dateFormat.format(hire.endTime!.toLocal())),
-              if (_navigationTarget != null) ...[
+              // One button per place — pickup and end (and any stops) are
+              // separate; the one the driver is heading for now is filled in.
+              if (mapTargets.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _openAddressInMaps(_navigationTarget!),
-                    icon: const Icon(Icons.location_on_outlined, size: 18),
-                    label: const Text('Open Location in Google Maps'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.neonDeep,
-                      side: const BorderSide(color: AppColors.neon),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                for (final target in mapTargets)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _MapsButton.place(
+                      target: target,
+                      primary: target == nextTarget,
+                      onTap: () => _openAddressInMaps(target.place),
                     ),
                   ),
-                ),
               ],
             ],
           ),
@@ -721,6 +753,12 @@ class _TrackingCard extends StatelessWidget {
   final bool arrived;
   final double? metersToPickup;
 
+  /// The Google Maps route for this stage — Your location → pickup → end
+  /// before the hire starts, Your location → end once it has — or null when
+  /// there is nothing to navigate to.
+  final MapRoute? mapRoute;
+  final ValueChanged<MapRoute> onOpenRoute;
+
   /// Reminder that the phone's settings may stop tracking once another app
   /// is opened (see backgroundAccessNotice); null when nothing needs fixing.
   final String? accessNotice;
@@ -740,6 +778,8 @@ class _TrackingCard extends StatelessWidget {
     required this.hasPath,
     required this.arrived,
     required this.metersToPickup,
+    required this.mapRoute,
+    required this.onOpenRoute,
     required this.accessNotice,
     required this.onPickup,
     required this.onStart,
@@ -903,6 +943,10 @@ class _TrackingCard extends StatelessWidget {
             const SizedBox(height: 12),
             SizedBox(width: double.infinity, child: _CompleteButton(busy: busy, onPressed: onComplete)),
           ],
+          if (mapRoute != null) ...[
+            const SizedBox(height: 14),
+            _MapsButton.route(route: mapRoute!, onTap: () => onOpenRoute(mapRoute!)),
+          ],
           if (isTracking && accessNotice != null) ...[
             const SizedBox(height: 16),
             Container(
@@ -1019,6 +1063,104 @@ class _TrackingCard extends StatelessWidget {
 
 /// The green used for "you've arrived" — the Start button turns this colour.
 const _arrivedColor = Color(0xFF16A34A);
+
+/// A Google Maps button with a title and, underneath, what it will open.
+/// [primary] fills it in; otherwise it's outlined.
+///
+///  * [_MapsButton.route] — the whole trip, "You → pickup → end";
+///  * [_MapsButton.place] — one place, "Open <pickup location | end location |
+///    stop N> in Google Maps"; filled in for the place the driver is heading
+///    for now.
+class _MapsButton extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool primary;
+  final VoidCallback onTap;
+
+  const _MapsButton._({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.primary,
+    required this.onTap,
+  });
+
+  factory _MapsButton.route({required MapRoute route, required VoidCallback onTap}) => _MapsButton._(
+        icon: Icons.alt_route,
+        title: 'Open route in Google Maps',
+        subtitle: route.summary,
+        primary: true,
+        onTap: onTap,
+      );
+
+  factory _MapsButton.place({required MapTarget target, required bool primary, required VoidCallback onTap}) {
+    final IconData icon;
+    switch (target.role) {
+      case MapRole.pickup:
+        icon = Icons.trip_origin;
+      case MapRole.end:
+        icon = Icons.flag_outlined;
+      case MapRole.stop:
+        icon = Icons.pin_drop_outlined;
+      case MapRole.single:
+        icon = Icons.location_on_outlined;
+    }
+
+    return _MapsButton._(
+      icon: icon,
+      title: 'Open ${target.label.toLowerCase()} in Google Maps',
+      subtitle: target.place,
+      primary: primary,
+      onTap: onTap,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = primary ? AppColors.onNeon : AppColors.neonDeep;
+
+    return Material(
+      color: primary ? AppColors.neon : Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AppColors.neon),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          child: Row(
+            children: [
+              Icon(icon, color: foreground, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(color: foreground, fontWeight: FontWeight.w700, fontSize: 13),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: foreground.withValues(alpha: primary ? 0.9 : 0.75), fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.open_in_new, color: foreground, size: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// A line of guidance under the main button.
 class _StageHint extends StatelessWidget {

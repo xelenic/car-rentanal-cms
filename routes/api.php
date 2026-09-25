@@ -45,6 +45,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/driver/vehicle-maintenance', [VehicleMaintenanceController::class, 'index']);
     Route::post('/driver/vehicle-maintenance', [VehicleMaintenanceController::class, 'store']);
 
+    Route::get('/driver/hires/{hire}/tracking', [HireTrackingController::class, 'show']);
     Route::post('/driver/hires/{hire}/tracking/start', [HireTrackingController::class, 'start']);
     Route::post('/driver/hires/{hire}/tracking/stop', [HireTrackingController::class, 'stop']);
     Route::post('/driver/hires/{hire}/tracking/complete', [HireTrackingController::class, 'complete']);

@@ -85,3 +85,66 @@ test('the pickup location is null when the hire has no locations at all', functi
 
     $this->getJson('/api/driver/hires')->assertOk()->assertJsonPath('data.0.pickup_location', null);
 });
+
+// ---- map_locations: every place on the trip, for the driver app's map ----
+
+test('a drop-and-pickup hire maps its pickup and end', function () {
+    [, $hire] = driverWithHire();
+    hireLocation($hire, 'to', Location::create(['name' => 'Ella', 'latitude' => 6.87, 'longitude' => 81.05]));
+    hireLocation($hire, 'from', Location::create(['name' => 'Colombo Fort', 'latitude' => 6.9344, 'longitude' => 79.8428]));
+
+    $this->getJson('/api/driver/hires')->assertOk()->assertJsonPath('data.0.map_locations', [
+        ['role' => 'pickup', 'name' => 'Colombo Fort', 'latitude' => 6.9344, 'longitude' => 79.8428],
+        ['role' => 'end', 'name' => 'Ella', 'latitude' => 6.87, 'longitude' => 81.05],
+    ]);
+});
+
+test('a multi day hire maps pickup → stops → end in day order', function () {
+    [, $hire] = driverWithHire(['tour_type' => 'multi_day']);
+    hireLocation($hire, 'stay', Location::create(['name' => 'Galle', 'latitude' => 6.03, 'longitude' => 80.21]), ['day_number' => 3, 'order' => 1]);
+    hireLocation($hire, 'stay', Location::create(['name' => 'Kandy', 'latitude' => 7.29, 'longitude' => 80.63]), ['day_number' => 1, 'order' => 1]);
+    hireLocation($hire, 'stay', Location::create(['name' => 'Ella', 'latitude' => 6.87, 'longitude' => 81.05]), ['day_number' => 2, 'order' => 1]);
+
+    $response = $this->getJson('/api/driver/hires')->assertOk();
+
+    expect(collect($response->json('data.0.map_locations'))->map(fn ($p) => $p['role'].':'.$p['name'])->all())
+        ->toBe(['pickup:Kandy', 'stop:Ella', 'end:Galle']);
+});
+
+test('a package hire maps its itinerary stops', function () {
+    $package = Package::create(['name' => 'Hill Country', 'hours' => 24, 'price' => 5000]);
+    PackageItinerary::create(['package_id' => $package->id, 'location_id' => Location::create(['name' => 'Nuwara Eliya', 'latitude' => 6.97, 'longitude' => 80.78])->id, 'order' => 2]);
+    PackageItinerary::create(['package_id' => $package->id, 'location_id' => Location::create(['name' => 'Kandy', 'latitude' => 7.29, 'longitude' => 80.63])->id, 'order' => 1]);
+    driverWithHire(['tour_type' => 'package', 'package_id' => $package->id]);
+
+    $response = $this->getJson('/api/driver/hires')->assertOk();
+
+    expect(collect($response->json('data.0.map_locations'))->pluck('role', 'name')->all())
+        ->toBe(['Kandy' => 'pickup', 'Nuwara Eliya' => 'end']);
+});
+
+test('places without coordinates are left off the map but never change the others\' roles', function () {
+    [, $hire] = driverWithHire();
+    hireLocation($hire, 'from', Location::create(['name' => 'Somewhere', 'latitude' => null, 'longitude' => null]));
+    hireLocation($hire, 'to', Location::create(['name' => 'Ella', 'latitude' => 6.87, 'longitude' => 81.05]));
+
+    $response = $this->getJson('/api/driver/hires')->assertOk();
+
+    // Ella is still the *end* — the pickup just has nowhere to be drawn
+    expect($response->json('data.0.map_locations'))->toBe([
+        ['role' => 'end', 'name' => 'Ella', 'latitude' => 6.87, 'longitude' => 81.05],
+    ]);
+});
+
+test('a lone place is a single, and a hire with no places has an empty map', function () {
+    [, $hire] = driverWithHire();
+    hireLocation($hire, 'from', Location::create(['name' => 'Colombo Fort', 'latitude' => 6.9344, 'longitude' => 79.8428]));
+
+    $this->getJson('/api/driver/hires')->assertJsonPath('data.0.map_locations.0.role', 'single');
+});
+
+test('a hire with no locations has an empty map', function () {
+    driverWithHire();
+
+    $this->getJson('/api/driver/hires')->assertOk()->assertJsonPath('data.0.map_locations', []);
+});

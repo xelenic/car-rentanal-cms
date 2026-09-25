@@ -61,6 +61,11 @@
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="location"
             android:exported="false" />
+        <!-- Google Maps (the hire page's map). The key is injected by Gradle
+             from android/local.properties — see app/build.gradle.kts. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${MAPS_API_KEY}" />
         <meta-data
             android:name="com.carrentalcms.driver_app.TRACKING_NOTIFICATION_ICON"
             android:resource="@drawable/ic_tracking_notification" />

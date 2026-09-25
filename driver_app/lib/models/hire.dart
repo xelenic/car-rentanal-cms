@@ -1,3 +1,5 @@
+import 'hire_map_point.dart';
+
 class Hire {
   final int id;
   final String tourType;
@@ -13,6 +15,10 @@ class Hire {
   final String? pickupLocationName;
   final double? pickupLatitude;
   final double? pickupLongitude;
+
+  /// Every place on the trip that has coordinates, in journey order — plotted
+  /// on the hire page's map. Empty when none has (or the server predates it).
+  final List<HireMapPoint> mapPoints;
   final String? package;
   final DateTime? startTime;
   final DateTime? endTime;
@@ -39,6 +45,7 @@ class Hire {
     this.pickupLocationName,
     this.pickupLatitude,
     this.pickupLongitude,
+    this.mapPoints = const [],
     this.package,
     this.startTime,
     this.endTime,
@@ -71,6 +78,10 @@ class Hire {
       pickupLocationName: pickup is Map ? pickup['name'] as String? : null,
       pickupLatitude: pickup is Map ? (pickup['latitude'] as num?)?.toDouble() : null,
       pickupLongitude: pickup is Map ? (pickup['longitude'] as num?)?.toDouble() : null,
+      mapPoints: (json['map_locations'] as List<dynamic>? ?? [])
+          .map(HireMapPoint.tryParse)
+          .whereType<HireMapPoint>()
+          .toList(),
       package: json['package'] as String?,
       startTime: json['start_time'] != null
           ? DateTime.tryParse(json['start_time'] as String)
@@ -117,6 +128,7 @@ class Hire {
       pickupLocationName: pickupLocationName,
       pickupLatitude: pickupLatitude,
       pickupLongitude: pickupLongitude,
+      mapPoints: mapPoints,
       package: package,
       startTime: startTime,
       endTime: endTime,

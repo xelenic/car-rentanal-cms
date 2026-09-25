@@ -46,6 +46,20 @@
       caches.keys().then((keys) => keys.forEach((key) => caches.delete(key)));
     }
   </script>
+  <!--
+    Google Maps for the hire page's map (web preview only — the real app is the
+    Android one). The key is kept out of git: put
+        window.GOOGLE_MAPS_API_KEY = 'YOUR_KEY';
+    in web/maps_key.js (git-ignored). Without it the map simply doesn't load.
+  -->
+  <script src="maps_key.js"></script>
+  <script>
+    if (window.GOOGLE_MAPS_API_KEY) {
+      // Loaded synchronously: Flutter must find `google.maps` when the map is created.
+      document.write('<script src="https://maps.googleapis.com/maps/api/js?key=' +
+        encodeURIComponent(window.GOOGLE_MAPS_API_KEY) + '"><\/script>');
+    }
+  </script>
 </head>
 <body>
   <!--

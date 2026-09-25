@@ -232,6 +232,54 @@ class Hire extends Model
         return $this->package?->itineraries()->with('location')->orderBy('order')->first()?->location;
     }
 
+    /**
+     * Every place on this hire's trip that has coordinates, in journey order —
+     * what the driver app plots on its map. Roles follow the trip: the first
+     * place is the "pickup", the last the "end" and anything between a "stop"
+     * (a lone place is a "single"). Roles are worked out over the whole trip
+     * *before* places without coordinates are dropped, so a missing pickup
+     * never makes the first stop look like one.
+     *
+     * Drop-and-pickup and day tours run from → to; multi day tours through
+     * their stays (by day, then position); package tours through the
+     * package's itinerary.
+     *
+     * @return list<array{role: string, name: string, latitude: float, longitude: float}>
+     */
+    public function mapLocations(): array
+    {
+        $links = $this->relationLoaded('locations')
+            ? $this->locations
+            : $this->locations()->with('location')->get();
+
+        $stays = fn () => $links->where('role', 'stay')->sortBy([['day_number', 'asc'], ['order', 'asc']])->pluck('location');
+
+        $trip = match ($this->tour_type) {
+            'multi_day' => $stays(),
+            'package' => $this->package?->itineraries()->with('location')->orderBy('order')->get()->pluck('location'),
+            default => collect([$links->firstWhere('role', 'from')?->location, $links->firstWhere('role', 'to')?->location])
+                ->filter(),
+        } ?? collect();
+
+        // A hire of any type that has only stays still gets a trip.
+        if ($trip->isEmpty()) {
+            $trip = $stays();
+        }
+
+        $last = $trip->count() - 1;
+
+        return $trip->values()
+            ->map(fn (?Location $location, int $i) => $location === null ? null : [
+                'role' => $last === 0 ? 'single' : ($i === 0 ? 'pickup' : ($i === $last ? 'end' : 'stop')),
+                'name' => $location->name,
+                'latitude' => $location->latitude,
+                'longitude' => $location->longitude,
+            ])
+            ->filter(fn (?array $place) => $place !== null && $place['latitude'] !== null && $place['longitude'] !== null)
+            ->values()
+            ->all();
+    }
+
     public function stayLocations(): HasMany
     {
         return $this->hasMany(HireLocation::class)->where('role', 'stay')->orderBy('order');

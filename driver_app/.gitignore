@@ -9,3 +9,6 @@
 # IDE
 .idea/
 .vscode/
+
+# Google Maps API key for the web preview (see web/index.html)
+/web/maps_key.js

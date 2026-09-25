@@ -332,6 +332,20 @@ class ApiClient {
     throw ApiException(_extractError(response));
   }
 
+  /// The hire's tracking state and the path recorded so far — read-only.
+  Future<TrackingStatus> fetchTrackingStatus(int hireId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/driver/hires/$hireId/tracking'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      return TrackingStatus.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response), statusCode: response.statusCode);
+  }
+
   /// How long a position upload may take before it's treated as a failed
   /// (offline) attempt. Without a limit, a connection that stalls mid-request
   /// would hang the background service's tick forever and silently stop every

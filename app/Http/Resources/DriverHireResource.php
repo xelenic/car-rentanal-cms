@@ -18,6 +18,7 @@ class DriverHireResource extends JsonResource
             'to_location' => $this->toLocation?->location?->name,
             'stay_locations' => $this->stayLocations->pluck('location.name')->values(),
             'pickup_location' => $this->pickupLocationPayload(),
+            'map_locations' => $this->mapLocations(),
             'package' => $this->package?->name,
             'start_time' => $this->start_time?->toIso8601String(),
             'end_time' => $this->end_time?->toIso8601String(),

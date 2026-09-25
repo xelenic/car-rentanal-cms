@@ -1,8 +1,21 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Google Maps key for the hire page's map (Maps SDK for Android). Read from
+// android/local.properties (git-ignored — `MAPS_API_KEY=...`), or passed as
+// `-PMAPS_API_KEY=...`, so the key never lands in git. Without one the app
+// still builds and runs; the map just shows Google's grey "for development
+// purposes only" tiles.
+val mapsApiKey: String = (project.findProperty("MAPS_API_KEY") as String?)
+    ?: Properties().apply {
+        val file = rootProject.file("local.properties")
+        if (file.exists()) file.inputStream().use { load(it) }
+    }.getProperty("MAPS_API_KEY", "")
 
 android {
     namespace = "com.carrentalcms.driver_app"
@@ -23,6 +36,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
     buildTypes {

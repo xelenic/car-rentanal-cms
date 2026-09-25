@@ -10,6 +10,18 @@ use Illuminate\Http\Request;
 
 class HireTrackingController extends Controller
 {
+    /**
+     * The hire's tracking state and the path recorded so far — read-only. Lets
+     * the driver app draw the path on the hire's map whenever the hire is
+     * opened, not only after the next position ping.
+     */
+    public function show(Request $request, Hire $hire): JsonResponse
+    {
+        $this->authorizeDriver($request, $hire);
+
+        return $this->statusResponse($hire);
+    }
+
     public function start(Request $request, Hire $hire): JsonResponse
     {
         $this->authorizeDriver($request, $hire);
