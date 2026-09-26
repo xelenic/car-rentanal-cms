@@ -12,10 +12,13 @@ import '../widgets/profit_breakdown_sheet.dart';
 import '../widgets/state_views.dart';
 import 'expense_categories_screen.dart';
 import 'expense_form_screen.dart';
+import 'income_form_screen.dart';
 
-/// The owner's own expenses, a month at a time: My Profit (the month's profit
-/// after these expenses) and the totals up top, then the month's expenses
-/// — with add, edit, delete and category management as the user's permissions allow.
+/// The owner's own expenses and other income, a month at a time: My Profit
+/// (the month's profit from hires plus other income, less the expenses) and
+/// the totals up top, then the month's expenses or other income, one tab
+/// each — with add, edit, delete and category management as the user's
+/// permissions allow.
 class MyExpensesScreen extends StatefulWidget {
   const MyExpensesScreen({super.key, required this.user});
 
@@ -25,6 +28,8 @@ class MyExpensesScreen extends StatefulWidget {
   State<MyExpensesScreen> createState() => _MyExpensesScreenState();
 }
 
+enum _Tab { expenses, income }
+
 class _MyExpensesScreenState extends State<MyExpensesScreen> {
   final _searchController = TextEditingController();
   Timer? _debounce;
@@ -32,8 +37,10 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
   late int _year = DateTime.now().year;
   late int _month = DateTime.now().month;
   String? _category;
+  _Tab _tab = _Tab.expenses;
 
   List<MyExpense> _expenses = [];
+  List<OtherIncome> _incomes = [];
   ExpenseSummary? _summary;
   List<ExpenseCategory> _categories = [];
   List<int> _years = [];
@@ -54,6 +61,7 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
   AdminUser get _user => widget.user;
   bool get _searching => _searchController.text.trim().isNotEmpty;
   bool get _filtering => _searching || _category != null;
+  bool get _onIncome => _tab == _Tab.income;
   bool get _hasActions => _user.canUpdateMyExpenses || _user.canDeleteMyExpenses;
 
   @override
@@ -89,21 +97,38 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
     });
 
     try {
-      final page = await ApiClient.instance.fetchMyExpenses(
-        year: _year,
-        month: _month,
-        category: _category,
-        search: _searchController.text.trim(),
-      );
-      if (!mounted || generation != _generation) return;
-      setState(() {
-        _expenses = page.expenses;
-        _summary = page.summary;
-        _years = page.years;
-        _filteredTotal = page.filteredTotal;
-        _hasMore = page.hasMore;
-        _page = page.currentPage;
-      });
+      if (_onIncome) {
+        final page = await ApiClient.instance.fetchOtherIncomes(
+          year: _year,
+          month: _month,
+          search: _searchController.text.trim(),
+        );
+        if (!mounted || generation != _generation) return;
+        setState(() {
+          _incomes = page.incomes;
+          _summary = page.summary;
+          _years = page.years;
+          _filteredTotal = page.filteredTotal;
+          _hasMore = page.hasMore;
+          _page = page.currentPage;
+        });
+      } else {
+        final page = await ApiClient.instance.fetchMyExpenses(
+          year: _year,
+          month: _month,
+          category: _category,
+          search: _searchController.text.trim(),
+        );
+        if (!mounted || generation != _generation) return;
+        setState(() {
+          _expenses = page.expenses;
+          _summary = page.summary;
+          _years = page.years;
+          _filteredTotal = page.filteredTotal;
+          _hasMore = page.hasMore;
+          _page = page.currentPage;
+        });
+      }
     } on ApiException catch (e) {
       if (!mounted || generation != _generation) return;
       setState(() => _error = e.message);
@@ -121,20 +146,36 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
     setState(() => _loadingMore = true);
 
     try {
-      final page = await ApiClient.instance.fetchMyExpenses(
-        year: _year,
-        month: _month,
-        category: _category,
-        search: _searchController.text.trim(),
-        page: _page + 1,
-      );
-      if (!mounted || generation != _generation) return;
-      final known = _expenses.map((e) => e.id).toSet();
-      setState(() {
-        _expenses = [..._expenses, ...page.expenses.where((e) => !known.contains(e.id))];
-        _hasMore = page.hasMore;
-        _page = page.currentPage;
-      });
+      if (_onIncome) {
+        final page = await ApiClient.instance.fetchOtherIncomes(
+          year: _year,
+          month: _month,
+          search: _searchController.text.trim(),
+          page: _page + 1,
+        );
+        if (!mounted || generation != _generation) return;
+        final known = _incomes.map((e) => e.id).toSet();
+        setState(() {
+          _incomes = [..._incomes, ...page.incomes.where((e) => !known.contains(e.id))];
+          _hasMore = page.hasMore;
+          _page = page.currentPage;
+        });
+      } else {
+        final page = await ApiClient.instance.fetchMyExpenses(
+          year: _year,
+          month: _month,
+          category: _category,
+          search: _searchController.text.trim(),
+          page: _page + 1,
+        );
+        if (!mounted || generation != _generation) return;
+        final known = _expenses.map((e) => e.id).toSet();
+        setState(() {
+          _expenses = [..._expenses, ...page.expenses.where((e) => !known.contains(e.id))];
+          _hasMore = page.hasMore;
+          _page = page.currentPage;
+        });
+      }
     } catch (_) {
       // Silent — scrolling to the end again retries.
     } finally {
@@ -259,6 +300,70 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
     _load(silent: true);
   }
 
+  /// Switches between the expenses and the other income. A search or category
+  /// belongs to one list, so it is dropped rather than carried to the other.
+  void _setTab(_Tab tab) {
+    if (tab == _tab) return;
+    _debounce?.cancel();
+    _searchController.clear();
+    setState(() {
+      _tab = tab;
+      _category = null;
+    });
+    _load();
+  }
+
+  Future<void> _openIncomeForm({OtherIncome? income}) async {
+    final saved = await Navigator.of(context).push<OtherIncome>(
+      MaterialPageRoute(builder: (_) => IncomeFormScreen(initialDate: _defaultDate, income: income)),
+    );
+    if (saved == null || !mounted) return;
+
+    _snack('${saved.title} ${income == null ? 'added' : 'updated'}.');
+    // Straight to the month it landed in, so it doesn't seem to have vanished.
+    _year = saved.date.year;
+    _month = saved.date.month;
+    _load(silent: true);
+  }
+
+  Future<void> _confirmDeleteIncome(OtherIncome income) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete "${income.title}"?'),
+        content: Text(
+          '${formatRsExact(income.amount)} comes out of ${DateFormat('MMMM y').format(income.date)}\'s '
+          'other income and out of My Profit. This can\'t be undone.',
+        ),
+        actions: [
+          TextButton(
+            key: const Key('keep-income'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep it'),
+          ),
+          TextButton(
+            key: const Key('confirm-delete-income'),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ApiClient.instance.deleteOtherIncome(income.id);
+      if (!mounted) return;
+      _snack('${income.title} deleted.');
+      _load(silent: true);
+    } on ApiException catch (e) {
+      if (mounted) _snack(e.message);
+    } catch (_) {
+      if (mounted) _snack('Could not reach the server. Nothing was deleted.');
+    }
+  }
+
   void _showProfitBreakdown() {
     final summary = _summary;
     if (summary == null) return;
@@ -289,10 +394,10 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
       ),
       floatingActionButton: _user.canCreateMyExpenses
           ? FloatingActionButton.extended(
-              key: const Key('add-expense'),
-              onPressed: () => _openForm(),
+              key: Key(_onIncome ? 'add-income' : 'add-expense'),
+              onPressed: () => _onIncome ? _openIncomeForm() : _openForm(),
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Add Expense'),
+              label: Text(_onIncome ? 'Add Income' : 'Add Expense'),
             )
           : null,
       body: Column(
@@ -302,6 +407,12 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
             onPrevious: () => _stepMonth(-1),
             onNext: () => _stepMonth(1),
             onPick: _pickMonth,
+          ),
+          _TabSwitch(
+            tab: _tab,
+            expenseCount: _summary?.recordCount,
+            incomeCount: _summary?.otherIncomeCount,
+            onChanged: _setTab,
           ),
           const Divider(height: 1),
           Expanded(child: _buildBody()),
@@ -340,11 +451,33 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
           children: [
             _ProfitCard(summary: summary, onTap: _showProfitBreakdown),
             const SizedBox(height: 10),
-            // Same height side by side, whichever caption wraps to more lines.
+            // The three that add up to My Profit, side by side and the same height.
             IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Expanded(
+                    child: _StatCard(
+                      key: const Key('card-profit-before'),
+                      label: 'Profit From Hires',
+                      value: formatRsExact(summary.profitBeforeExpenses),
+                      caption: "Dashboard's Total Profit",
+                      icon: Icons.trending_up_rounded,
+                      color: const Color(0xFF2A78D6),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _StatCard(
+                      key: const Key('card-other-income'),
+                      label: 'Other Income',
+                      value: formatRsExact(summary.otherIncomeTotal),
+                      caption: countOf(summary.otherIncomeCount, 'entry', 'entries'),
+                      icon: Icons.payments_outlined,
+                      color: AppColors.success,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: _StatCard(
                       key: const Key('card-total'),
@@ -353,17 +486,6 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
                       caption: countOf(summary.recordCount, 'record'),
                       icon: Icons.wallet_rounded,
                       color: const Color(0xFFC95A26),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _StatCard(
-                      key: const Key('card-profit-before'),
-                      label: 'Profit Before My Expenses',
-                      value: formatRsExact(summary.profitBeforeExpenses),
-                      caption: "Same as the dashboard's Total Profit",
-                      icon: Icons.trending_up_rounded,
-                      color: const Color(0xFF2A78D6),
                     ),
                   ),
                 ],
@@ -375,7 +497,7 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
               controller: _searchController,
               onChanged: _onSearchChanged,
               decoration: InputDecoration(
-                hintText: 'Search expense or notes…',
+                hintText: _onIncome ? 'Search income or notes…' : 'Search expense or notes…',
                 prefixIcon: const Icon(Icons.search_rounded, size: 20),
                 suffixIcon: _searching
                     ? IconButton(
@@ -391,34 +513,59 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
                     : null,
               ),
             ),
-            if (_categories.isNotEmpty) ...[
+            if (!_onIncome && _categories.isNotEmpty) ...[
               const SizedBox(height: 10),
               _CategoryFilter(categories: _categories, selected: _category, onSelected: _setCategory),
             ],
             const SizedBox(height: 12),
-            if (_expenses.isEmpty)
+            if ((_onIncome ? _incomes : _expenses).isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 28),
                 child: EmptyState(
-                  icon: Icons.wallet_rounded,
-                  title: _filtering ? 'No expenses match' : 'No expenses yet',
+                  icon: _onIncome ? Icons.payments_outlined : Icons.wallet_rounded,
+                  title: _onIncome
+                      ? (_filtering ? 'No income matches' : 'No other income yet')
+                      : (_filtering ? 'No expenses match' : 'No expenses yet'),
                   message: _filtering
-                      ? 'Try a different search or category.'
+                      ? (_onIncome ? 'Try a different search.' : 'Try a different search or category.')
                       : 'Nothing recorded for ${summary.label}.',
                 ),
               )
             else ...[
-              for (final expense in _expenses) ...[
-                _ExpenseTile(
-                  expense: expense,
-                  dateLabel: _shortDate.format(expense.date),
-                  onTap: _user.canUpdateMyExpenses ? () => _openForm(expense: expense) : null,
-                  onEdit: _user.canUpdateMyExpenses ? () => _openForm(expense: expense) : null,
-                  onDelete: _user.canDeleteMyExpenses ? () => _confirmDelete(expense) : null,
-                  showMenu: _hasActions,
-                ),
-                const SizedBox(height: 8),
-              ],
+              if (_onIncome)
+                for (final income in _incomes) ...[
+                  _EntryTile(
+                    keyPrefix: 'income',
+                    id: income.id,
+                    title: income.title,
+                    dateLabel: _shortDate.format(income.date),
+                    notes: income.notes,
+                    amount: income.amount,
+                    amountColor: AppColors.success,
+                    onTap: _user.canUpdateMyExpenses ? () => _openIncomeForm(income: income) : null,
+                    onEdit: _user.canUpdateMyExpenses ? () => _openIncomeForm(income: income) : null,
+                    onDelete: _user.canDeleteMyExpenses ? () => _confirmDeleteIncome(income) : null,
+                    showMenu: _hasActions,
+                  ),
+                  const SizedBox(height: 8),
+                ]
+              else
+                for (final expense in _expenses) ...[
+                  _EntryTile(
+                    keyPrefix: 'expense',
+                    id: expense.id,
+                    title: expense.title,
+                    pillLabel: expense.categoryName,
+                    dateLabel: _shortDate.format(expense.date),
+                    notes: expense.notes,
+                    amount: expense.amount,
+                    onTap: _user.canUpdateMyExpenses ? () => _openForm(expense: expense) : null,
+                    onEdit: _user.canUpdateMyExpenses ? () => _openForm(expense: expense) : null,
+                    onDelete: _user.canDeleteMyExpenses ? () => _confirmDelete(expense) : null,
+                    showMenu: _hasActions,
+                  ),
+                  const SizedBox(height: 8),
+                ],
               if (_hasMore)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12),
@@ -428,7 +575,9 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    'Total of the ${countOf(_expenses.length, 'expense')} shown: ${formatRsExact(_filteredTotal)}',
+                    _onIncome
+                        ? 'Total of the ${countOf(_incomes.length, 'entry', 'entries')} shown: ${formatRsExact(_filteredTotal)}'
+                        : 'Total of the ${countOf(_expenses.length, 'expense')} shown: ${formatRsExact(_filteredTotal)}',
                     key: const Key('filtered-total'),
                     textAlign: TextAlign.end,
                     style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
@@ -536,7 +685,7 @@ class _ProfitCard extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                'After all costs and my expenses · tap for the working',
+                'Hires + other income − my expenses · tap for the working',
                 style: TextStyle(fontSize: 11.5, color: Colors.white.withValues(alpha: 0.75)),
               ),
             ],
@@ -648,18 +797,33 @@ class _CategoryFilter extends StatelessWidget {
   }
 }
 
-class _ExpenseTile extends StatelessWidget {
-  const _ExpenseTile({
-    required this.expense,
+/// One expense or one piece of other income: title, an optional category
+/// pill, the date, notes and the amount — with an Edit / Delete menu when the
+/// user may do either. [keyPrefix] ('expense' / 'income') names its keys.
+class _EntryTile extends StatelessWidget {
+  const _EntryTile({
+    required this.keyPrefix,
+    required this.id,
+    required this.title,
     required this.dateLabel,
+    required this.amount,
     required this.showMenu,
+    this.pillLabel,
+    this.notes,
+    this.amountColor = AppColors.textPrimary,
     this.onTap,
     this.onEdit,
     this.onDelete,
   });
 
-  final MyExpense expense;
+  final String keyPrefix;
+  final int id;
+  final String title;
+  final String? pillLabel;
   final String dateLabel;
+  final String? notes;
+  final double amount;
+  final Color amountColor;
   final bool showMenu;
   final VoidCallback? onTap;
   final VoidCallback? onEdit;
@@ -669,7 +833,7 @@ class _ExpenseTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: InkWell(
-        key: Key('expense-${expense.id}'),
+        key: Key('$keyPrefix-$id'),
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Padding(
@@ -681,21 +845,21 @@ class _ExpenseTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(expense.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
+                    Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
                     const SizedBox(height: 4),
                     Wrap(
                       spacing: 8,
                       runSpacing: 4,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Pill(label: expense.categoryName, color: AppColors.primary),
+                        if (pillLabel != null) Pill(label: pillLabel!, color: AppColors.primary),
                         Text(dateLabel, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
                       ],
                     ),
-                    if (expense.notes != null) ...[
+                    if (notes != null) ...[
                       const SizedBox(height: 4),
                       Text(
-                        expense.notes!,
+                        notes!,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
@@ -708,27 +872,84 @@ class _ExpenseTile extends StatelessWidget {
               Padding(
                 padding: EdgeInsets.only(top: showMenu ? 10 : 0, right: showMenu ? 0 : 8),
                 child: Text(
-                  formatRsExact(expense.amount),
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5),
+                  formatRsExact(amount),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: amountColor),
                 ),
               ),
               if (showMenu)
                 PopupMenuButton<String>(
-                  key: Key('expense-menu-${expense.id}'),
+                  key: Key('$keyPrefix-menu-$id'),
                   tooltip: 'More',
                   icon: const Icon(Icons.more_vert_rounded, size: 20, color: AppColors.textMuted),
                   onSelected: (value) => value == 'edit' ? onEdit?.call() : onDelete?.call(),
                   itemBuilder: (_) => [
                     if (onEdit != null) const PopupMenuItem(value: 'edit', child: Text('Edit')),
                     if (onDelete != null)
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Text('Delete', style: TextStyle(color: AppColors.danger)),
-                      ),
+                      const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: AppColors.danger))),
                   ],
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Expenses 2 | Other Income 1" — the two lists the page switches between.
+class _TabSwitch extends StatelessWidget {
+  const _TabSwitch({required this.tab, required this.onChanged, this.expenseCount, this.incomeCount});
+
+  final _Tab tab;
+  final ValueChanged<_Tab> onChanged;
+  final int? expenseCount;
+  final int? incomeCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.surface,
+      child: Row(
+        children: [
+          Expanded(
+            child: _tab('tab-expenses', 'Expenses', expenseCount, _Tab.expenses),
+          ),
+          Expanded(
+            child: _tab('tab-income', 'Other Income', incomeCount, _Tab.income),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tab(String key, String label, int? count, _Tab value) {
+    final selected = tab == value;
+    final color = selected ? AppColors.primary : AppColors.textSecondary;
+
+    return InkWell(
+      key: Key(key),
+      onTap: () => onChanged(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: selected ? AppColors.primary : Colors.transparent, width: 2.5)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(label, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: color)),
+            if (count != null) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text('$count', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: color)),
+              ),
+            ],
+          ],
         ),
       ),
     );

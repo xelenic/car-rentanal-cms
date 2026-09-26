@@ -83,6 +83,37 @@ DateTime parseCalendarDate(String? value) {
 String formatCalendarDate(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
+/// One piece of the owner's other income — money that isn't a hire (rent
+/// received, interest…). Mirrors Api\Admin\OtherIncomeResource.
+class OtherIncome {
+  const OtherIncome({
+    required this.id,
+    required this.title,
+    required this.amount,
+    required this.date,
+    this.notes,
+  });
+
+  final int id;
+  final String title;
+  final double amount;
+
+  /// A calendar date (no time, no zone).
+  final DateTime date;
+  final String? notes;
+
+  factory OtherIncome.fromJson(Map<String, dynamic> json) {
+    final notes = json['notes'] as String?;
+    return OtherIncome(
+      id: json['id'] as int,
+      title: json['title'] as String? ?? '',
+      amount: _number(json['amount']),
+      date: parseCalendarDate(json['income_date'] as String?),
+      notes: notes != null && notes.trim().isNotEmpty ? notes : null,
+    );
+  }
+}
+
 /// What one category cost in the month.
 class CategoryTotal {
   const CategoryTotal({required this.key, required this.name, required this.total});
@@ -150,6 +181,8 @@ class ExpenseSummary {
     this.total = 0,
     this.recordCount = 0,
     this.profitBeforeExpenses = 0,
+    this.otherIncomeTotal = 0,
+    this.otherIncomeCount = 0,
     this.myProfit = 0,
     this.byCategory = const [],
     this.breakdown = const ProfitBreakdown(),
@@ -160,7 +193,15 @@ class ExpenseSummary {
   final String label;
   final double total;
   final int recordCount;
+
+  /// The month's profit from hires alone — before other income and my expenses.
   final double profitBeforeExpenses;
+
+  /// Money received that isn't a hire (rent, interest…) — added to My Profit.
+  final double otherIncomeTotal;
+  final int otherIncomeCount;
+
+  /// [profitBeforeExpenses] + [otherIncomeTotal] − [total].
   final double myProfit;
   final List<CategoryTotal> byCategory;
   final ProfitBreakdown breakdown;
@@ -173,6 +214,8 @@ class ExpenseSummary {
       total: _number(json['total']),
       recordCount: _int(json['record_count']),
       profitBeforeExpenses: _number(json['profit_before_expenses']),
+      otherIncomeTotal: _number(json['other_income_total']),
+      otherIncomeCount: _int(json['other_income_count']),
       myProfit: _number(json['my_profit']),
       byCategory: (json['by_category'] as List<dynamic>? ?? [])
           .map((e) => CategoryTotal.fromJson(e as Map<String, dynamic>))
@@ -210,6 +253,43 @@ class MyExpensePage {
     final meta = json['meta'] as Map<String, dynamic>?;
     return MyExpensePage(
       expenses: (json['data'] as List<dynamic>? ?? []).map((e) => MyExpense.fromJson(e as Map<String, dynamic>)).toList(),
+      currentPage: (meta?['current_page'] as int?) ?? 1,
+      lastPage: (meta?['last_page'] as int?) ?? 1,
+      summary: ExpenseSummary.fromJson(json['summary'] as Map<String, dynamic>? ?? const {}),
+      filteredTotal: _number(json['filtered_total']),
+      years: (json['years'] as List<dynamic>? ?? []).map((e) => _int(e)).toList(),
+    );
+  }
+}
+
+/// A page of a month's other income from GET /admin/other-incomes — with the
+/// same month summary as the expenses list, so the cards stay right whichever
+/// tab is open.
+class OtherIncomePage {
+  const OtherIncomePage({
+    required this.incomes,
+    required this.currentPage,
+    required this.lastPage,
+    required this.summary,
+    required this.filteredTotal,
+    required this.years,
+  });
+
+  final List<OtherIncome> incomes;
+  final int currentPage;
+  final int lastPage;
+  final ExpenseSummary summary;
+
+  /// The total of everything the current search matches (the whole month when nothing is searched).
+  final double filteredTotal;
+  final List<int> years;
+
+  bool get hasMore => currentPage < lastPage;
+
+  factory OtherIncomePage.fromJson(Map<String, dynamic> json) {
+    final meta = json['meta'] as Map<String, dynamic>?;
+    return OtherIncomePage(
+      incomes: (json['data'] as List<dynamic>? ?? []).map((e) => OtherIncome.fromJson(e as Map<String, dynamic>)).toList(),
       currentPage: (meta?['current_page'] as int?) ?? 1,
       lastPage: (meta?['last_page'] as int?) ?? 1,
       summary: ExpenseSummary.fromJson(json['summary'] as Map<String, dynamic>? ?? const {}),

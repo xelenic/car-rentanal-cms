@@ -388,6 +388,64 @@ class ApiClient {
     throw ApiException(_extractError(response));
   }
 
+  /// One month's other income (this month when [year]/[month] are omitted), a
+  /// page at a time, with the cards' figures for the whole month.
+  Future<OtherIncomePage> fetchOtherIncomes({int? year, int? month, String? search, int page = 1}) async {
+    final uri = Uri.parse('$baseUrl/admin/other-incomes').replace(
+      queryParameters: {
+        if (year != null) 'year': '$year',
+        if (month != null) 'month': '$month',
+        if (search != null && search.isNotEmpty) 'search': search,
+        'page': '$page',
+      },
+    );
+    final response = await _http.get(uri, headers: await _headers(auth: true));
+
+    if (response.statusCode == 200) {
+      return OtherIncomePage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// Adds a piece of other income, or — given [id] — saves changes to one.
+  Future<OtherIncome> saveOtherIncome({
+    int? id,
+    required String title,
+    required String amount,
+    required DateTime date,
+    String? notes,
+  }) async {
+    final body = jsonEncode({
+      'title': title,
+      'amount': amount,
+      'income_date': formatCalendarDate(date),
+      'notes': (notes ?? '').trim().isEmpty ? null : notes!.trim(),
+    });
+    final headers = await _headers(auth: true);
+    final response = id == null
+        ? await _http.post(Uri.parse('$baseUrl/admin/other-incomes'), headers: headers, body: body)
+        : await _http.put(Uri.parse('$baseUrl/admin/other-incomes/$id'), headers: headers, body: body);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return OtherIncome.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  Future<void> deleteOtherIncome(int id) async {
+    final response = await _http.delete(
+      Uri.parse('$baseUrl/admin/other-incomes/$id'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 204) return;
+
+    throw ApiException(_extractError(response));
+  }
+
   /// Every expense category A to Z, each with how many expenses are filed under it.
   Future<List<ExpenseCategory>> fetchExpenseCategories() async {
     final response = await _http.get(

@@ -512,7 +512,7 @@
                 <ul class="sidebar-nav">
                     <li>
                         <a class="nav-link {{ request()->routeIs('admin.my-expenses.*') ? 'active' : '' }}" href="{{ route('admin.my-expenses.index') }}">
-                            <i class="bi bi-wallet2"></i> My Expenses
+                            <i class="bi bi-wallet2"></i> My Expenses &amp; Income
                         </a>
                     </li>
                 </ul>

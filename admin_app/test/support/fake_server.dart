@@ -24,13 +24,17 @@ class FakeServer {
     this.pageSize = 20,
     List<Map<String, dynamic>>? expenses,
     List<Map<String, dynamic>>? expenseCategories,
+    List<Map<String, dynamic>>? incomes,
     this.profitBeforeExpenses = 6400,
+    this.otherIncomeTotal = 0,
+    this.otherIncomeCount = 0,
     Map<int, Map<String, dynamic>>? periods,
     Map<String, Map<String, dynamic>>? statsByPeriod,
   })  : vehicles = vehicles ?? [],
         hires = hires ?? {},
         expenses = expenses ?? [],
         expenseCategories = expenseCategories ?? defaultExpenseCategories(),
+        incomes = incomes ?? [],
         periods = periods ?? {},
         statsByPeriod = statsByPeriod ?? {};
 
@@ -54,8 +58,15 @@ class FakeServer {
   final List<Map<String, dynamic>> expenses;
   final List<Map<String, dynamic>> expenseCategories;
 
-  /// The month's profit before the owner's own expenses — whatever month is asked for.
+  /// The owner's other income, in the API's shape.
+  final List<Map<String, dynamic>> incomes;
+
+  /// The month's profit from hires — whatever month is asked for.
   num profitBeforeExpenses;
+
+  /// Other income (not a hire) for whatever month is asked for; it is added to My Profit.
+  num otherIncomeTotal;
+  int otherIncomeCount;
 
 
   /// Per vehicle id: the {years, months_by_year} the periods endpoint answers with.
@@ -74,6 +85,8 @@ class FakeServer {
   final List<int> deletedHires = [];
   final List<({int? id, Map<String, dynamic> body})> savedExpenses = [];
   final List<int> deletedExpenses = [];
+  final List<({int? id, Map<String, dynamic> body})> savedIncomes = [];
+  final List<int> deletedIncomes = [];
   final List<String> createdCategories = [];
   final List<({int id, String name})> renamedCategories = [];
   final List<int> deletedCategories = [];
@@ -134,22 +147,27 @@ class FakeServer {
   String _categoryName(String key) =>
       expenseCategories.where((c) => c['key'] == key).map((c) => c['name'] as String).firstOrNull ?? key;
 
-  http.Response _expensesList(http.Request request) {
+  ({int year, int month, int page, String search}) _period(http.Request request) {
     final q = request.url.queryParameters;
     final now = DateTime.now();
-    final year = int.parse(q['year'] ?? '${now.year}');
-    final month = int.parse(q['month'] ?? '${now.month}');
-    final page = int.parse(q['page'] ?? '1');
-    final tag = '$year-${month.toString().padLeft(2, '0')}';
+    return (
+      year: int.parse(q['year'] ?? '${now.year}'),
+      month: int.parse(q['month'] ?? '${now.month}'),
+      page: int.parse(q['page'] ?? '1'),
+      search: (q['search'] ?? '').toLowerCase(),
+    );
+  }
 
-    final inMonth = expenses.where((e) => (e['expense_date'] as String).startsWith(tag)).toList();
+  static bool _inMonth(Map<String, dynamic> row, String dateKey, int year, int month) =>
+      (row[dateKey] as String).startsWith('$year-${month.toString().padLeft(2, '0')}');
+
+  /// The cards' figures for one month, worked out from what is in the fake's lists
+  /// (plus whatever fixed [otherIncomeTotal] / [otherIncomeCount] a test set).
+  Map<String, dynamic> _summary(int year, int month) {
+    final inMonth = expenses.where((e) => _inMonth(e, 'expense_date', year, month)).toList();
     final total = inMonth.fold<double>(0, (sum, e) => sum + (e['amount'] as num));
-    final search = (q['search'] ?? '').toLowerCase();
-    final matching = inMonth
-        .where((e) => q['category'] == null || e['category'] == q['category'])
-        .where((e) => search.isEmpty || '${e['title']} ${e['notes'] ?? ''}'.toLowerCase().contains(search))
-        .toList()
-      ..sort((a, b) => (b['expense_date'] as String).compareTo(a['expense_date'] as String));
+    final incomeInMonth = incomes.where((i) => _inMonth(i, 'income_date', year, month)).toList();
+    final income = otherIncomeTotal + incomeInMonth.fold<double>(0, (sum, i) => sum + (i['amount'] as num));
 
     final byCategory = <String, double>{};
     for (final e in inMonth) {
@@ -157,33 +175,109 @@ class FakeServer {
     }
     final sorted = byCategory.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
 
-    final start = (page - 1) * pageSize;
+    return {
+      'year': year,
+      'month': month,
+      'label': '${_monthNames[month - 1]} $year',
+      'total': total,
+      'record_count': inMonth.length,
+      'profit_before_expenses': profitBeforeExpenses,
+      'other_income_total': income,
+      'other_income_count': otherIncomeCount + incomeInMonth.length,
+      'my_profit': profitBeforeExpenses + income - total,
+      'by_category': [for (final e in sorted) {'key': e.key, 'name': _categoryName(e.key), 'total': e.value}],
+      'breakdown': {
+        'our_hire_value_total': 8000,
+        'expenses_total': 0,
+        'net_before_salary': 8000,
+        'salary_percentage': 20,
+        'salary_total': 1600,
+        'leasing_installment_total': 0,
+        'repair_cost_total': 0,
+        'profit_total': profitBeforeExpenses,
+      },
+    };
+  }
+
+  List<int> _years(int year) {
+    int yearOf(Map<String, dynamic> row, String key) => int.parse((row[key] as String).substring(0, 4));
+    return {
+      DateTime.now().year,
+      year,
+      ...expenses.map((e) => yearOf(e, 'expense_date')),
+      ...incomes.map((i) => yearOf(i, 'income_date')),
+    }.toList()
+      ..sort((a, b) => b.compareTo(a));
+  }
+
+  http.Response _expensesList(http.Request request) {
+    final q = request.url.queryParameters;
+    final p = _period(request);
+
+    final matching = expenses
+        .where((e) => _inMonth(e, 'expense_date', p.year, p.month))
+        .where((e) => q['category'] == null || e['category'] == q['category'])
+        .where((e) => p.search.isEmpty || '${e['title']} ${e['notes'] ?? ''}'.toLowerCase().contains(p.search))
+        .toList()
+      ..sort((a, b) => (b['expense_date'] as String).compareTo(a['expense_date'] as String));
+
+    final start = (p.page - 1) * pageSize;
     return _json({
       'data': matching.skip(start).take(pageSize).toList(),
-      'meta': {'current_page': page, 'last_page': (matching.length / pageSize).ceil().clamp(1, 999)},
-      'summary': {
-        'year': year,
-        'month': month,
-        'label': '${_monthNames[month - 1]} $year',
-        'total': total,
-        'record_count': inMonth.length,
-        'profit_before_expenses': profitBeforeExpenses,
-        'my_profit': profitBeforeExpenses - total,
-        'by_category': [for (final e in sorted) {'key': e.key, 'name': _categoryName(e.key), 'total': e.value}],
-        'breakdown': {
-          'our_hire_value_total': 8000,
-          'expenses_total': 0,
-          'net_before_salary': 8000,
-          'salary_percentage': 20,
-          'salary_total': 1600,
-          'leasing_installment_total': 0,
-          'repair_cost_total': 0,
-          'profit_total': profitBeforeExpenses,
-        },
-      },
+      'meta': {'current_page': p.page, 'last_page': (matching.length / pageSize).ceil().clamp(1, 999)},
+      'summary': _summary(p.year, p.month),
       'filtered_total': matching.fold<double>(0, (sum, e) => sum + (e['amount'] as num)),
-      'years': ({now.year, year, ...expenses.map((e) => int.parse((e['expense_date'] as String).substring(0, 4)))}.toList()..sort((a, b) => b.compareTo(a))),
+      'years': _years(p.year),
     });
+  }
+
+  http.Response _incomesList(http.Request request) {
+    final p = _period(request);
+
+    final matching = incomes
+        .where((i) => _inMonth(i, 'income_date', p.year, p.month))
+        .where((i) => p.search.isEmpty || '${i['title']} ${i['notes'] ?? ''}'.toLowerCase().contains(p.search))
+        .toList()
+      ..sort((a, b) => (b['income_date'] as String).compareTo(a['income_date'] as String));
+
+    final start = (p.page - 1) * pageSize;
+    return _json({
+      'data': matching.skip(start).take(pageSize).toList(),
+      'meta': {'current_page': p.page, 'last_page': (matching.length / pageSize).ceil().clamp(1, 999)},
+      'summary': _summary(p.year, p.month),
+      'filtered_total': matching.fold<double>(0, (sum, i) => sum + (i['amount'] as num)),
+      'years': _years(p.year),
+    });
+  }
+
+  http.Response _incomeSave(http.Request request, int? id) {
+    final body = jsonDecode(request.body) as Map<String, dynamic>;
+    savedIncomes.add((id: id, body: body));
+
+    http.Response invalid(String field, String message) =>
+        _json({'message': message, 'errors': {field: [message]}}, 422);
+
+    if (((body['title'] ?? '') as String).trim().isEmpty) return invalid('title', 'The title field is required.');
+    final amount = num.tryParse('${body['amount']}');
+    if (amount == null || amount <= 0) return invalid('amount', 'The amount field must be at least 0.01.');
+
+    final saved = {
+      'id': id ?? (incomes.map((i) => i['id'] as int).fold<int>(0, (a, b) => a > b ? a : b)) + 1,
+      'title': (body['title'] as String).trim(),
+      'amount': amount,
+      'income_date': body['income_date'],
+      'notes': body['notes'],
+    };
+
+    if (id == null) {
+      incomes.add(saved);
+    } else {
+      final index = incomes.indexWhere((i) => i['id'] == id);
+      if (index < 0) return _json({'message': 'Not found.'}, 404);
+      incomes[index] = saved;
+    }
+
+    return _json({'data': saved}, id == null ? 201 : 200);
   }
 
   static const _monthNames = [
@@ -272,6 +366,19 @@ class FakeServer {
       expenses.remove(found);
       deletedExpenses.add(id);
       return _json({'message': 'Expense "${found['title']}" was deleted.'});
+    }
+
+    if (path == '/admin/other-incomes' && request.method == 'GET') return _incomesList(request);
+    if (path == '/admin/other-incomes' && request.method == 'POST') return _incomeSave(request, null);
+    final incomeOne = RegExp(r'^/admin/other-incomes/(\d+)$').firstMatch(path);
+    if (incomeOne != null && request.method == 'PUT') return _incomeSave(request, int.parse(incomeOne.group(1)!));
+    if (incomeOne != null && request.method == 'DELETE') {
+      final id = int.parse(incomeOne.group(1)!);
+      final found = incomes.where((i) => i['id'] == id).firstOrNull;
+      if (found == null) return _json({'message': 'Not found.'}, 404);
+      incomes.remove(found);
+      deletedIncomes.add(id);
+      return _json({'message': 'Income "${found['title']}" was deleted.'});
     }
 
     if (path == '/admin/my-expense-categories' && request.method == 'GET') {
@@ -641,3 +748,13 @@ Map<String, dynamic> expenseJson({
 /// A day of the given month, as the API writes dates: "2026-09-05".
 String dayOf(DateTime month, int day) =>
     '${month.year.toString().padLeft(4, '0')}-${month.month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+
+/// A piece of other income in the API's shape.
+Map<String, dynamic> incomeJson({
+  required int id,
+  String title = 'ZZZ Shop rent',
+  num amount = 1000,
+  required String date,
+  String? notes,
+}) =>
+    {'id': id, 'title': title, 'amount': amount, 'income_date': date, 'notes': notes};

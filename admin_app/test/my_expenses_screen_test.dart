@@ -72,7 +72,7 @@ void main() {
       expect(find.text('My Profit · $_thisMonthLabel'), findsOneWidget);
     });
 
-    testWidgets('show the month\'s total, record count and the profit before my expenses', (tester) async {
+    testWidgets('show the month\'s total, record count and the profit from hires', (tester) async {
       await _show(tester, _server());
 
       final total = find.byKey(const Key('card-total'));
@@ -300,7 +300,8 @@ void main() {
       expect(inSheet('-Rs. 1,600.00'), findsOneWidget);
       expect(inSheet('Less: Leasing Installments'), findsOneWidget);
       expect(inSheet('Less: Vehicle Repair Cost'), findsOneWidget);
-      expect(inSheet('Profit Before My Expenses'), findsOneWidget);
+      expect(inSheet('Profit From Hires'), findsOneWidget);
+      expect(inSheet('Add: Other Income (0 entries)'), findsOneWidget);
       expect(inSheet('Rs. 6,400.00'), findsOneWidget);
       // My expenses by category, biggest first.
       expect(inSheet('Rent'), findsOneWidget);
@@ -309,7 +310,44 @@ void main() {
       expect(inSheet('-Rs. 499.50'), findsOneWidget);
       expect(inSheet('Total My Expenses'), findsOneWidget);
       expect(find.byKey(const Key('breakdown-my-profit')), findsOneWidget);
-      expect(inSheet('Profit Before My Expenses (Rs. 6,400.00) − My Expenses (Rs. 2,000.00) = Rs. 4,400.00.'), findsOneWidget);
+      expect(
+        inSheet('Profit From Hires (Rs. 6,400.00) + Other Income (Rs. 0.00) − My Expenses (Rs. 2,000.00) = Rs. 4,400.00.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('adds other income into My Profit and shows it as its own line', (tester) async {
+      final server = _server()
+        ..otherIncomeTotal = 1750.5
+        ..otherIncomeCount = 2;
+      await _show(tester, server);
+
+      // 6,400 + 1,750.50 - 2,000
+      expect(find.descendant(of: find.byKey(const Key('card-my-profit')), matching: find.text('Rs. 6,150.50')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('card-my-profit')));
+      await tester.pumpAndSettle();
+
+      final sheet = find.byType(ProfitBreakdownSheet);
+      Finder inSheet(String text) => find.descendant(of: sheet, matching: find.text(text));
+      expect(inSheet('Add: Other Income (2 entries)'), findsOneWidget);
+      expect(inSheet('+Rs. 1,750.50'), findsOneWidget);
+      expect(
+        inSheet('Profit From Hires (Rs. 6,400.00) + Other Income (Rs. 1,750.50) − My Expenses (Rs. 2,000.00) = Rs. 6,150.50.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('says "1 entry" for a single piece of other income', (tester) async {
+      final server = _server()
+        ..otherIncomeTotal = 500
+        ..otherIncomeCount = 1;
+      await _show(tester, server);
+
+      await tester.tap(find.byKey(const Key('card-my-profit')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add: Other Income (1 entry)'), findsOneWidget);
     });
 
     testWidgets('says when there are no expenses to take off', (tester) async {

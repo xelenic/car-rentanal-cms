@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Api\Admin\HireController as AdminHireController;
 use App\Http\Controllers\Api\Admin\MyExpenseCategoryController as AdminMyExpenseCategoryController;
 use App\Http\Controllers\Api\Admin\MyExpenseController as AdminMyExpenseController;
+use App\Http\Controllers\Api\Admin\OtherIncomeController as AdminOtherIncomeController;
 use App\Http\Controllers\Api\Admin\PlaceController as AdminPlaceController;
 use App\Http\Controllers\Api\Admin\VehicleController as AdminVehicleController;
 use App\Http\Controllers\Api\AuthController;
@@ -79,6 +80,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/admin/my-expenses', [AdminMyExpenseController::class, 'store']);
     Route::put('/admin/my-expenses/{myExpense}', [AdminMyExpenseController::class, 'update']);
     Route::delete('/admin/my-expenses/{myExpense}', [AdminMyExpenseController::class, 'destroy']);
+    Route::get('/admin/other-incomes', [AdminOtherIncomeController::class, 'index']);
+    Route::post('/admin/other-incomes', [AdminOtherIncomeController::class, 'store']);
+    Route::put('/admin/other-incomes/{otherIncome}', [AdminOtherIncomeController::class, 'update']);
+    Route::delete('/admin/other-incomes/{otherIncome}', [AdminOtherIncomeController::class, 'destroy']);
     Route::get('/admin/my-expense-categories', [AdminMyExpenseCategoryController::class, 'index']);
     Route::post('/admin/my-expense-categories', [AdminMyExpenseCategoryController::class, 'store']);
     Route::put('/admin/my-expense-categories/{myExpenseCategory}', [AdminMyExpenseCategoryController::class, 'update']);

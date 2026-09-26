@@ -93,18 +93,18 @@ describe('access', function () {
 });
 
 describe('the sidebar', function () {
-    it('links to My Expenses for someone who may view them', function () {
+    it('links to My Expenses & Income for someone who may view them', function () {
         ownerSignedIn();
 
         $this->get('/admin')->assertOk()
-            ->assertSee('My Expenses')
+            ->assertSee('My Expenses &amp; Income', false)
             ->assertSee(route('admin.my-expenses.index'), false);
     });
 
     it('does not show it to someone who may not', function () {
         ownerSignedIn(['hires.view']);
 
-        $this->get('/admin/expenses')->assertOk()->assertDontSee('My Expenses');
+        $this->get('/admin/expenses')->assertOk()->assertDontSee('My Expenses &amp; Income', false)->assertDontSee('My Expenses');
     });
 
     it('marks it active on its own page', function () {
@@ -117,6 +117,14 @@ describe('the sidebar', function () {
 });
 
 describe('the page', function () {
+    it('is called My Expenses & Income, in the heading and the browser tab', function () {
+        ownerSignedIn();
+
+        $this->get('/admin/my-expenses')->assertOk()
+            ->assertSee('<h1>My Expenses &amp; Income</h1>', false)
+            ->assertSee('<title>My Expenses &amp; Income · Car Rental CMS</title>', false);
+    });
+
     it('opens on the current month', function () {
         ownerSignedIn();
 
@@ -360,9 +368,10 @@ describe('my profit', function () {
             ->assertSee('Less: Driver Salary (20%)')
             ->assertSee('Less: Leasing Installments')
             ->assertSee('Less: Vehicle Repair Cost')
-            ->assertSee('Profit Before My Expenses')
+            ->assertSee('Profit From Hires')
+            ->assertSee('Add: Other Income')
             ->assertSee('Less: My Expenses')
-            ->assertSeeInOrder(['Profit Before My Expenses (Rs. 6,400.00)', '− My Expenses (Rs. 1,000.00)', '= Rs. 5,400.00.']);
+            ->assertSeeInOrder(['Profit From Hires (Rs. 6,400.00)', '+ Other Income (Rs. 0.00)', '− My Expenses (Rs. 1,000.00)', '= Rs. 5,400.00.']);
     });
 
     it('is worked out by the same calculator the dashboard uses', function () {

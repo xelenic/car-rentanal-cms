@@ -37,6 +37,52 @@ void main() {
     });
   });
 
+  group('OtherIncome.fromJson', () {
+    test('reads a piece of other income', () {
+      final income = OtherIncome.fromJson(
+        incomeJson(id: 4, title: 'ZZZ Shop rent', amount: 1500.5, date: '2026-09-12', notes: 'ZZZ keys'),
+      );
+
+      expect(income.id, 4);
+      expect(income.title, 'ZZZ Shop rent');
+      expect(income.amount, 1500.5);
+      expect(income.date, DateTime(2026, 9, 12));
+      expect(income.notes, 'ZZZ keys');
+    });
+
+    test('treats blank notes as none, and takes an amount that arrives as text', () {
+      final income = OtherIncome.fromJson({...incomeJson(id: 1, date: '2026-09-12', notes: '  '), 'amount': '250.75'});
+
+      expect(income.notes, isNull);
+      expect(income.amount, 250.75);
+    });
+  });
+
+  test('OtherIncomePage reads the list, paging, filtered total, years and the month summary', () {
+    final page = OtherIncomePage.fromJson({
+      'data': [incomeJson(id: 1, date: '2026-09-02')],
+      'meta': {'current_page': 2, 'last_page': 3},
+      'summary': {
+        'year': 2026,
+        'month': 9,
+        'label': 'September 2026',
+        'other_income_total': 1750.5,
+        'other_income_count': 2,
+        'my_profit': 6150.5,
+      },
+      'filtered_total': 1500,
+      'years': [2026, 2025],
+    });
+
+    expect(page.incomes, hasLength(1));
+    expect(page.currentPage, 2);
+    expect(page.hasMore, isTrue);
+    expect(page.filteredTotal, 1500);
+    expect(page.years, [2026, 2025]);
+    expect(page.summary.otherIncomeTotal, 1750.5);
+    expect(page.summary.myProfit, 6150.5);
+  });
+
   group('calendar dates', () {
     test('are read as that day, whatever the time zone', () {
       final date = parseCalendarDate('2026-09-12');
@@ -80,7 +126,9 @@ void main() {
       'total': 2000,
       'record_count': 2,
       'profit_before_expenses': 6400,
-      'my_profit': 4400,
+      'other_income_total': 1750.5,
+      'other_income_count': 2,
+      'my_profit': 6150.5,
       'by_category': [
         {'key': 'rent', 'name': 'Rent', 'total': 1500.5},
         {'key': 'fuel', 'name': 'Fuel', 'total': 499.5},
@@ -100,7 +148,10 @@ void main() {
     expect(summary.label, 'September 2026');
     expect(summary.total, 2000);
     expect(summary.recordCount, 2);
-    expect(summary.myProfit, 4400);
+    expect(summary.myProfit, 6150.5);
+    expect(summary.profitBeforeExpenses, 6400);
+    expect(summary.otherIncomeTotal, 1750.5);
+    expect(summary.otherIncomeCount, 2);
     expect(summary.byCategory.map((c) => c.name), ['Rent', 'Fuel']);
     expect(summary.byCategory.first.total, 1500.5);
     expect(summary.breakdown.salaryPercentage, 20);
@@ -112,6 +163,8 @@ void main() {
     final summary = ExpenseSummary.fromJson({'year': 2026, 'month': 9, 'label': 'September 2026'});
 
     expect(summary.total, 0);
+    expect(summary.otherIncomeTotal, 0);
+    expect(summary.otherIncomeCount, 0);
     expect(summary.byCategory, isEmpty);
     expect(summary.breakdown.profitTotal, 0);
   });

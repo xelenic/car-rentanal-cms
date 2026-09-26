@@ -3,6 +3,7 @@
 use App\Models\Hire;
 use App\Models\MyExpense;
 use App\Models\MyExpenseCategory;
+use App\Models\OtherIncome;
 use App\Models\User;
 use App\Services\MyExpenseReport;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -142,6 +143,32 @@ describe('a month of expenses', function () {
             ->assertJsonPath('summary.profit_before_expenses', 6400)
             ->assertJsonPath('summary.total', 1250.5)
             ->assertJsonPath('summary.my_profit', 5149.5);
+    });
+
+    it('adds other income to My Profit, and reports it', function () {
+        apiOwner();
+        apiProfitableHire(8000); // profit 6,400
+        apiExpense(['amount' => 1000]);
+        OtherIncome::create(['title' => 'ZZZ Shop rent', 'amount' => 1500, 'income_date' => '2026-09-08']);
+        OtherIncome::create(['title' => 'ZZZ Interest', 'amount' => 250.5, 'income_date' => '2026-09-20']);
+        OtherIncome::create(['title' => 'ZZZ last month', 'amount' => 9999, 'income_date' => '2026-08-20']);
+
+        $this->getJson('/api/admin/my-expenses')->assertOk()
+            ->assertJsonPath('summary.profit_before_expenses', 6400)
+            ->assertJsonPath('summary.other_income_total', 1750.5)
+            ->assertJsonPath('summary.other_income_count', 2)
+            ->assertJsonPath('summary.total', 1000)
+            ->assertJsonPath('summary.my_profit', 7150.5); // 6,400 + 1,750.50 - 1,000
+    });
+
+    it('reports no other income as zero', function () {
+        apiOwner();
+        apiProfitableHire(8000);
+
+        $this->getJson('/api/admin/my-expenses')->assertOk()
+            ->assertJsonPath('summary.other_income_total', 0)
+            ->assertJsonPath('summary.other_income_count', 0)
+            ->assertJsonPath('summary.my_profit', 6400);
     });
 
     it('matches the dashboard\'s Total Profit and the web page', function () {

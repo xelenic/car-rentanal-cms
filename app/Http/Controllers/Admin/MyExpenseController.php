@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\MyExpense;
 use App\Models\MyExpenseCategory;
+use App\Models\OtherIncome;
 use App\Services\MyExpenseReport;
 use App\Services\MyExpenseService;
 use Illuminate\Http\RedirectResponse;
@@ -15,8 +16,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 /**
- * The owner's own expenses, month by month, and what's left of the month's
- * profit once they're paid (see ProfitCalculator for the profit itself).
+ * The owner's own expenses and other income, month by month, and My Profit —
+ * the month's profit from hires plus other income, less the expenses (see
+ * ProfitCalculator and MyExpenseReport). One page, two tabs; the expenses
+ * and the other income are edited by the same permissions.
  */
 class MyExpenseController extends Controller implements HasMiddleware
 {
@@ -36,26 +39,40 @@ class MyExpenseController extends Controller implements HasMiddleware
     {
         $now = now();
         [$year, $month] = MyExpenseReport::periodFrom($request->integer('year') ?: null, $request->has('month') ? $request->integer('month') : null);
+        $tab = $request->string('tab')->toString() === 'income' ? 'income' : 'expenses';
         $categoryList = MyExpenseCategory::query()->withCount('expenses')->orderBy('name')->get();
         $categories = $categoryList->pluck('name', 'key');
         $category = $request->string('category')->toString();
-        $category = $categories->has($category) ? $category : null;
+        // A category only narrows the expenses; on the income tab it is ignored.
+        $category = $tab === 'expenses' && $categories->has($category) ? $category : null;
         $search = $request->string('search')->toString();
 
         $report = MyExpenseReport::forMonth($year, $month);
 
-        $listQuery = MyExpense::query()->inMonth($year, $month)->matching($category, $search);
+        // Only the tab on show is listed, and paged.
+        $expenses = null;
+        $filteredTotal = 0.0;
+        $incomes = null;
+        $filteredIncomeTotal = 0.0;
 
-        $expenses = (clone $listQuery)
-            ->with('categoryRecord')
-            ->orderByDesc('expense_date')
-            ->orderByDesc('id')
-            ->paginate(15)
-            ->withQueryString();
+        if ($tab === 'income') {
+            $incomeQuery = OtherIncome::query()->inMonth($year, $month)->matching($search);
+            $incomes = (clone $incomeQuery)->orderByDesc('income_date')->orderByDesc('id')->paginate(15)->withQueryString();
+            $filteredIncomeTotal = round((float) $incomeQuery->sum('amount'), 2);
+        } else {
+            $listQuery = MyExpense::query()->inMonth($year, $month)->matching($category, $search);
+            $expenses = (clone $listQuery)->with('categoryRecord')->orderByDesc('expense_date')->orderByDesc('id')->paginate(15)->withQueryString();
+            $filteredTotal = round((float) $listQuery->sum('amount'), 2);
+        }
 
         return view('admin.my-expenses.index', [
+            'tab' => $tab,
             'expenses' => $expenses,
-            'filteredTotal' => round((float) $listQuery->sum('amount'), 2),
+            'filteredTotal' => $filteredTotal,
+            'incomes' => $incomes,
+            'filteredIncomeTotal' => $filteredIncomeTotal,
+            'otherIncomeTotal' => $report['other_income_total'],
+            'otherIncomeCount' => $report['other_income_count'],
             'total' => $report['total'],
             'recordCount' => $report['record_count'],
             'byCategory' => $report['by_category'],

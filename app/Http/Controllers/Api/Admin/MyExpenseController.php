@@ -11,7 +11,6 @@ use App\Services\MyExpenseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -51,7 +50,6 @@ class MyExpenseController extends Controller
         // An unknown category is treated as no category, like the web page does.
         $category = isset($filters['category']) && $categories->has($filters['category']) ? $filters['category'] : null;
 
-        $report = MyExpenseReport::forMonth($year, $month);
         $listQuery = MyExpense::query()->inMonth($year, $month)->matching($category, $filters['search'] ?? null);
 
         $expenses = (clone $listQuery)
@@ -61,25 +59,7 @@ class MyExpenseController extends Controller
             ->paginate((int) ($filters['per_page'] ?? self::PER_PAGE));
 
         return MyExpenseResource::collection($expenses)->additional([
-            'summary' => [
-                'year' => $year,
-                'month' => $month,
-                'label' => now()->setDate($year, $month, 1)->format('F Y'),
-                'total' => $report['total'],
-                'record_count' => $report['record_count'],
-                'profit_before_expenses' => $report['profit_before_expenses'],
-                'my_profit' => $report['my_profit'],
-                'by_category' => $report['by_category']->map(fn (float $total, string $key) => [
-                    'key' => $key,
-                    'name' => $categories->get($key) ?? str($key)->headline()->toString(),
-                    'total' => $total,
-                ])->values(),
-                // The working behind the profit figure, for the "how is this worked out" sheet.
-                'breakdown' => Arr::only($report['profit'], [
-                    'our_hire_value_total', 'expenses_total', 'net_before_salary', 'salary_percentage',
-                    'salary_total', 'leasing_installment_total', 'repair_cost_total', 'profit_total',
-                ]),
-            ],
+            'summary' => MyExpenseReport::summaryFor($year, $month, $categories),
             'filtered_total' => round((float) $listQuery->sum('amount'), 2),
             'years' => MyExpenseReport::availableYears($year),
         ]);

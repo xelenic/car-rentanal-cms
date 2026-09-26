@@ -4,9 +4,9 @@ import '../models/my_expense.dart';
 import '../theme/app_theme.dart';
 import '../util/format.dart';
 
-/// "How is My Profit worked out": the month's profit line by line, then the
-/// owner's own expenses by category, down to My Profit — the same working as
-/// the web panel's "Full Calculation".
+/// "How is My Profit worked out": the month's profit from hires line by line,
+/// plus other income, then the owner's own expenses by category, down to My
+/// Profit — the same working as the web panel's "Full Calculation".
 class ProfitBreakdownSheet extends StatelessWidget {
   const ProfitBreakdownSheet({super.key, required this.summary});
 
@@ -34,7 +34,12 @@ class ProfitBreakdownSheet extends StatelessWidget {
             _line('Less: Leasing Installments', '-${formatRsExact(b.leasingInstallmentTotal)}', negative: true),
             _line('Less: Vehicle Repair Cost', '-${formatRsExact(b.repairCostTotal)}', negative: true),
             const Divider(height: 22),
-            _line('Profit Before My Expenses', formatRsExact(summary.profitBeforeExpenses), bold: true),
+            _line('Profit From Hires', formatRsExact(summary.profitBeforeExpenses), bold: true),
+            _line(
+              'Add: Other Income (${countOf(summary.otherIncomeCount, 'entry', 'entries')})',
+              '+${formatRsExact(summary.otherIncomeTotal)}',
+              positive: true,
+            ),
             const SizedBox(height: 10),
             const Text('Less: My Expenses', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
             const SizedBox(height: 4),
@@ -73,7 +78,8 @@ class ProfitBreakdownSheet extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              'Profit Before My Expenses (${formatRsExact(summary.profitBeforeExpenses)}) '
+              'Profit From Hires (${formatRsExact(summary.profitBeforeExpenses)}) '
+              '+ Other Income (${formatRsExact(summary.otherIncomeTotal)}) '
               '− My Expenses (${formatRsExact(summary.total)}) = ${formatRsExact(summary.myProfit)}.',
               style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
             ),
@@ -83,7 +89,14 @@ class ProfitBreakdownSheet extends StatelessWidget {
     );
   }
 
-  Widget _line(String label, String value, {bool negative = false, bool bold = false, bool small = false}) {
+  Widget _line(
+    String label,
+    String value, {
+    bool negative = false,
+    bool positive = false,
+    bool bold = false,
+    bool small = false,
+  }) {
     final size = small ? 12.5 : 13.5;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -105,7 +118,7 @@ class ProfitBreakdownSheet extends StatelessWidget {
             style: TextStyle(
               fontSize: size,
               fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
-              color: negative ? AppColors.danger : AppColors.textPrimary,
+              color: negative ? AppColors.danger : (positive ? AppColors.success : AppColors.textPrimary),
             ),
           ),
         ],
