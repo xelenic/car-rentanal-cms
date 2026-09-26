@@ -10,6 +10,10 @@ class AdminUser {
     this.canDeleteHires = false,
     this.canViewVehicles = false,
     this.canCreateVehicles = false,
+    this.canViewMyExpenses = false,
+    this.canCreateMyExpenses = false,
+    this.canUpdateMyExpenses = false,
+    this.canDeleteMyExpenses = false,
   });
 
   final int id;
@@ -20,6 +24,13 @@ class AdminUser {
   final bool canDeleteHires;
   final bool canViewVehicles;
   final bool canCreateVehicles;
+  final bool canViewMyExpenses;
+  final bool canCreateMyExpenses;
+  final bool canUpdateMyExpenses;
+  final bool canDeleteMyExpenses;
+
+  /// Whether the categories screen has anything to offer this user.
+  bool get canManageExpenseCategories => canCreateMyExpenses || canUpdateMyExpenses || canDeleteMyExpenses;
 
   factory AdminUser.fromJson(Map<String, dynamic> json) {
     return AdminUser(
@@ -31,6 +42,10 @@ class AdminUser {
       canDeleteHires: json['can_delete_hires'] as bool? ?? false,
       canViewVehicles: json['can_view_vehicles'] as bool? ?? false,
       canCreateVehicles: json['can_create_vehicles'] as bool? ?? false,
+      canViewMyExpenses: json['can_view_my_expenses'] as bool? ?? false,
+      canCreateMyExpenses: json['can_create_my_expenses'] as bool? ?? false,
+      canUpdateMyExpenses: json['can_update_my_expenses'] as bool? ?? false,
+      canDeleteMyExpenses: json['can_delete_my_expenses'] as bool? ?? false,
     );
   }
 }

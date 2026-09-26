@@ -10,6 +10,7 @@ import '../widgets/state_views.dart';
 import '../widgets/vehicle_tile.dart';
 import 'add_vehicle_screen.dart';
 import 'login_screen.dart';
+import 'my_expenses_screen.dart';
 import 'vehicle_detail_screen.dart';
 
 /// The app's home: the fleet as a grid of icon-and-name tiles, narrowed by
@@ -146,6 +147,13 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
     if (mounted) _load(silent: true);
   }
 
+  void _openMyExpenses() {
+    final user = _user;
+    if (user == null) return;
+
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => MyExpensesScreen(user: user)));
+  }
+
   Future<void> _logout() async {
     await ApiClient.instance.logout();
     if (!mounted) return;
@@ -161,6 +169,13 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
       appBar: AppBar(
         title: const Text('Vehicles'),
         actions: [
+          if (_user?.canViewMyExpenses ?? false)
+            IconButton(
+              key: const Key('my-expenses'),
+              tooltip: 'My Expenses',
+              icon: const Icon(Icons.account_balance_wallet_outlined),
+              onPressed: _openMyExpenses,
+            ),
           IconButton(
             tooltip: 'Sign out',
             icon: const Icon(Icons.logout_rounded),

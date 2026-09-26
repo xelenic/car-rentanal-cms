@@ -105,7 +105,15 @@ class Pill extends StatelessWidget {
             Icon(icon, size: 12, color: color),
             const SizedBox(width: 4),
           ],
-          Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+          // A long label (a category the owner named) shortens instead of overflowing.
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
+            ),
+          ),
         ],
       ),
     );

@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Api\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Api\Admin\HireController as AdminHireController;
+use App\Http\Controllers\Api\Admin\MyExpenseCategoryController as AdminMyExpenseCategoryController;
+use App\Http\Controllers\Api\Admin\MyExpenseController as AdminMyExpenseController;
 use App\Http\Controllers\Api\Admin\PlaceController as AdminPlaceController;
 use App\Http\Controllers\Api\Admin\VehicleController as AdminVehicleController;
 use App\Http\Controllers\Api\AuthController;
@@ -72,6 +74,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/admin/vehicles/{vehicle}', [AdminVehicleController::class, 'show']);
     Route::get('/admin/vehicles/{vehicle}/hires', [AdminVehicleController::class, 'hires']);
     Route::get('/admin/vehicles/{vehicle}/periods', [AdminVehicleController::class, 'periods']);
+
+    Route::get('/admin/my-expenses', [AdminMyExpenseController::class, 'index']);
+    Route::post('/admin/my-expenses', [AdminMyExpenseController::class, 'store']);
+    Route::put('/admin/my-expenses/{myExpense}', [AdminMyExpenseController::class, 'update']);
+    Route::delete('/admin/my-expenses/{myExpense}', [AdminMyExpenseController::class, 'destroy']);
+    Route::get('/admin/my-expense-categories', [AdminMyExpenseCategoryController::class, 'index']);
+    Route::post('/admin/my-expense-categories', [AdminMyExpenseCategoryController::class, 'store']);
+    Route::put('/admin/my-expense-categories/{myExpenseCategory}', [AdminMyExpenseCategoryController::class, 'update']);
+    Route::delete('/admin/my-expense-categories/{myExpenseCategory}', [AdminMyExpenseCategoryController::class, 'destroy']);
 
     Route::get('/admin/places/autocomplete', [AdminPlaceController::class, 'autocomplete']);
     Route::get('/admin/places/details', [AdminPlaceController::class, 'details']);

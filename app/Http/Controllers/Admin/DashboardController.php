@@ -7,9 +7,8 @@ use App\Models\Driver;
 use App\Models\DriverDepositTransfer;
 use App\Models\Hire;
 use App\Models\SalaryAdvanceRequest;
-use App\Models\VehicleLeasingSettlement;
-use App\Models\VehicleMaintenanceRecord;
 use App\Services\DriverSalaryCalculator;
+use App\Services\ProfitCalculator;
 use Illuminate\Support\Carbon;
 use Illuminate\View\View;
 
@@ -65,27 +64,7 @@ class DashboardController extends Controller
      */
     private function profitBreakdownFor(Carbon $date): array
     {
-        $year = (int) $date->format('Y');
-        $month = (int) $date->format('n');
-
-        $data = DriverSalaryCalculator::calculateForAllDrivers($year, $month);
-        $leasingInstallmentTotal = $this->leasingInstallmentTotalFor($year, $month);
-        $repairCostTotal = $this->repairCostTotalFor($year, $month);
-
-        return [
-            'our_hire_value_total' => $data['our_hire_value_total'],
-            'expenses_total' => $data['expenses_total'],
-            'expenses_by_category' => $data['expenses_by_category'],
-            'net_before_salary' => $data['net_before_salary'],
-            'salary_percentage' => $data['salary_percentage'],
-            'salary_total' => $data['salary'],
-            'leasing_installment_total' => $leasingInstallmentTotal,
-            'repair_cost_total' => $repairCostTotal,
-            'profit_total' => round(
-                $data['net_before_salary'] - $data['salary'] - $leasingInstallmentTotal - $repairCostTotal,
-                2
-            ),
-        ];
+        return ProfitCalculator::breakdownFor((int) $date->format('Y'), (int) $date->format('n'));
     }
 
     /**
@@ -96,7 +75,7 @@ class DashboardController extends Controller
         $year = (int) $date->format('Y');
         $month = (int) $date->format('n');
 
-        $repairCostTotal = $this->repairCostTotalFor($year, $month);
+        $repairCostTotal = ProfitCalculator::repairCostTotalFor($year, $month);
 
         // "Average Day Hire Rate": the average hire_full_value among this
         // month's Day Tour hires specifically (Hire::TOUR_TYPES['day_tour']).
@@ -173,46 +152,18 @@ class DashboardController extends Controller
         $month = (int) $date->format('n');
 
         $data = DriverSalaryCalculator::calculateForAllDrivers($year, $month);
-        $leasingInstallmentTotal = $this->leasingInstallmentTotalFor($year, $month);
-        $repairCostTotal = $this->repairCostTotalFor($year, $month);
 
         return [
             'our_hire_value_total' => $data['our_hire_value_total'],
             'salary_total' => $data['salary'],
             'commission_total' => round($data['hire_full_value_total'] - $data['our_hire_value_total'], 2),
             'hire_full_value_total' => $data['hire_full_value_total'],
-            'profit_total' => round(
-                $data['net_before_salary'] - $data['salary'] - $leasingInstallmentTotal - $repairCostTotal,
-                2
+            'profit_total' => ProfitCalculator::profitFrom(
+                $data,
+                ProfitCalculator::leasingInstallmentTotalFor($year, $month),
+                ProfitCalculator::repairCostTotalFor($year, $month),
             ),
         ];
-    }
-
-    /**
-     * Vehicle service/repair/parts costs actually logged in the given month
-     * (see VehicleMaintenanceController) — a real cash cost, not a category
-     * that reduces driver salary.
-     */
-    private function repairCostTotalFor(int $year, int $month): float
-    {
-        return round((float) VehicleMaintenanceRecord::query()
-            ->whereYear('created_at', $year)
-            ->whereMonth('created_at', $month)
-            ->sum('cost'), 2);
-    }
-
-    /**
-     * Leasing/loan settlements actually paid in the given month (see
-     * VehicleLeasingSettlementController) — across every vehicle's
-     * financing record, not just active ones, since a settlement is a real
-     * cash outflow regardless of the record's current status.
-     */
-    private function leasingInstallmentTotalFor(int $year, int $month): float
-    {
-        return round((float) VehicleLeasingSettlement::query()
-            ->where('year', $year)
-            ->where('month', $month)
-            ->sum('amount'), 2);
     }
 
     /**

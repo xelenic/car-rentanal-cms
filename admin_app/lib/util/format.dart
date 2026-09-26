@@ -6,6 +6,12 @@ final _rsMillions = NumberFormat('#,##0.##', 'en_LK');
 /// "Rs. 125,000" — whole rupees, as the hire cards show money.
 String formatRs(double value) => _rs.format(value);
 
+final _rsExact = NumberFormat.currency(locale: 'en_LK', symbol: 'Rs. ', decimalDigits: 2);
+
+/// "Rs. 1,500.50" — with the cents, for money that is entered to the cent
+/// (expenses, profit). A negative amount reads "-Rs. 1,200.00".
+String formatRsExact(double value) => '${value < 0 ? '-' : ''}${_rsExact.format(value.abs())}';
+
 /// Like [formatRs], but from a million up it reads "Rs. 1.25M" — for the
 /// narrow tiles that sit four to a row.
 String formatRsShort(double value) {

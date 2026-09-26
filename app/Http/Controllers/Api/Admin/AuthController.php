@@ -63,6 +63,10 @@ class AuthController extends Controller
             'can_delete_hires' => $user->can('hires.delete'),
             'can_view_vehicles' => $user->can('vehicles.view'),
             'can_create_vehicles' => $user->can('vehicles.create'),
+            'can_view_my_expenses' => $user->can('my-expenses.view'),
+            'can_create_my_expenses' => $user->can('my-expenses.create'),
+            'can_update_my_expenses' => $user->can('my-expenses.update'),
+            'can_delete_my_expenses' => $user->can('my-expenses.delete'),
         ];
     }
 }

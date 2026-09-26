@@ -17,11 +17,20 @@ class FakeServer {
     this.canCreateHires = true,
     this.canUpdateHires = true,
     this.canDeleteHires = true,
+    this.canViewMyExpenses = true,
+    this.canCreateMyExpenses = true,
+    this.canUpdateMyExpenses = true,
+    this.canDeleteMyExpenses = true,
     this.pageSize = 20,
+    List<Map<String, dynamic>>? expenses,
+    List<Map<String, dynamic>>? expenseCategories,
+    this.profitBeforeExpenses = 6400,
     Map<int, Map<String, dynamic>>? periods,
     Map<String, Map<String, dynamic>>? statsByPeriod,
   })  : vehicles = vehicles ?? [],
         hires = hires ?? {},
+        expenses = expenses ?? [],
+        expenseCategories = expenseCategories ?? defaultExpenseCategories(),
         periods = periods ?? {},
         statsByPeriod = statsByPeriod ?? {};
 
@@ -35,7 +44,19 @@ class FakeServer {
   bool canCreateHires;
   bool canUpdateHires;
   bool canDeleteHires;
+  bool canViewMyExpenses;
+  bool canCreateMyExpenses;
+  bool canUpdateMyExpenses;
+  bool canDeleteMyExpenses;
   int pageSize;
+
+  /// The owner's expenses, in the API's shape, and the categories they are filed under.
+  final List<Map<String, dynamic>> expenses;
+  final List<Map<String, dynamic>> expenseCategories;
+
+  /// The month's profit before the owner's own expenses — whatever month is asked for.
+  num profitBeforeExpenses;
+
 
   /// Per vehicle id: the {years, months_by_year} the periods endpoint answers with.
   final Map<int, Map<String, dynamic>> periods;
@@ -51,6 +72,11 @@ class FakeServer {
   final List<Map<String, dynamic>> createdHires = [];
   final List<({int id, Map<String, dynamic> body})> updatedHires = [];
   final List<int> deletedHires = [];
+  final List<({int? id, Map<String, dynamic> body})> savedExpenses = [];
+  final List<int> deletedExpenses = [];
+  final List<String> createdCategories = [];
+  final List<({int id, String name})> renamedCategories = [];
+  final List<int> deletedCategories = [];
 
   /// When set, every request fails with this HTTP status and message.
   int? failWith;
@@ -76,6 +102,139 @@ class FakeServer {
         headers: {'content-type': 'application/json'},
       );
 
+  static String _tidy(String name) => name.trim().replaceAll(RegExp(r'\s+'), ' ');
+
+  String? _categoryNameProblem(String name, int? ownId) {
+    if (name.isEmpty) return 'The name field is required.';
+    final taken = expenseCategories.any((c) => c['id'] != ownId && (c['name'] as String).toLowerCase() == name.toLowerCase());
+    return taken ? 'A category with this name already exists.' : null;
+  }
+
+  Map<String, dynamic> _addCategory(String name) {
+    final base = name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-|-$'), '');
+    var key = base.isEmpty ? 'category' : base;
+    for (var n = 2; expenseCategories.any((c) => c['key'] == key); n++) {
+      key = '${base.isEmpty ? 'category' : base}-$n';
+    }
+    final category = {
+      'id': (expenseCategories.map((c) => c['id'] as int).fold<int>(0, (a, b) => a > b ? a : b)) + 1,
+      'key': key,
+      'name': name,
+    };
+    expenseCategories.add(category);
+    expenseCategories.sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+    return category;
+  }
+
+  Map<String, dynamic> _categoryJson(Map<String, dynamic> category) => {
+        ...category,
+        'expenses_count': expenses.where((e) => e['category'] == category['key']).length,
+      };
+
+  String _categoryName(String key) =>
+      expenseCategories.where((c) => c['key'] == key).map((c) => c['name'] as String).firstOrNull ?? key;
+
+  http.Response _expensesList(http.Request request) {
+    final q = request.url.queryParameters;
+    final now = DateTime.now();
+    final year = int.parse(q['year'] ?? '${now.year}');
+    final month = int.parse(q['month'] ?? '${now.month}');
+    final page = int.parse(q['page'] ?? '1');
+    final tag = '$year-${month.toString().padLeft(2, '0')}';
+
+    final inMonth = expenses.where((e) => (e['expense_date'] as String).startsWith(tag)).toList();
+    final total = inMonth.fold<double>(0, (sum, e) => sum + (e['amount'] as num));
+    final search = (q['search'] ?? '').toLowerCase();
+    final matching = inMonth
+        .where((e) => q['category'] == null || e['category'] == q['category'])
+        .where((e) => search.isEmpty || '${e['title']} ${e['notes'] ?? ''}'.toLowerCase().contains(search))
+        .toList()
+      ..sort((a, b) => (b['expense_date'] as String).compareTo(a['expense_date'] as String));
+
+    final byCategory = <String, double>{};
+    for (final e in inMonth) {
+      byCategory[e['category'] as String] = (byCategory[e['category']] ?? 0) + (e['amount'] as num);
+    }
+    final sorted = byCategory.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+
+    final start = (page - 1) * pageSize;
+    return _json({
+      'data': matching.skip(start).take(pageSize).toList(),
+      'meta': {'current_page': page, 'last_page': (matching.length / pageSize).ceil().clamp(1, 999)},
+      'summary': {
+        'year': year,
+        'month': month,
+        'label': '${_monthNames[month - 1]} $year',
+        'total': total,
+        'record_count': inMonth.length,
+        'profit_before_expenses': profitBeforeExpenses,
+        'my_profit': profitBeforeExpenses - total,
+        'by_category': [for (final e in sorted) {'key': e.key, 'name': _categoryName(e.key), 'total': e.value}],
+        'breakdown': {
+          'our_hire_value_total': 8000,
+          'expenses_total': 0,
+          'net_before_salary': 8000,
+          'salary_percentage': 20,
+          'salary_total': 1600,
+          'leasing_installment_total': 0,
+          'repair_cost_total': 0,
+          'profit_total': profitBeforeExpenses,
+        },
+      },
+      'filtered_total': matching.fold<double>(0, (sum, e) => sum + (e['amount'] as num)),
+      'years': ({now.year, year, ...expenses.map((e) => int.parse((e['expense_date'] as String).substring(0, 4)))}.toList()..sort((a, b) => b.compareTo(a))),
+    });
+  }
+
+  static const _monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
+  http.Response _expenseSave(http.Request request, int? id) {
+    final body = jsonDecode(request.body) as Map<String, dynamic>;
+    savedExpenses.add((id: id, body: body));
+
+    Map<String, dynamic> errors(String field, String message) => {
+          'message': message,
+          'errors': {field: [message]},
+        };
+
+    if (((body['title'] ?? '') as String).trim().isEmpty) return _json(errors('title', 'The title field is required.'), 422);
+    final amount = num.tryParse('${body['amount']}');
+    if (amount == null || amount <= 0) return _json(errors('amount', 'The amount field must be at least 0.01.'), 422);
+
+    var category = body['category'] as String;
+    if (category == '__new__') {
+      final name = _tidy((body['new_category'] ?? '') as String);
+      if (name.isEmpty) return _json(errors('new_category', 'Type a name for the new category.'), 422);
+      final existing = expenseCategories.where((c) => (c['name'] as String).toLowerCase() == name.toLowerCase()).firstOrNull;
+      category = (existing ?? _addCategory(name))['key'] as String;
+    } else if (!expenseCategories.any((c) => c['key'] == category)) {
+      return _json(errors('category', 'The selected category is invalid.'), 422);
+    }
+
+    final saved = {
+      'id': id ?? (expenses.map((e) => e['id'] as int).fold<int>(0, (a, b) => a > b ? a : b)) + 1,
+      'title': (body['title'] as String).trim(),
+      'category': category,
+      'category_name': _categoryName(category),
+      'amount': amount,
+      'expense_date': body['expense_date'],
+      'notes': body['notes'],
+    };
+
+    if (id == null) {
+      expenses.add(saved);
+    } else {
+      final index = expenses.indexWhere((e) => e['id'] == id);
+      if (index < 0) return _json({'message': 'Not found.'}, 404);
+      expenses[index] = saved;
+    }
+
+    return _json({'data': saved}, id == null ? 201 : 200);
+  }
+
   Future<http.Response> _handle(http.Request request) async {
     requests.add(request);
     final path = request.url.path.replaceFirst(RegExp(r'^/api'), '');
@@ -93,9 +252,63 @@ class FakeServer {
         'can_create_hires': canCreateHires,
         'can_update_hires': canUpdateHires,
         'can_delete_hires': canDeleteHires,
+        'can_view_my_expenses': canViewMyExpenses,
+        'can_create_my_expenses': canCreateMyExpenses,
+        'can_update_my_expenses': canUpdateMyExpenses,
+        'can_delete_my_expenses': canDeleteMyExpenses,
         'can_view_vehicles': true,
         'can_create_vehicles': canCreateVehicles,
       });
+    }
+
+    if (path == '/admin/my-expenses' && request.method == 'GET') return _expensesList(request);
+    if (path == '/admin/my-expenses' && request.method == 'POST') return _expenseSave(request, null);
+    final expenseOne = RegExp(r'^/admin/my-expenses/(\d+)$').firstMatch(path);
+    if (expenseOne != null && request.method == 'PUT') return _expenseSave(request, int.parse(expenseOne.group(1)!));
+    if (expenseOne != null && request.method == 'DELETE') {
+      final id = int.parse(expenseOne.group(1)!);
+      final found = expenses.where((e) => e['id'] == id).firstOrNull;
+      if (found == null) return _json({'message': 'Not found.'}, 404);
+      expenses.remove(found);
+      deletedExpenses.add(id);
+      return _json({'message': 'Expense "${found['title']}" was deleted.'});
+    }
+
+    if (path == '/admin/my-expense-categories' && request.method == 'GET') {
+      return _json({'data': expenseCategories.map(_categoryJson).toList()});
+    }
+    if (path == '/admin/my-expense-categories' && request.method == 'POST') {
+      final name = _tidy(((jsonDecode(request.body) as Map<String, dynamic>)['name'] ?? '') as String);
+      final problem = _categoryNameProblem(name, null);
+      if (problem != null) return _json({'message': problem, 'errors': {'name': [problem]}}, 422);
+      final created = _addCategory(name);
+      createdCategories.add(name);
+      return _json({'data': _categoryJson(created)}, 201);
+    }
+    final categoryOne = RegExp(r'^/admin/my-expense-categories/(\d+)$').firstMatch(path);
+    if (categoryOne != null) {
+      final id = int.parse(categoryOne.group(1)!);
+      final category = expenseCategories.where((c) => c['id'] == id).firstOrNull;
+      if (category == null) return _json({'message': 'Not found.'}, 404);
+
+      if (request.method == 'PUT') {
+        final name = _tidy(((jsonDecode(request.body) as Map<String, dynamic>)['name'] ?? '') as String);
+        final problem = _categoryNameProblem(name, id);
+        if (problem != null) return _json({'message': problem, 'errors': {'name': [problem]}}, 422);
+        category['name'] = name;
+        renamedCategories.add((id: id, name: name));
+        return _json({'data': _categoryJson(category)});
+      }
+
+      if (request.method == 'DELETE') {
+        final inUse = expenses.where((e) => e['category'] == category['key']).length;
+        if (inUse > 0) {
+          return _json({'message': '"${category['name']}" is used by $inUse ${inUse == 1 ? 'expense' : 'expenses'} — move or delete them first.'}, 422);
+        }
+        expenseCategories.remove(category);
+        deletedCategories.add(id);
+        return _json({'message': 'Category "${category['name']}" was deleted.'});
+      }
     }
 
     if (path == '/admin/vehicles' && request.method == 'GET') {
@@ -386,3 +599,45 @@ Map<String, dynamic> hireJson({
       'cancel_reason': cancelReason,
       'created_at': null,
     };
+
+
+/// The nine categories My Expenses starts with, A to Z.
+List<Map<String, dynamic>> defaultExpenseCategories() {
+  const names = {
+    'fuel': 'Fuel',
+    'insurance': 'Insurance',
+    'marketing': 'Marketing',
+    'office': 'Office & Supplies',
+    'others': 'Others',
+    'personal': 'Personal',
+    'rent': 'Rent',
+    'taxes': 'Taxes & Licences',
+    'utilities': 'Utilities',
+  };
+  var id = 0;
+  return [for (final e in names.entries) {'id': ++id, 'key': e.key, 'name': e.value}];
+}
+
+/// An expense in the API's shape.
+Map<String, dynamic> expenseJson({
+  required int id,
+  String title = 'ZZZ Test Rent',
+  String category = 'rent',
+  String categoryName = 'Rent',
+  num amount = 1000,
+  required String date,
+  String? notes,
+}) =>
+    {
+      'id': id,
+      'title': title,
+      'category': category,
+      'category_name': categoryName,
+      'amount': amount,
+      'expense_date': date,
+      'notes': notes,
+    };
+
+/// A day of the given month, as the API writes dates: "2026-09-05".
+String dayOf(DateTime month, int day) =>
+    '${month.year.toString().padLeft(4, '0')}-${month.month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';

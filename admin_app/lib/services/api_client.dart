@@ -9,6 +9,7 @@ import '../models/admin_user.dart';
 import '../models/hire.dart';
 import '../models/hire_period.dart';
 import '../models/hire_tab.dart';
+import '../models/my_expense.dart';
 import '../models/place_suggestion.dart';
 import '../models/reference_data.dart';
 import '../models/vehicle.dart';
@@ -308,6 +309,134 @@ class ApiClient {
   Future<void> deleteHire(int id) async {
     final response = await _http.delete(
       Uri.parse('$baseUrl/admin/hires/$id'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 204) return;
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// One month's expenses (this month when [year]/[month] are omitted), a page
+  /// at a time, with the cards' figures for the whole month.
+  Future<MyExpensePage> fetchMyExpenses({
+    int? year,
+    int? month,
+    String? category,
+    String? search,
+    int page = 1,
+  }) async {
+    final uri = Uri.parse('$baseUrl/admin/my-expenses').replace(
+      queryParameters: {
+        if (year != null) 'year': '$year',
+        if (month != null) 'month': '$month',
+        if (category != null && category.isNotEmpty) 'category': category,
+        if (search != null && search.isNotEmpty) 'search': search,
+        'page': '$page',
+      },
+    );
+    final response = await _http.get(uri, headers: await _headers(auth: true));
+
+    if (response.statusCode == 200) {
+      return MyExpensePage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// Adds an expense, or — given [id] — saves changes to one. To file it under
+  /// a brand new category pass [newExpenseCategoryOption] as [category] and
+  /// the name as [newCategory].
+  Future<MyExpense> saveMyExpense({
+    int? id,
+    required String title,
+    required String category,
+    String? newCategory,
+    required String amount,
+    required DateTime date,
+    String? notes,
+  }) async {
+    final body = jsonEncode({
+      'title': title,
+      'category': category,
+      if (category == newExpenseCategoryOption) 'new_category': newCategory,
+      'amount': amount,
+      'expense_date': formatCalendarDate(date),
+      'notes': (notes ?? '').trim().isEmpty ? null : notes!.trim(),
+    });
+    final headers = await _headers(auth: true);
+    final response = id == null
+        ? await _http.post(Uri.parse('$baseUrl/admin/my-expenses'), headers: headers, body: body)
+        : await _http.put(Uri.parse('$baseUrl/admin/my-expenses/$id'), headers: headers, body: body);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return MyExpense.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  Future<void> deleteMyExpense(int id) async {
+    final response = await _http.delete(
+      Uri.parse('$baseUrl/admin/my-expenses/$id'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 204) return;
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// Every expense category A to Z, each with how many expenses are filed under it.
+  Future<List<ExpenseCategory>> fetchExpenseCategories() async {
+    final response = await _http.get(
+      Uri.parse('$baseUrl/admin/my-expense-categories'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return (data['data'] as List<dynamic>? ?? []).map((e) => ExpenseCategory.fromJson(e as Map<String, dynamic>)).toList();
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  Future<ExpenseCategory> createExpenseCategory(String name) async {
+    final response = await _http.post(
+      Uri.parse('$baseUrl/admin/my-expense-categories'),
+      headers: await _headers(auth: true),
+      body: jsonEncode({'name': name}),
+    );
+
+    if (response.statusCode == 201) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return ExpenseCategory.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  Future<ExpenseCategory> renameExpenseCategory(int id, String name) async {
+    final response = await _http.put(
+      Uri.parse('$baseUrl/admin/my-expense-categories/$id'),
+      headers: await _headers(auth: true),
+      body: jsonEncode({'name': name}),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return ExpenseCategory.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// Deletes a category nothing is filed under; the server refuses (with how many) otherwise.
+  Future<void> deleteExpenseCategory(int id) async {
+    final response = await _http.delete(
+      Uri.parse('$baseUrl/admin/my-expense-categories/$id'),
       headers: await _headers(auth: true),
     );
 

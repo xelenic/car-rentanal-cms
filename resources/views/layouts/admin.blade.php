@@ -507,6 +507,17 @@
                 </ul>
             @endcanany
 
+            @can('my-expenses.view')
+                <div class="sidebar-section-label">Finance</div>
+                <ul class="sidebar-nav">
+                    <li>
+                        <a class="nav-link {{ request()->routeIs('admin.my-expenses.*') ? 'active' : '' }}" href="{{ route('admin.my-expenses.index') }}">
+                            <i class="bi bi-wallet2"></i> My Expenses
+                        </a>
+                    </li>
+                </ul>
+            @endcan
+
             @canany(['users.view', 'roles.view', 'permissions.view'])
                 <div class="sidebar-section-label">Access Control</div>
                 <ul class="sidebar-nav">
@@ -640,7 +651,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            var reopenId = @json($errors->any() ? old('form_id') : null);
+            var reopenId = @json($errors->any() ? old('form_id') : session('reopen_modal'));
             var targetId = reopenId ? 'modal-' + reopenId : null;
 
             if (! targetId && new URLSearchParams(window.location.search).get('new') === '1') {
