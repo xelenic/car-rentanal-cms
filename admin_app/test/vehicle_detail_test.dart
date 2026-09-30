@@ -41,16 +41,26 @@ FakeServer _vanWithHires({int pageSize = 20, bool canCreateHires = true}) {
 
 /// [settle] false is for a list with more pages to come: its bottom spinner
 /// never stops, so waiting for the screen to go quiet would wait forever.
-AdminUser _user({bool canCreateHires = true}) => AdminUser(
+AdminUser _user({bool canCreateHires = true, bool canUpdateVehicles = false, bool canDeleteVehicles = false}) => AdminUser(
       id: 1,
       name: 'ZZZ Test Admin',
       email: 'zzz@example.test',
       canCreateHires: canCreateHires,
       canUpdateHires: true,
       canDeleteHires: true,
+      canViewVehicles: true,
+      canUpdateVehicles: canUpdateVehicles,
+      canDeleteVehicles: canDeleteVehicles,
     );
 
-Future<void> _show(WidgetTester tester, FakeServer server, {bool canCreateHires = true, bool settle = true}) async {
+Future<void> _show(
+  WidgetTester tester,
+  FakeServer server, {
+  bool canCreateHires = true,
+  bool canUpdateVehicles = false,
+  bool canDeleteVehicles = false,
+  bool settle = true,
+}) async {
   tester.view.physicalSize = const Size(412, 1200);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -60,7 +70,7 @@ Future<void> _show(WidgetTester tester, FakeServer server, {bool canCreateHires 
     theme: buildAdminAppTheme(),
     home: VehicleDetailScreen(
       vehicle: Vehicle.fromJson(server.vehicles.first),
-      user: _user(canCreateHires: canCreateHires),
+      user: _user(canCreateHires: canCreateHires, canUpdateVehicles: canUpdateVehicles, canDeleteVehicles: canDeleteVehicles),
     ),
   ));
   await _quiet(tester, settle);
@@ -335,6 +345,84 @@ void main() {
       expect(find.descendant(of: today, matching: find.text('2')), findsOneWidget); // was 1
       final all = find.byKey(const Key('tab-all'));
       expect(find.descendant(of: all, matching: find.text('7')), findsOneWidget); // was 6
+    });
+  });
+
+  group('editing and deleting the vehicle', () {
+    testWidgets('offers no menu to someone who may neither edit nor delete', (tester) async {
+      await _show(tester, _vanWithHires());
+
+      expect(find.byKey(const Key('vehicle-menu')), findsNothing);
+    });
+
+    testWidgets('offers Edit to someone allowed to update vehicles', (tester) async {
+      await _show(tester, _vanWithHires(), canUpdateVehicles: true);
+
+      await tester.tap(find.byKey(const Key('vehicle-menu')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit'), findsOneWidget);
+      expect(find.text('Delete'), findsNothing);
+    });
+
+    testWidgets('editing saves changes and shows them on return', (tester) async {
+      await _show(tester, _vanWithHires(), canUpdateVehicles: true);
+
+      await tester.tap(find.byKey(const Key('vehicle-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('vehicle-model')), 'ZZZ Renamed Van');
+      await tester.ensureVisible(find.byKey(const Key('save-vehicle')));
+      await tester.tap(find.byKey(const Key('save-vehicle')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ZZZ Renamed Van'), findsWidgets); // the title
+      expect(find.text('ZZZ Renamed Van updated.'), findsOneWidget);
+    });
+
+    testWidgets('offers Delete to someone allowed to delete vehicles', (tester) async {
+      await _show(tester, _vanWithHires(), canDeleteVehicles: true);
+
+      await tester.tap(find.byKey(const Key('vehicle-menu')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete'), findsOneWidget);
+      expect(find.text('Edit'), findsNothing);
+    });
+
+    testWidgets('deleting asks for confirmation, then pops the page', (tester) async {
+      final server = _vanWithHires();
+      await _show(tester, server, canDeleteVehicles: true);
+
+      await tester.tap(find.byKey(const Key('vehicle-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete "ZZZ Test Van"?'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('confirm-delete-vehicle')));
+      await tester.pumpAndSettle();
+
+      expect(server.deletedVehicles, [1]);
+      expect(find.byKey(const Key('vehicle-header')), findsNothing); // popped
+    });
+
+    testWidgets('keeping it cancels — nothing is deleted', (tester) async {
+      final server = _vanWithHires();
+      await _show(tester, server, canDeleteVehicles: true);
+
+      await tester.tap(find.byKey(const Key('vehicle-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('keep-vehicle')));
+      await tester.pumpAndSettle();
+
+      expect(server.deletedVehicles, isEmpty);
+      expect(find.byKey(const Key('vehicle-header')), findsOneWidget); // still here
     });
   });
 }

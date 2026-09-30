@@ -1,20 +1,31 @@
 import 'package:driver_app/models/hire.dart';
 import 'package:driver_app/screens/hire_detail_screen.dart';
+import 'package:driver_app/theme/app_theme.dart';
 import 'package:driver_app/widgets/hire_route_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_google_maps.dart';
 
-Hire _hire({String status = 'pending', DateTime? startTime, DateTime? cancelledAt}) => Hire(
+Hire _hire({
+  String status = 'pending',
+  DateTime? startTime,
+  DateTime? cancelledAt,
+  String paymentType = 'cash',
+  double balanceRemaining = 0,
+  String paymentStatus = 'paid',
+}) =>
+    Hire(
       id: 7,
       tourType: 'drop_pickup',
       tourTypeLabel: 'Drop and Pickup',
       fromLocation: 'Colombo Fort',
       toLocation: 'Ella',
       hireFullValue: 100,
-      paymentType: 'cash',
-      paymentTypeLabel: 'Cash',
+      paymentType: paymentType,
+      paymentTypeLabel: paymentType == 'credit' ? 'Credit' : 'Cash',
+      balanceRemaining: balanceRemaining,
+      paymentStatus: paymentStatus,
       status: status,
       startTime: startTime,
       cancelledAt: cancelledAt,
@@ -90,6 +101,36 @@ void main() {
 
       await tester.pumpWidget(_app(HireRouteCard(hire: _hire())));
       expect(find.textContaining('Scheduled'), findsNothing);
+    });
+  });
+
+  group('the payment badge', () {
+    testWidgets('a cash hire never shows one, even with a balance somehow set', (tester) async {
+      await tester.pumpWidget(_app(HireRouteCard(hire: _hire(paymentType: 'cash', paymentStatus: 'unpaid', balanceRemaining: 100))));
+
+      expect(find.byType(PaymentBadge), findsNothing);
+    });
+
+    testWidgets('a fully paid credit hire shows nothing — it has already been claimed', (tester) async {
+      await tester.pumpWidget(_app(HireRouteCard(hire: _hire(paymentType: 'credit', paymentStatus: 'paid'))));
+
+      expect(find.byType(PaymentBadge), findsNothing);
+    });
+
+    testWidgets('an unpaid credit hire shows "Unpaid" in red', (tester) async {
+      await tester.pumpWidget(_app(HireRouteCard(hire: _hire(paymentType: 'credit', paymentStatus: 'unpaid', balanceRemaining: 100))));
+
+      expect(find.text('Unpaid'), findsOneWidget);
+      final text = tester.widget<Text>(find.text('Unpaid'));
+      expect(text.style!.color, AppColors.danger);
+    });
+
+    testWidgets('a partially claimed credit hire shows "Partially Paid" in amber', (tester) async {
+      await tester.pumpWidget(_app(HireRouteCard(hire: _hire(paymentType: 'credit', paymentStatus: 'partial', balanceRemaining: 40))));
+
+      expect(find.text('Partially Paid'), findsOneWidget);
+      final text = tester.widget<Text>(find.text('Partially Paid'));
+      expect(text.style!.color, AppColors.warning);
     });
   });
 }

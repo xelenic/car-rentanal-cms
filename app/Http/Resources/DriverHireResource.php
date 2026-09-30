@@ -26,6 +26,13 @@ class DriverHireResource extends JsonResource
             'hire_full_value' => (float) $this->hire_full_value,
             'payment_type' => $this->payment_type,
             'payment_type_label' => Hire::PAYMENT_TYPES[$this->payment_type] ?? $this->payment_type,
+            // Only meaningful for credit hires — cash is assumed collected on
+            // the spot. Read-only here: claiming payment is an admin-only
+            // action (see Admin\HirePaymentController); the driver app just
+            // shows whether it's still owed.
+            'paid_amount' => $this->paid_amount,
+            'balance_remaining' => $this->balance_remaining,
+            'payment_status' => $this->payment_status,
             'description' => $this->description,
             'created_at' => $this->created_at?->toIso8601String(),
             'status' => $this->status,

@@ -12,6 +12,7 @@ import '../util/format.dart';
 import '../widgets/hire_card.dart';
 import '../widgets/state_views.dart';
 import '../widgets/vehicle_style.dart';
+import 'add_vehicle_screen.dart';
 import 'hire_form_screen.dart';
 import 'hire_detail_screen.dart';
 
@@ -44,6 +45,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> with SingleTi
   HirePeriod? _period;
 
   bool get _canCreateHires => widget.user?.canCreateHires ?? false;
+  bool get _canEdit => widget.user?.canUpdateVehicles ?? false;
+  bool get _canDelete => widget.user?.canDeleteVehicles ?? false;
 
   @override
   void initState() {
@@ -107,6 +110,53 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> with SingleTi
     _reloadVehicle();
   }
 
+  Future<void> _editVehicle() async {
+    final updated = await Navigator.of(context).push<Vehicle>(
+      MaterialPageRoute(builder: (_) => AddVehicleScreen(vehicle: _vehicle)),
+    );
+    if (updated == null || !mounted) return;
+
+    setState(() => _vehicle = updated);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${updated.model} updated.')));
+  }
+
+  Future<void> _deleteVehicle() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete "${_vehicle.model}"?'),
+        content: const Text('This can\'t be undone. Its past hires keep their records, but no longer point at this vehicle.'),
+        actions: [
+          TextButton(
+            key: const Key('keep-vehicle'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep it'),
+          ),
+          TextButton(
+            key: const Key('confirm-delete-vehicle'),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ApiClient.instance.deleteVehicle(_vehicle.id);
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Could not reach the server. Nothing was deleted.')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -123,6 +173,17 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> with SingleTi
             ),
             onPressed: _pickPeriod,
           ),
+          if (_canEdit || _canDelete)
+            PopupMenuButton<String>(
+              key: const Key('vehicle-menu'),
+              tooltip: 'More',
+              onSelected: (value) => value == 'edit' ? _editVehicle() : _deleteVehicle(),
+              itemBuilder: (_) => [
+                if (_canEdit) const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                if (_canDelete)
+                  const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: AppColors.danger))),
+              ],
+            ),
         ],
       ),
       floatingActionButton: _canCreateHires

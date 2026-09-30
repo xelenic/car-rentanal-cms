@@ -20,6 +20,7 @@ class AppColors {
   static const danger = Color(0xFFE11D48);
   static const warning = Color(0xFFD97706);
   static const info = Color(0xFF0D9488);
+  static const success = Color(0xFF16A34A);
 }
 
 ThemeData buildDriverAppTheme() {

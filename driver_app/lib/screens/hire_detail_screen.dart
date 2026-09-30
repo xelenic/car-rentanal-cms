@@ -20,6 +20,7 @@ import '../services/route_planner.dart';
 import '../theme/app_theme.dart';
 import '../widgets/background_access_prompt.dart';
 import '../widgets/hire_map.dart';
+import '../widgets/hire_route_card.dart' show PaymentBadge;
 import 'expense_entry_screen.dart';
 import 'placeholder_screen.dart';
 
@@ -801,6 +802,26 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
                 value: 'Rs. ${hire.hireFullValue.toStringAsFixed(2)}',
               ),
               _InfoRow(label: 'Payment Method', value: hire.paymentTypeLabel),
+              if (hire.isCredit && !hire.isFullyPaid) ...[
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.only(left: 110),
+                  child: Row(
+                    children: [
+                      PaymentBadge(hire: hire),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Rs. ${hire.balanceRemaining.toStringAsFixed(2)} left to claim',
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11.5),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
           if (hire.description != null && hire.description!.isNotEmpty) ...[
@@ -1211,6 +1232,23 @@ class _TrackingCard extends StatelessWidget {
               ),
             ],
           ),
+          if (hire.isCredit && !hire.isFullyPaid) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                PaymentBadge(hire: hire),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Rs. ${hire.balanceRemaining.toStringAsFixed(2)} left to claim',
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 11.5),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (error != null) ...[
             const SizedBox(height: 12),
             Container(

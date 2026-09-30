@@ -89,6 +89,10 @@ class HireRouteCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    if (hire.isCredit && !hire.isFullyPaid) ...[
+                      const SizedBox(height: 4),
+                      PaymentBadge(hire: hire),
+                    ],
                     if (_when != null) ...[
                       const SizedBox(height: 2),
                       Text(
@@ -144,6 +148,41 @@ class HireStatusPill extends StatelessWidget {
       child: Text(
         hire.statusLabel,
         style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+/// A small flag for a credit hire the company hasn't fully claimed from the
+/// customer yet — cash is assumed collected on the spot, so this is only
+/// ever shown for credit hires. Read-only: claiming payment happens in the
+/// admin panel, not here — this just tells the driver where things stand.
+class PaymentBadge extends StatelessWidget {
+  final Hire hire;
+
+  const PaymentBadge({super.key, required this.hire});
+
+  @override
+  Widget build(BuildContext context) {
+    final partial = hire.paymentStatus == 'partial';
+    final color = partial ? AppColors.warning : AppColors.danger;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline_rounded, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            partial ? 'Partially Paid' : 'Unpaid',
+            style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w700),
+          ),
+        ],
       ),
     );
   }

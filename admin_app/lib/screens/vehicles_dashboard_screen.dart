@@ -9,15 +9,18 @@ import '../theme/app_theme.dart';
 import '../widgets/state_views.dart';
 import '../widgets/vehicle_tile.dart';
 import 'add_vehicle_screen.dart';
-import 'login_screen.dart';
-import 'my_expenses_screen.dart';
 import 'vehicle_detail_screen.dart';
 
-/// The app's home: the fleet as a grid of icon-and-name tiles, narrowed by
+/// The Vehicles tab: the fleet as a grid of icon-and-name tiles, narrowed by
 /// search or by condition. Everything about a vehicle — and its hires — is on
-/// its own page, one tap away.
+/// its own page, one tap away. Embedded under HomeScreen's shared AppBar and
+/// TabBar — this widget owns only its body and its own FAB.
 class VehiclesDashboardScreen extends StatefulWidget {
-  const VehiclesDashboardScreen({super.key});
+  const VehiclesDashboardScreen({super.key, this.user});
+
+  /// Who is signed in — decides whether Add Vehicle is offered. Passed down
+  /// from HomeScreen, which already fetched it once for every tab to share.
+  final AdminUser? user;
 
   @override
   State<VehiclesDashboardScreen> createState() => _VehiclesDashboardScreenState();
@@ -27,7 +30,6 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
   final _searchController = TextEditingController();
   Timer? _debounce;
 
-  AdminUser? _user;
   List<Vehicle> _vehicles = [];
   bool _loading = true;
   bool _loadingMore = false;
@@ -44,7 +46,7 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
 
   bool get _searching => _searchController.text.trim().isNotEmpty;
   bool get _filtering => _searching || _condition != null;
-  bool get _canAdd => _user?.canCreateVehicles ?? false;
+  bool get _canAdd => widget.user?.canCreateVehicles ?? false;
 
   @override
   void initState() {
@@ -67,18 +69,14 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
     });
 
     try {
-      final results = await Future.wait<Object?>([
-        ApiClient.instance.fetchVehicles(search: _searchController.text.trim(), condition: _condition, page: 1),
-        // Who is signed in decides what is offered (Add Vehicle, and on the
-        // pages after this one Edit/Delete). Not worth failing the whole
-        // screen over, so a failed lookup just offers less.
-        if (_user == null) ApiClient.instance.fetchMe().then<AdminUser?>((u) => u, onError: (_) => null),
-      ]);
+      final page = await ApiClient.instance.fetchVehicles(
+        search: _searchController.text.trim(),
+        condition: _condition,
+        page: 1,
+      );
       if (!mounted || generation != _generation) return;
 
-      final page = results.first as VehiclePage;
       setState(() {
-        if (results.length > 1) _user = results[1] as AdminUser?;
         _vehicles = page.vehicles;
         _hasMore = page.hasMore;
         _page = page.currentPage;
@@ -142,47 +140,14 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
 
   Future<void> _openVehicle(Vehicle vehicle) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => VehicleDetailScreen(vehicle: vehicle, user: _user)),
+      MaterialPageRoute(builder: (_) => VehicleDetailScreen(vehicle: vehicle, user: widget.user)),
     );
     if (mounted) _load(silent: true);
-  }
-
-  void _openMyExpenses() {
-    final user = _user;
-    if (user == null) return;
-
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => MyExpensesScreen(user: user)));
-  }
-
-  Future<void> _logout() async {
-    await ApiClient.instance.logout();
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Vehicles'),
-        actions: [
-          if (_user?.canViewMyExpenses ?? false)
-            IconButton(
-              key: const Key('my-expenses'),
-              tooltip: 'My Expenses',
-              icon: const Icon(Icons.account_balance_wallet_outlined),
-              onPressed: _openMyExpenses,
-            ),
-          IconButton(
-            tooltip: 'Sign out',
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: _logout,
-          ),
-        ],
-      ),
       floatingActionButton: _canAdd
           ? FloatingActionButton.extended(
               key: const Key('add-vehicle'),

@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\AuthController as AdminAuthController;
+use App\Http\Controllers\Api\Admin\CustomerController as AdminCustomerController;
+use App\Http\Controllers\Api\Admin\DriverController as AdminDriverController;
 use App\Http\Controllers\Api\Admin\HireController as AdminHireController;
 use App\Http\Controllers\Api\Admin\MyExpenseCategoryController as AdminMyExpenseCategoryController;
 use App\Http\Controllers\Api\Admin\MyExpenseController as AdminMyExpenseController;
@@ -73,8 +75,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/admin/vehicles', [AdminVehicleController::class, 'index']);
     Route::post('/admin/vehicles', [AdminVehicleController::class, 'store']);
     Route::get('/admin/vehicles/{vehicle}', [AdminVehicleController::class, 'show']);
+    Route::put('/admin/vehicles/{vehicle}', [AdminVehicleController::class, 'update']);
+    Route::delete('/admin/vehicles/{vehicle}', [AdminVehicleController::class, 'destroy']);
     Route::get('/admin/vehicles/{vehicle}/hires', [AdminVehicleController::class, 'hires']);
     Route::get('/admin/vehicles/{vehicle}/periods', [AdminVehicleController::class, 'periods']);
+
+    Route::get('/admin/drivers', [AdminDriverController::class, 'index']);
+    Route::post('/admin/drivers', [AdminDriverController::class, 'store']);
+    Route::get('/admin/drivers/{driver}', [AdminDriverController::class, 'show']);
+    Route::put('/admin/drivers/{driver}', [AdminDriverController::class, 'update']);
+    Route::delete('/admin/drivers/{driver}', [AdminDriverController::class, 'destroy']);
+
+    Route::get('/admin/customers', [AdminCustomerController::class, 'index']);
+    Route::post('/admin/customers', [AdminCustomerController::class, 'store']);
+    Route::get('/admin/customers/{customer}', [AdminCustomerController::class, 'show']);
+    Route::put('/admin/customers/{customer}', [AdminCustomerController::class, 'update']);
+    Route::delete('/admin/customers/{customer}', [AdminCustomerController::class, 'destroy']);
 
     Route::get('/admin/my-expenses', [AdminMyExpenseController::class, 'index']);
     Route::post('/admin/my-expenses', [AdminMyExpenseController::class, 'store']);

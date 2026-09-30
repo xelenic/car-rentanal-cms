@@ -380,18 +380,6 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Expenses'),
-        actions: [
-          if (_user.canManageExpenseCategories)
-            IconButton(
-              key: const Key('manage-categories'),
-              tooltip: 'Categories',
-              icon: const Icon(Icons.sell_outlined),
-              onPressed: _manageCategories,
-            ),
-        ],
-      ),
       floatingActionButton: _user.canCreateMyExpenses
           ? FloatingActionButton.extended(
               key: Key(_onIncome ? 'add-income' : 'add-expense'),
@@ -407,6 +395,7 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
             onPrevious: () => _stepMonth(-1),
             onNext: () => _stepMonth(1),
             onPick: _pickMonth,
+            onManageCategories: _user.canManageExpenseCategories ? _manageCategories : null,
           ),
           _TabSwitch(
             tab: _tab,
@@ -591,14 +580,23 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
   }
 }
 
-/// ‹ September 2026 › — steps a month at a time; tapping the name picks any month.
+/// ‹ September 2026 › — steps a month at a time; tapping the name picks any
+/// month. A trailing Categories icon shows when the user may manage them —
+/// this screen has no AppBar of its own to host it (it's embedded as a tab).
 class _MonthBar extends StatelessWidget {
-  const _MonthBar({required this.label, required this.onPrevious, required this.onNext, required this.onPick});
+  const _MonthBar({
+    required this.label,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onPick,
+    this.onManageCategories,
+  });
 
   final String label;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final VoidCallback onPick;
+  final VoidCallback? onManageCategories;
 
   @override
   Widget build(BuildContext context) {
@@ -628,6 +626,13 @@ class _MonthBar extends StatelessWidget {
             icon: const Icon(Icons.chevron_right_rounded),
             onPressed: onNext,
           ),
+          if (onManageCategories != null)
+            IconButton(
+              key: const Key('manage-categories'),
+              tooltip: 'Categories',
+              icon: const Icon(Icons.sell_outlined),
+              onPressed: onManageCategories,
+            ),
         ],
       ),
     );

@@ -26,6 +26,13 @@ class Hire {
   final double hireFullValue;
   final String paymentType;
   final String paymentTypeLabel;
+
+  /// Only meaningful for a credit hire — cash is assumed collected on the
+  /// spot. Claiming payment is admin-only (the web panel / admin app); these
+  /// just reflect what has been claimed so far. "unpaid", "partial" or "paid".
+  final double paidAmount;
+  final double balanceRemaining;
+  final String paymentStatus;
   final String? description;
   final DateTime? createdAt;
   final String status;
@@ -57,6 +64,9 @@ class Hire {
     required this.hireFullValue,
     required this.paymentType,
     required this.paymentTypeLabel,
+    this.paidAmount = 0,
+    this.balanceRemaining = 0,
+    this.paymentStatus = 'unpaid',
     this.description,
     this.createdAt,
     this.status = 'pending',
@@ -99,6 +109,9 @@ class Hire {
       hireFullValue: (json['hire_full_value'] as num).toDouble(),
       paymentType: json['payment_type'] as String,
       paymentTypeLabel: json['payment_type_label'] as String,
+      paidAmount: (json['paid_amount'] as num?)?.toDouble() ?? 0,
+      balanceRemaining: (json['balance_remaining'] as num?)?.toDouble() ?? 0,
+      paymentStatus: json['payment_status'] as String? ?? 'unpaid',
       description: json['description'] as String?,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'] as String)
@@ -146,6 +159,9 @@ class Hire {
       hireFullValue: hireFullValue,
       paymentType: paymentType,
       paymentTypeLabel: paymentTypeLabel,
+      paidAmount: paidAmount,
+      balanceRemaining: balanceRemaining,
+      paymentStatus: paymentStatus,
       description: description,
       createdAt: createdAt,
       status: status ?? this.status,
@@ -168,6 +184,13 @@ class Hire {
   /// Whether the phone's position can be compared with the pickup location.
   bool get hasPickupCoordinates => pickupLatitude != null && pickupLongitude != null;
 
+  bool get isCredit => paymentType == 'credit';
+
+  /// Whether a credit hire's full value has been claimed by the company yet
+  /// — cash hires are always considered settled (see [paymentStatus]'s
+  /// backend doc comment).
+  bool get isFullyPaid => paymentStatus == 'paid';
+
   /// A hire scheduled ahead of time (see the admin panel's "Schedule"
   /// field) whose date hasn't arrived yet — tracking can't be started or
   /// completed until then (enforced server-side too, see
@@ -184,6 +207,10 @@ class Hire {
         return stayLocations.isNotEmpty
             ? stayLocations.join(' → ')
             : 'Multi day tour';
+      case 'day_tour':
+        final from = fromLocation ?? '—';
+        final to = toLocation ?? '—';
+        return stayLocations.isEmpty ? '$from → $to' : [from, ...stayLocations, to].join(' → ');
       default:
         final from = fromLocation ?? '—';
         final to = toLocation ?? '—';

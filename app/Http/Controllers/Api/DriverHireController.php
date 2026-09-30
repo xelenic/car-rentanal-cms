@@ -50,7 +50,7 @@ class DriverHireController extends Controller
         $countedTotal = (clone $query)->counted()->count();
 
         $hires = $query
-            ->with(['package', 'vehicle', 'locations.location', 'trackingPoints', 'expenses'])
+            ->with(['package', 'vehicle', 'locations.location', 'trackingPoints', 'expenses', 'payments'])
             ->latest()
             ->paginate((int) ($filters['per_page'] ?? self::MAX_PER_PAGE));
 
@@ -90,7 +90,7 @@ class DriverHireController extends Controller
 
         abort_if(! $driver || $hire->driver_id !== $driver->id, 403);
 
-        $hire->load(['package', 'vehicle', 'locations.location', 'trackingPoints', 'expenses']);
+        $hire->load(['package', 'vehicle', 'locations.location', 'trackingPoints', 'expenses', 'payments']);
 
         return new DriverHireResource($hire);
     }

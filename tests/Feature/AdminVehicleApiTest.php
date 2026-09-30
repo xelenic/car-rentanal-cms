@@ -11,7 +11,7 @@ use Spatie\Permission\Models\Permission;
 
 uses(RefreshDatabase::class);
 
-const ALL_ADMIN_PERMISSIONS = ['vehicles.view', 'vehicles.create', 'hires.view', 'hires.create'];
+const ALL_ADMIN_PERMISSIONS = ['vehicles.view', 'vehicles.create', 'vehicles.update', 'vehicles.delete', 'hires.view', 'hires.create'];
 
 beforeEach(function () {
     // Wednesday midday — every "today" / "this month" figure below is
@@ -265,6 +265,83 @@ describe('adding a vehicle', function () {
         'too many seats' => [['seats' => 101], 'seats'],
         'passengers not a number' => [['pax' => 'lots'], 'pax'],
     ]);
+});
+
+describe('updating a vehicle', function () {
+    it('saves changes and answers with the updated card', function () {
+        signedInAdmin();
+        $vehicle = fleetVehicle('ZZZ Test Van', ['condition' => 'Good', 'seats' => 4, 'pax' => 4]);
+
+        $response = $this->putJson("/api/admin/vehicles/{$vehicle->id}", [
+            'model' => 'ZZZ Test Van Renamed', 'condition' => 'Excellent', 'seats' => 6, 'pax' => 5, 'description' => 'ZZZ updated',
+        ])->assertOk();
+
+        $response->assertJsonPath('data.model', 'ZZZ Test Van Renamed')
+            ->assertJsonPath('data.condition', 'Excellent')
+            ->assertJsonPath('data.seats', 6);
+        expect($vehicle->fresh()->model)->toBe('ZZZ Test Van Renamed');
+    });
+
+    it('needs vehicles.update', function () {
+        signedInAdmin(['vehicles.view', 'hires.view']);
+        $vehicle = fleetVehicle('ZZZ Test Van');
+
+        $this->putJson("/api/admin/vehicles/{$vehicle->id}", [
+            'model' => 'ZZZ Changed', 'condition' => 'Good', 'seats' => 4, 'pax' => 4,
+        ])->assertForbidden();
+        expect($vehicle->fresh()->model)->toBe('ZZZ Test Van');
+    });
+
+    it('rejects bad input', function () {
+        signedInAdmin();
+        $vehicle = fleetVehicle();
+
+        $this->putJson("/api/admin/vehicles/{$vehicle->id}", ['model' => '', 'condition' => 'Good', 'seats' => 4, 'pax' => 4])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('model');
+    });
+
+    it('is 404 for a vehicle that does not exist', function () {
+        signedInAdmin();
+
+        $this->putJson('/api/admin/vehicles/999', ['model' => 'ZZZ', 'condition' => 'Good', 'seats' => 4, 'pax' => 4])
+            ->assertNotFound();
+    });
+});
+
+describe('deleting a vehicle', function () {
+    it('removes it', function () {
+        signedInAdmin();
+        $vehicle = fleetVehicle('ZZZ Test Van');
+
+        $this->deleteJson("/api/admin/vehicles/{$vehicle->id}")->assertOk();
+
+        expect(Vehicle::find($vehicle->id))->toBeNull();
+    });
+
+    it('needs vehicles.delete', function () {
+        signedInAdmin(['vehicles.view', 'hires.view']);
+        $vehicle = fleetVehicle();
+
+        $this->deleteJson("/api/admin/vehicles/{$vehicle->id}")->assertForbidden();
+        expect(Vehicle::find($vehicle->id))->not->toBeNull();
+    });
+
+    it('nulls out the vehicle on its hires rather than failing', function () {
+        signedInAdmin();
+        $vehicle = fleetVehicle();
+        $hire = vehicleHire($vehicle);
+
+        $this->deleteJson("/api/admin/vehicles/{$vehicle->id}")->assertOk();
+
+        expect($hire->fresh()->vehicle_id)->toBeNull();
+    });
+
+    it('is 404 for a vehicle that does not exist', function () {
+        signedInAdmin();
+
+        $this->deleteJson('/api/admin/vehicles/999')->assertNotFound();
+    });
 });
 
 describe('one vehicle', function () {

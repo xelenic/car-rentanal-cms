@@ -24,6 +24,14 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^4.0.0
   google_maps_flutter_platform_interface: ^2.17.0
+  flutter_launcher_icons: ^0.14.3
 
 flutter:
   uses-material-design: true
+
+# Regenerate with: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  remove_alpha_ios: true

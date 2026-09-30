@@ -217,6 +217,10 @@ class _HireMapViewState extends State<HireMapView> {
   /// The drawn pin pictures, filled in shortly after the map opens.
   final Map<MapRole, BitmapDescriptor> _pins = {};
 
+  /// The scheduled retries of [_fit] (see [_fitRetries]) — cancelled on
+  /// dispose so none of them fire, or stay pending, after the map is gone.
+  final List<Timer> _fitTimers = [];
+
   /// The route ahead: a straight line at once, replaced by the road route when
   /// it has been planned.
   PlannedRoute? _route;
@@ -228,6 +232,18 @@ class _HireMapViewState extends State<HireMapView> {
   /// drawn, before it is planned again — every ping would be a billed call.
   static const double _replanMeters = 400;
   static const Duration _replanEvery = Duration(seconds: 45);
+
+  /// How long after the map reports itself created before framing it —
+  /// tried more than once because a freshly created map isn't always laid out
+  /// and sized yet at that point (most noticeably on the web, where the maps
+  /// script and first tiles are still loading over the network): a `_fit()`
+  /// that runs too early silently computes nothing useful, and without a
+  /// retry the trip would stay zoomed in on wherever it happened to open.
+  static const List<Duration> _fitRetries = [
+    Duration(milliseconds: 350),
+    Duration(seconds: 1),
+    Duration(seconds: 3),
+  ];
 
   bool get _hasData => widget.places.isNotEmpty || widget.path.isNotEmpty;
 
@@ -284,6 +300,9 @@ class _HireMapViewState extends State<HireMapView> {
   @override
   void dispose() {
     _meSub?.cancel();
+    for (final timer in _fitTimers) {
+      timer.cancel();
+    }
     // The controller is not disposed here: the GoogleMap widget disposes its own
     // when it goes away, and disposing it a second time throws on the web.
     super.dispose();
@@ -478,8 +497,9 @@ class _HireMapViewState extends State<HireMapView> {
               : const <Factory<OneSequenceGestureRecognizer>>{},
           onMapCreated: (controller) {
             _controller = controller;
-            // Give the map a moment to lay out before framing it.
-            Future<void>.delayed(const Duration(milliseconds: 350), _fit);
+            for (final delay in _fitRetries) {
+              _fitTimers.add(Timer(delay, _fit));
+            }
           },
         ),
         // Top-right, clear of Google's own controls along the bottom edge.

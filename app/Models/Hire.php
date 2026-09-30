@@ -303,9 +303,9 @@ class Hire extends Model
      * *before* places without coordinates are dropped, so a missing pickup
      * never makes the first stop look like one.
      *
-     * Drop-and-pickup and day tours run from → to; multi day tours through
-     * their stays (by day, then position); package tours through the
-     * package's itinerary.
+     * Drop-and-pickup tours run from → to; day tours from → their stays (in
+     * order) → to; multi day tours through their stays (by day, then
+     * position); package tours through the package's itinerary.
      *
      * @return list<array{role: string, name: string, latitude: float, longitude: float}>
      */
@@ -319,6 +319,11 @@ class Hire extends Model
 
         $trip = match ($this->tour_type) {
             'multi_day' => $stays(),
+            'day_tour' => collect([
+                $links->firstWhere('role', 'from')?->location,
+                ...$stays()->all(),
+                $links->firstWhere('role', 'to')?->location,
+            ])->filter(),
             'package' => $this->package?->itineraries()->with('location')->orderBy('order')->get()->pluck('location'),
             default => collect([$links->firstWhere('role', 'from')?->location, $links->firstWhere('role', 'to')?->location])
                 ->filter(),

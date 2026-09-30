@@ -77,6 +77,25 @@ test('before the hire starts the route runs from the driver through the pickup t
     });
 });
 
+test('a day tour\'s route runs through its stay locations, not just from and to', function () {
+    Http::fake([DIRECTIONS_URL => Http::response(googleRoute())]);
+    [, $hire] = routeHire(['tour_type' => 'day_tour'], withPlaces: false);
+    HireLocation::create(['hire_id' => $hire->id, 'role' => 'from', 'location_id' => Location::create(['name' => 'Colombo Fort', 'latitude' => 6.9344, 'longitude' => 79.8428])->id]);
+    HireLocation::create(['hire_id' => $hire->id, 'role' => 'stay', 'order' => 1, 'location_id' => Location::create(['name' => 'Sigiriya', 'latitude' => 7.95, 'longitude' => 80.76])->id]);
+    HireLocation::create(['hire_id' => $hire->id, 'role' => 'stay', 'order' => 2, 'location_id' => Location::create(['name' => 'Kandy', 'latitude' => 7.29, 'longitude' => 80.63])->id]);
+    HireLocation::create(['hire_id' => $hire->id, 'role' => 'to', 'location_id' => Location::create(['name' => 'Colombo Fort', 'latitude' => 6.9344, 'longitude' => 79.8428])->id]);
+
+    $this->getJson("/api/driver/hires/{$hire->id}/route?origin_lat=6.05&origin_lng=80.22")->assertOk();
+
+    Http::assertSent(function (HttpRequest $request) {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+        // from → Sigiriya → Kandy are all on the way; the trip finishes back at from (→ to).
+        return $query['waypoints'] === '6.9344,79.8428|7.95,80.76|7.29,80.63'
+            && $query['destination'] === '6.9344,79.8428';
+    });
+});
+
 test('once the hire has started the pickup is behind the driver: straight to the end', function () {
     Http::fake([DIRECTIONS_URL => Http::response(googleRoute())]);
     [, $hire] = routeHire(['status' => 'started', 'tracking_started_at' => now()->subMinutes(20)]);

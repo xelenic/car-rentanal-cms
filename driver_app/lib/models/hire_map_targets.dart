@@ -33,34 +33,45 @@ bool _named(String? value) => value != null && value.trim().isNotEmpty;
 /// location are separate buttons instead of one that opens whichever comes
 /// first.
 ///
-///  * drop-and-pickup / day tours: the "from" place is the pickup location,
-///    the "to" place the end location;
+///  * drop-and-pickup tours: the "from" place is the pickup location, the
+///    "to" place the end location;
+///  * day tours: the same, but with any stay locations as stops in between —
+///    "from" pickup, then "Stop N" for each stay, then "to" as the end;
 ///  * multi day tours: the first stay is the pickup location, the last the end
 ///    location and anything between "Stop N";
 ///  * package tours: the package's own location.
 List<MapTarget> mapTargetsOf(Hire hire) {
   final targets = <MapTarget>[];
 
-  void addStays() {
-    final stays = hire.stayLocations.where(_named).map((s) => s.trim()).toList();
-    if (stays.length == 1) {
-      targets.add(MapTarget(role: MapRole.single, label: 'Location', place: stays.first));
+  List<String> namedStays() => hire.stayLocations.where(_named).map((s) => s.trim()).toList();
+
+  void addPlaces(List<String> places) {
+    if (places.length == 1) {
+      targets.add(MapTarget(role: MapRole.single, label: 'Location', place: places.first));
       return;
     }
-    for (var i = 0; i < stays.length; i++) {
+    for (var i = 0; i < places.length; i++) {
       final first = i == 0;
-      final last = i == stays.length - 1;
+      final last = i == places.length - 1;
       targets.add(MapTarget(
         role: first ? MapRole.pickup : (last ? MapRole.end : MapRole.stop),
         label: first ? 'Pickup location' : (last ? 'End location' : 'Stop ${i + 1}'),
-        place: stays[i],
+        place: places[i],
       ));
     }
   }
 
+  void addStays() => addPlaces(namedStays());
+
   switch (hire.tourType) {
     case 'multi_day':
       addStays();
+    case 'day_tour':
+      addPlaces([
+        if (_named(hire.fromLocation)) hire.fromLocation!.trim(),
+        ...namedStays(),
+        if (_named(hire.toLocation)) hire.toLocation!.trim(),
+      ]);
     case 'package':
       if (_named(hire.package)) {
         targets.add(MapTarget(role: MapRole.single, label: 'Package location', place: hire.package!.trim()));
@@ -139,7 +150,7 @@ class MapRoute {
 /// The route to open for this hire at this stage:
 ///
 ///  * before the hire starts — Your location → pickup location → end location
-///    (through any stops in between on a multi day tour);
+///    (through any stops in between on a day tour or a multi day tour);
 ///  * once it has started the customer is on board and the pickup is behind
 ///    the driver, so it's Your location → the rest of the way → end location;
 ///  * a hire with a single place just goes there;

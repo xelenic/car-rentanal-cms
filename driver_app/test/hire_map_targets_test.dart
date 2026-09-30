@@ -33,9 +33,20 @@ void main() {
       expect(_summary(mapTargetsOf(_hire())), ['Pickup location: Colombo Fort', 'End location: Ella']);
     });
 
-    test('a day tour is treated the same way', () {
+    test('a day tour with no stays is treated the same as a drop-and-pickup', () {
       expect(_summary(mapTargetsOf(_hire(tourType: 'day_tour', to: 'Kandy'))),
           ['Pickup location: Colombo Fort', 'End location: Kandy']);
+    });
+
+    test('a day tour runs pickup → its stays as stops → end', () {
+      final targets = mapTargetsOf(_hire(tourType: 'day_tour', stays: ['Sigiriya', 'Kandy']));
+
+      expect(_summary(targets), [
+        'Pickup location: Colombo Fort',
+        'Stop 2: Sigiriya',
+        'Stop 3: Kandy',
+        'End location: Ella',
+      ]);
     });
 
     test('only the places that exist are offered', () {
@@ -160,6 +171,19 @@ void main() {
       final after = mapRouteFor(hire, HireStage.inProgress)!;
       expect(after.waypoints, ['Nuwara Eliya', 'Ella']);
       expect(after.destination, 'Galle');
+    });
+
+    test('a day tour with stays goes through them too; after starting it skips the pickup', () {
+      final hire = _hire(tourType: 'day_tour', stays: ['Sigiriya', 'Kandy']);
+
+      final before = mapRouteFor(hire, HireStage.pickup)!;
+      expect(before.waypoints, ['Colombo Fort', 'Sigiriya', 'Kandy']);
+      expect(before.destination, 'Ella');
+      expect(before.url.queryParameters['waypoints'], 'Colombo Fort|Sigiriya|Kandy');
+
+      final after = mapRouteFor(hire.copyWith(trackingStartedAt: DateTime(2026, 9, 24)), HireStage.inProgress)!;
+      expect(after.waypoints, ['Sigiriya', 'Kandy']);
+      expect(after.destination, 'Ella');
     });
 
     test('place names are encoded, including non-latin ones', () {

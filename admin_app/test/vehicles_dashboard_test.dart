@@ -13,7 +13,7 @@ Future<void> _show(WidgetTester tester, FakeServer server, {bool settle = true})
   addTearDown(tester.view.reset);
 
   await server.install();
-  await tester.pumpWidget(MaterialApp(theme: buildAdminAppTheme(), home: const VehiclesDashboardScreen()));
+  await tester.pumpWidget(MaterialApp(theme: buildAdminAppTheme(), home: VehiclesDashboardScreen(user: server.adminUser)));
   await _quiet(tester, settle);
 }
 
@@ -95,32 +95,6 @@ void main() {
 
     expect(server.paths, isNot(contains('/api/admin/hires')));
     expect(server.paths.where((p) => p.contains('/hires')), isEmpty);
-  });
-
-  group('My Expenses', () {
-    testWidgets('has a button for someone who may view them', (tester) async {
-      await _show(tester, _fleet()..canViewMyExpenses = true);
-
-      expect(find.byKey(const Key('my-expenses')), findsOneWidget);
-    });
-
-    testWidgets('has none for someone who may not', (tester) async {
-      await _show(tester, _fleet()..canViewMyExpenses = false);
-
-      expect(find.byKey(const Key('my-expenses')), findsNothing);
-    });
-
-    testWidgets('the button opens My Expenses', (tester) async {
-      final server = _fleet();
-      await _show(tester, server);
-
-      await tester.tap(find.byKey(const Key('my-expenses')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('My Expenses'), findsOneWidget);
-      expect(find.byKey(const Key('card-my-profit')), findsOneWidget);
-      expect(server.requestsTo('/api/admin/my-expenses'), isNotEmpty);
-    });
   });
 
   testWidgets('offers Add Vehicle to someone allowed to add one', (tester) async {

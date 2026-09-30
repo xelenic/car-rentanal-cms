@@ -11,13 +11,16 @@ class NotificationsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Notifications'),
           bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: 'Assigned Tours'),
+              Tab(text: 'Unpaid Credit Hires'),
               Tab(text: 'Admin Messages'),
             ],
           ),
@@ -25,6 +28,7 @@ class NotificationsScreen extends StatelessWidget {
         body: const TabBarView(
           children: [
             _AssignedToursTab(),
+            _UnpaidCreditTab(),
             _AdminMessagesTab(),
           ],
         ),
@@ -93,6 +97,77 @@ class _AssignedToursTabState extends State<_AssignedToursTab> {
             itemCount: hires.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (context, index) => HireRouteCard(hire: hires[index]),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Credit hires the company hasn't fully claimed payment for yet ("Unpaid" or
+/// "Partially Paid" — see Hire.isFullyPaid) — a running reminder of what's
+/// still owed, whichever hire the balance happens to sit on. Claiming payment
+/// itself is admin-only; this is read-only.
+class _UnpaidCreditTab extends StatefulWidget {
+  const _UnpaidCreditTab();
+
+  @override
+  State<_UnpaidCreditTab> createState() => _UnpaidCreditTabState();
+}
+
+class _UnpaidCreditTabState extends State<_UnpaidCreditTab> {
+  late Future<HirePage> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = ApiClient.instance.fetchHires(perPage: 50);
+  }
+
+  Future<void> _refresh() async {
+    final future = ApiClient.instance.fetchHires(perPage: 50);
+    setState(() => _future = future);
+    await future;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      color: AppColors.neon,
+      backgroundColor: AppColors.surface,
+      onRefresh: _refresh,
+      child: FutureBuilder<HirePage>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(
+              child: CircularProgressIndicator(color: AppColors.neon),
+            );
+          }
+
+          if (snapshot.hasError) {
+            return _EmptyState(
+              icon: Icons.error_outline,
+              title: 'Could not load hires',
+              subtitle: snapshot.error.toString(),
+            );
+          }
+
+          final unpaid = snapshot.data!.items.where((hire) => hire.isCredit && !hire.isFullyPaid).toList();
+
+          if (unpaid.isEmpty) {
+            return const _EmptyState(
+              icon: Icons.check_circle_outline,
+              title: 'All credit hires are settled',
+              subtitle: 'A credit hire will show up here until its payment is fully claimed.',
+            );
+          }
+
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: unpaid.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, index) => HireRouteCard(hire: unpaid[index]),
           );
         },
       ),

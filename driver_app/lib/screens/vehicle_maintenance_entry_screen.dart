@@ -82,10 +82,13 @@ class _VehicleMaintenanceEntryScreenState extends State<VehicleMaintenanceEntryS
     }
   }
 
-  Future<void> _takePhoto() async {
+  Future<void> _pickBillPhoto() async {
+    final source = await _chooseImageSource();
+    if (source == null) return;
+
     try {
       final photo = await _picker.pickImage(
-        source: ImageSource.camera,
+        source: source,
         maxWidth: 1600,
         imageQuality: 85,
       );
@@ -94,8 +97,55 @@ class _VehicleMaintenanceEntryScreenState extends State<VehicleMaintenanceEntryS
       setState(() => _bill = photo);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = 'Could not open the camera: $e');
+      setState(() {
+        _error = source == ImageSource.camera
+            ? 'Could not open the camera: $e'
+            : 'Could not open the gallery: $e';
+      });
     }
+  }
+
+  /// Lets the driver pick between the camera and their photo gallery for the
+  /// bill — some bills are easier to snap ahead of time or come in as an
+  /// existing photo/screenshot, rather than forcing a fresh one every time.
+  Future<ImageSource?> _chooseImageSource() {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined, color: AppColors.neon),
+                title: const Text('Take Photo'),
+                onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined, color: AppColors.neon),
+                title: const Text('Choose from Gallery'),
+                onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _save() async {
@@ -221,7 +271,7 @@ class _VehicleMaintenanceEntryScreenState extends State<VehicleMaintenanceEntryS
                         ),
                       ),
                       const SizedBox(height: 14),
-                      _BillPicker(bill: _bill, onTap: _takePhoto),
+                      _BillPicker(bill: _bill, onTap: _pickBillPhoto),
                       const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
@@ -316,9 +366,9 @@ class _BillPicker extends StatelessWidget {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                          Icon(Icons.sync, color: Colors.white, size: 14),
                           SizedBox(width: 4),
-                          Text('Retake', style: TextStyle(color: Colors.white, fontSize: 11)),
+                          Text('Change', style: TextStyle(color: Colors.white, fontSize: 11)),
                         ],
                       ),
                     ),
@@ -329,11 +379,16 @@ class _BillPicker extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.camera_alt_outlined, color: AppColors.neon, size: 26),
+                    Icon(Icons.add_a_photo_outlined, color: AppColors.neon, size: 26),
                     SizedBox(height: 6),
                     Text(
-                      'Take Photo of Bill',
+                      'Add Photo of Bill',
                       style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Camera or Gallery',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 10.5),
                     ),
                   ],
                 ),

@@ -144,6 +144,8 @@
                                         {{ $hire->package?->name ?? '—' }}
                                     @elseif ($hire->tour_type === 'multi_day')
                                         {{ $hire->stayLocations->pluck('location.name')->join(' → ') ?: '—' }}
+                                    @elseif ($hire->tour_type === 'day_tour' && $hire->stayLocations->isNotEmpty())
+                                        {{ collect([$hire->fromLocation?->location?->name])->concat($hire->stayLocations->pluck('location.name'))->push($hire->toLocation?->location?->name)->filter()->join(' → ') }}
                                     @else
                                         {{ $hire->fromLocation?->location?->name }} → {{ $hire->toLocation?->location?->name }}
                                     @endif

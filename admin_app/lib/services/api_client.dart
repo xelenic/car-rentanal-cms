@@ -6,6 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/admin_user.dart';
+import '../models/customer.dart';
+import '../models/driver.dart';
 import '../models/hire.dart';
 import '../models/hire_period.dart';
 import '../models/hire_tab.dart';
@@ -221,6 +223,45 @@ class ApiClient {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       return Vehicle.fromJson(data['data'] as Map<String, dynamic>);
     }
+
+    throw ApiException(_extractError(response));
+  }
+
+  Future<Vehicle> updateVehicle(
+    int id, {
+    required String model,
+    required String condition,
+    required int seats,
+    required int pax,
+    String? description,
+  }) async {
+    final response = await _http.put(
+      Uri.parse('$baseUrl/admin/vehicles/$id'),
+      headers: await _headers(auth: true),
+      body: jsonEncode({
+        'model': model,
+        'condition': condition,
+        'seats': seats,
+        'pax': pax,
+        'description': (description ?? '').trim().isEmpty ? null : description!.trim(),
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return Vehicle.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  Future<void> deleteVehicle(int id) async {
+    final response = await _http.delete(
+      Uri.parse('$baseUrl/admin/vehicles/$id'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 204) return;
 
     throw ApiException(_extractError(response));
   }
@@ -540,6 +581,154 @@ class ApiClient {
     } catch (_) {
       return const PlaceDetails();
     }
+  }
+
+  /// The driver roster, a page at a time.
+  Future<DriverPage> fetchDrivers({String? search, int page = 1}) async {
+    final uri = Uri.parse('$baseUrl/admin/drivers').replace(
+      queryParameters: {
+        if (search != null && search.isNotEmpty) 'search': search,
+        'page': '$page',
+      },
+    );
+    final response = await _http.get(uri, headers: await _headers(auth: true));
+
+    if (response.statusCode == 200) {
+      return DriverPage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  Future<Driver> fetchDriver(int id) async {
+    final response = await _http.get(
+      Uri.parse('$baseUrl/admin/drivers/$id'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return Driver.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// Adds a driver, or — given [id] — saves changes to one. [password] is
+  /// required when adding, and optional when editing (blank keeps it as-is).
+  Future<Driver> saveDriver({
+    int? id,
+    required String name,
+    required String license,
+    required String contactNumber,
+    String? additionalPhoneNumber,
+    required String email,
+    String? password,
+  }) async {
+    final body = jsonEncode({
+      'name': name,
+      'license': license,
+      'contact_number': contactNumber,
+      'additional_phone_number': (additionalPhoneNumber ?? '').trim().isEmpty ? null : additionalPhoneNumber!.trim(),
+      'email': email,
+      if (password != null && password.isNotEmpty) 'password': password,
+    });
+    final headers = await _headers(auth: true);
+    final response = id == null
+        ? await _http.post(Uri.parse('$baseUrl/admin/drivers'), headers: headers, body: body)
+        : await _http.put(Uri.parse('$baseUrl/admin/drivers/$id'), headers: headers, body: body);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return Driver.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  Future<void> deleteDriver(int id) async {
+    final response = await _http.delete(
+      Uri.parse('$baseUrl/admin/drivers/$id'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 204) return;
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// The customer list, a page at a time.
+  Future<CustomerPage> fetchCustomers({String? search, int page = 1}) async {
+    final uri = Uri.parse('$baseUrl/admin/customers').replace(
+      queryParameters: {
+        if (search != null && search.isNotEmpty) 'search': search,
+        'page': '$page',
+      },
+    );
+    final response = await _http.get(uri, headers: await _headers(auth: true));
+
+    if (response.statusCode == 200) {
+      return CustomerPage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  Future<Customer> fetchCustomer(int id) async {
+    final response = await _http.get(
+      Uri.parse('$baseUrl/admin/customers/$id'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return Customer.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// Adds a customer, or — given [id] — saves changes to one.
+  Future<Customer> saveCustomer({
+    int? id,
+    required String name,
+    required String phone,
+    String? email,
+    String? nicPassport,
+    String? address,
+    String? notes,
+  }) async {
+    String? orNull(String? value) => (value ?? '').trim().isEmpty ? null : value!.trim();
+    final body = jsonEncode({
+      'name': name,
+      'phone': phone,
+      'email': orNull(email),
+      'nic_passport': orNull(nicPassport),
+      'address': orNull(address),
+      'notes': orNull(notes),
+    });
+    final headers = await _headers(auth: true);
+    final response = id == null
+        ? await _http.post(Uri.parse('$baseUrl/admin/customers'), headers: headers, body: body)
+        : await _http.put(Uri.parse('$baseUrl/admin/customers/$id'), headers: headers, body: body);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return Customer.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  Future<void> deleteCustomer(int id) async {
+    final response = await _http.delete(
+      Uri.parse('$baseUrl/admin/customers/$id'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 204) return;
+
+    throw ApiException(_extractError(response));
   }
 
   String _extractError(http.Response response) {

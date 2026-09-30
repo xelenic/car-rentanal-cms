@@ -5,10 +5,13 @@ import '../models/vehicle.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 
-/// The Add Vehicle form. Pops with the created [Vehicle] so the dashboard can
-/// reload and confirm.
+/// The Add Vehicle form — or, given [vehicle], the Edit Vehicle form. Pops
+/// with the created/updated [Vehicle] so the caller can reload and confirm.
 class AddVehicleScreen extends StatefulWidget {
-  const AddVehicleScreen({super.key});
+  const AddVehicleScreen({super.key, this.vehicle});
+
+  /// When set, the form edits this vehicle instead of creating a new one.
+  final Vehicle? vehicle;
 
   @override
   State<AddVehicleScreen> createState() => _AddVehicleScreenState();
@@ -16,14 +19,16 @@ class AddVehicleScreen extends StatefulWidget {
 
 class _AddVehicleScreenState extends State<AddVehicleScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _model = TextEditingController();
-  final _seats = TextEditingController();
-  final _pax = TextEditingController();
-  final _description = TextEditingController();
+  late final _model = TextEditingController(text: widget.vehicle?.model);
+  late final _seats = TextEditingController(text: widget.vehicle?.seats.toString());
+  late final _pax = TextEditingController(text: widget.vehicle?.pax.toString());
+  late final _description = TextEditingController(text: widget.vehicle?.description);
 
-  String _condition = 'Good';
+  late String _condition = widget.vehicle?.condition ?? 'Good';
   bool _submitting = false;
   String? _error;
+
+  bool get _editing => widget.vehicle != null;
 
   @override
   void dispose() {
@@ -51,13 +56,22 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     });
 
     try {
-      final vehicle = await ApiClient.instance.createVehicle(
-        model: _model.text.trim(),
-        condition: _condition,
-        seats: int.parse(_seats.text.trim()),
-        pax: int.parse(_pax.text.trim()),
-        description: _description.text,
-      );
+      final vehicle = _editing
+          ? await ApiClient.instance.updateVehicle(
+              widget.vehicle!.id,
+              model: _model.text.trim(),
+              condition: _condition,
+              seats: int.parse(_seats.text.trim()),
+              pax: int.parse(_pax.text.trim()),
+              description: _description.text,
+            )
+          : await ApiClient.instance.createVehicle(
+              model: _model.text.trim(),
+              condition: _condition,
+              seats: int.parse(_seats.text.trim()),
+              pax: int.parse(_pax.text.trim()),
+              description: _description.text,
+            );
       if (!mounted) return;
       Navigator.of(context).pop(vehicle);
     } on ApiException catch (e) {
@@ -72,7 +86,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Add Vehicle')),
+      appBar: AppBar(title: Text(_editing ? 'Edit Vehicle' : 'Add Vehicle')),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -157,7 +171,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                       width: 20,
                       child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
                     )
-                  : const Text('Add Vehicle'),
+                  : Text(_editing ? 'Save Changes' : 'Add Vehicle'),
             ),
           ],
         ),

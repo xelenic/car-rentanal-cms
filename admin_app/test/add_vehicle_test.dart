@@ -12,7 +12,7 @@ Future<FakeServer> _openForm(WidgetTester tester, {FakeServer? server}) async {
 
   final fake = server ?? FakeServer(vehicles: [vehicleJson(id: 1, model: 'ZZZ Test Van')]);
   await fake.install();
-  await tester.pumpWidget(MaterialApp(theme: buildAdminAppTheme(), home: const VehiclesDashboardScreen()));
+  await tester.pumpWidget(MaterialApp(theme: buildAdminAppTheme(), home: VehiclesDashboardScreen(user: fake.adminUser)));
   await tester.pumpAndSettle();
 
   await tester.tap(find.byKey(const Key('add-vehicle')));

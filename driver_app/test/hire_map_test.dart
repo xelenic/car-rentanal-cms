@@ -207,6 +207,53 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     }, variant: _iosOnly);
 
+    testWidgets('a day tour plots every stop, and frames the whole trip — not just the first place', (tester) async {
+      const sigiriya = HireMapPoint(role: MapRole.stop, name: 'Sigiriya', latitude: 7.9570, longitude: 80.7603);
+      const dambulla = HireMapPoint(role: MapRole.stop, name: 'Dambulla', latitude: 7.8567, longitude: 80.6517);
+      const kandy = HireMapPoint(role: MapRole.end, name: 'Kandy', latitude: 7.2906, longitude: 80.6337);
+
+      await show(tester, _hire(mapPoints: [_colombo, sigiriya, dambulla, kandy]));
+
+      expect(maps.markers.map((m) => m.infoWindow.snippet), ['Colombo Fort', 'Sigiriya', 'Dambulla', 'Kandy']);
+      expect(maps.markers.map((m) => m.infoWindow.title), [
+        'Pickup location',
+        'Stop',
+        'Stop',
+        'End location',
+      ]);
+      expect(find.text('Stops'), findsOneWidget); // legend
+      // The camera starts on the first place (the pickup, before it is reframed)…
+      expect(maps.initialCamera!.target, const LatLng(6.9344, 79.8428));
+      // …but is asked to fit all four, not just where it opened.
+      expect(maps.fitBounds, isNotEmpty);
+      final bounds = maps.fitBounds.first;
+      for (final place in [_colombo, sigiriya, dambulla, kandy]) {
+        expect(bounds.southwest.latitude, lessThanOrEqualTo(place.latitude));
+        expect(bounds.northeast.latitude, greaterThanOrEqualTo(place.latitude));
+        expect(bounds.southwest.longitude, lessThanOrEqualTo(place.longitude));
+        expect(bounds.northeast.longitude, greaterThanOrEqualTo(place.longitude));
+      }
+
+      await tester.pumpWidget(const SizedBox());
+    }, variant: _iosOnly);
+
+    testWidgets('framing is retried over the first few seconds, in case the map was not ready yet', (tester) async {
+      await show(tester, _hire(mapPoints: [_colombo, _ella]));
+
+      expect(maps.fitBounds, hasLength(1)); // the first retry, already elapsed inside show()'s settle
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(maps.fitBounds, hasLength(2));
+
+      await tester.pump(const Duration(seconds: 2));
+      expect(maps.fitBounds, hasLength(3));
+
+      // Every retry asked for the same frame — nothing jumps around once it's right.
+      expect(maps.fitBounds.toSet(), hasLength(1));
+
+      await tester.pumpWidget(const SizedBox());
+    }, variant: _iosOnly);
+
     testWidgets('inline, the map lets the page scroll over it', (tester) async {
       await show(tester, _hire(mapPoints: [_colombo, _ella]));
 

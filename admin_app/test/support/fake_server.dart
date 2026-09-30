@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:admin_app/models/admin_user.dart';
 import 'package:admin_app/services/api_client.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,7 +14,18 @@ class FakeServer {
   FakeServer({
     List<Map<String, dynamic>>? vehicles,
     Map<int, List<Map<String, dynamic>>>? hires,
+    this.canViewVehicles = true,
     this.canCreateVehicles = true,
+    this.canUpdateVehicles = true,
+    this.canDeleteVehicles = true,
+    this.canViewDrivers = true,
+    this.canCreateDrivers = true,
+    this.canUpdateDrivers = true,
+    this.canDeleteDrivers = true,
+    this.canViewCustomers = true,
+    this.canCreateCustomers = true,
+    this.canUpdateCustomers = true,
+    this.canDeleteCustomers = true,
     this.canCreateHires = true,
     this.canUpdateHires = true,
     this.canDeleteHires = true,
@@ -25,6 +37,8 @@ class FakeServer {
     List<Map<String, dynamic>>? expenses,
     List<Map<String, dynamic>>? expenseCategories,
     List<Map<String, dynamic>>? incomes,
+    List<Map<String, dynamic>>? drivers,
+    List<Map<String, dynamic>>? customers,
     this.profitBeforeExpenses = 6400,
     this.otherIncomeTotal = 0,
     this.otherIncomeCount = 0,
@@ -35,6 +49,8 @@ class FakeServer {
         expenses = expenses ?? [],
         expenseCategories = expenseCategories ?? defaultExpenseCategories(),
         incomes = incomes ?? [],
+        drivers = drivers ?? [],
+        customers = customers ?? [],
         periods = periods ?? {},
         statsByPeriod = statsByPeriod ?? {};
 
@@ -44,7 +60,18 @@ class FakeServer {
   /// tagged with a "_tab" the fake serves them under.
   final Map<int, List<Map<String, dynamic>>> hires;
 
+  bool canViewVehicles;
   bool canCreateVehicles;
+  bool canUpdateVehicles;
+  bool canDeleteVehicles;
+  bool canViewDrivers;
+  bool canCreateDrivers;
+  bool canUpdateDrivers;
+  bool canDeleteDrivers;
+  bool canViewCustomers;
+  bool canCreateCustomers;
+  bool canUpdateCustomers;
+  bool canDeleteCustomers;
   bool canCreateHires;
   bool canUpdateHires;
   bool canDeleteHires;
@@ -53,6 +80,38 @@ class FakeServer {
   bool canUpdateMyExpenses;
   bool canDeleteMyExpenses;
   int pageSize;
+
+  /// The driver roster and customer list, each in the API's JSON shape.
+  final List<Map<String, dynamic>> drivers;
+  final List<Map<String, dynamic>> customers;
+
+  /// The signed-in user the fake's flags describe — for a test that mounts a
+  /// tab screen (VehiclesDashboardScreen, DriversTab, ...) directly instead
+  /// of through HomeScreen, which is what normally fetches /admin/me.
+  AdminUser get adminUser => AdminUser(
+        id: 1,
+        name: 'ZZZ Test Admin',
+        email: 'zzz@example.test',
+        canCreateHires: canCreateHires,
+        canUpdateHires: canUpdateHires,
+        canDeleteHires: canDeleteHires,
+        canViewVehicles: canViewVehicles,
+        canCreateVehicles: canCreateVehicles,
+        canUpdateVehicles: canUpdateVehicles,
+        canDeleteVehicles: canDeleteVehicles,
+        canViewDrivers: canViewDrivers,
+        canCreateDrivers: canCreateDrivers,
+        canUpdateDrivers: canUpdateDrivers,
+        canDeleteDrivers: canDeleteDrivers,
+        canViewCustomers: canViewCustomers,
+        canCreateCustomers: canCreateCustomers,
+        canUpdateCustomers: canUpdateCustomers,
+        canDeleteCustomers: canDeleteCustomers,
+        canViewMyExpenses: canViewMyExpenses,
+        canCreateMyExpenses: canCreateMyExpenses,
+        canUpdateMyExpenses: canUpdateMyExpenses,
+        canDeleteMyExpenses: canDeleteMyExpenses,
+      );
 
   /// The owner's expenses, in the API's shape, and the categories they are filed under.
   final List<Map<String, dynamic>> expenses;
@@ -80,6 +139,14 @@ class FakeServer {
 
   final List<http.Request> requests = [];
   final List<Map<String, dynamic>> createdVehicles = [];
+  final List<({int id, Map<String, dynamic> body})> updatedVehicles = [];
+  final List<int> deletedVehicles = [];
+  final List<Map<String, dynamic>> createdDrivers = [];
+  final List<({int id, Map<String, dynamic> body})> updatedDrivers = [];
+  final List<int> deletedDrivers = [];
+  final List<Map<String, dynamic>> createdCustomers = [];
+  final List<({int id, Map<String, dynamic> body})> updatedCustomers = [];
+  final List<int> deletedCustomers = [];
   final List<Map<String, dynamic>> createdHires = [];
   final List<({int id, Map<String, dynamic> body})> updatedHires = [];
   final List<int> deletedHires = [];
@@ -350,8 +417,18 @@ class FakeServer {
         'can_create_my_expenses': canCreateMyExpenses,
         'can_update_my_expenses': canUpdateMyExpenses,
         'can_delete_my_expenses': canDeleteMyExpenses,
-        'can_view_vehicles': true,
+        'can_view_vehicles': canViewVehicles,
         'can_create_vehicles': canCreateVehicles,
+        'can_update_vehicles': canUpdateVehicles,
+        'can_delete_vehicles': canDeleteVehicles,
+        'can_view_drivers': canViewDrivers,
+        'can_create_drivers': canCreateDrivers,
+        'can_update_drivers': canUpdateDrivers,
+        'can_delete_drivers': canDeleteDrivers,
+        'can_view_customers': canViewCustomers,
+        'can_create_customers': canCreateCustomers,
+        'can_update_customers': canUpdateCustomers,
+        'can_delete_customers': canDeleteCustomers,
       });
     }
 
@@ -482,6 +559,28 @@ class FakeServer {
       final id = int.parse(vehicleOne.group(1)!);
       final vehicle = vehicles.where((v) => v['id'] == id).firstOrNull;
       if (vehicle == null) return _json({'message': 'Not found.'}, 404);
+
+      if (request.method == 'PUT') {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        updatedVehicles.add((id: id, body: body));
+        if ((body['model'] as String? ?? '').isEmpty) {
+          return _json({'message': 'The model field is required.', 'errors': {'model': ['The model field is required.']}}, 422);
+        }
+        vehicle
+          ..['model'] = body['model']
+          ..['condition'] = body['condition']
+          ..['seats'] = body['seats']
+          ..['pax'] = body['pax']
+          ..['description'] = body['description'];
+        return _json({'data': vehicle});
+      }
+
+      if (request.method == 'DELETE') {
+        vehicles.remove(vehicle);
+        deletedVehicles.add(id);
+        return _json({'message': 'Vehicle "${vehicle['model']}" was deleted.'});
+      }
+
       final year = request.url.queryParameters['year'];
       final month = request.url.queryParameters['month'];
       final key = year == null ? null : (month == null ? year : '$year-$month');
@@ -489,6 +588,132 @@ class FakeServer {
         return _json({'data': {...vehicle, 'stats': statsByPeriod[key]}});
       }
       return _json({'data': vehicle});
+    }
+
+    if (path == '/admin/drivers' && request.method == 'GET') {
+      final search = (request.url.queryParameters['search'] ?? '').toLowerCase();
+      final page = int.parse(request.url.queryParameters['page'] ?? '1');
+      final matching = drivers
+          .where((d) => search.isEmpty || '${d['name']} ${d['email']} ${d['contact_number']}'.toLowerCase().contains(search))
+          .toList()
+        ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+      final start = (page - 1) * pageSize;
+      return _json({
+        'data': matching.skip(start).take(pageSize).toList(),
+        'meta': {'current_page': page, 'last_page': (matching.length / pageSize).ceil().clamp(1, 999)},
+      });
+    }
+
+    if (path == '/admin/drivers' && request.method == 'POST') {
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      if ((body['name'] as String? ?? '').isEmpty) {
+        return _json({'message': 'The name field is required.', 'errors': {'name': ['The name field is required.']}}, 422);
+      }
+      if (((body['password'] ?? '') as String).length < 8) {
+        return _json({'message': 'The password field must be at least 8 characters.', 'errors': {'password': ['The password field must be at least 8 characters.']}}, 422);
+      }
+      createdDrivers.add(body);
+      final driver = driverJson(
+        id: 200 + createdDrivers.length,
+        name: body['name'] as String,
+        license: body['license'] as String? ?? '',
+        contactNumber: body['contact_number'] as String? ?? '',
+        additionalPhoneNumber: body['additional_phone_number'] as String?,
+        email: body['email'] as String? ?? '',
+      );
+      drivers.add(driver);
+      return _json({'data': driver}, 201);
+    }
+
+    final driverOne = RegExp(r'^/admin/drivers/(\d+)$').firstMatch(path);
+    if (driverOne != null) {
+      final id = int.parse(driverOne.group(1)!);
+      final driver = drivers.where((d) => d['id'] == id).firstOrNull;
+      if (driver == null) return _json({'message': 'Not found.'}, 404);
+
+      if (request.method == 'PUT') {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        updatedDrivers.add((id: id, body: body));
+        driver
+          ..['name'] = body['name']
+          ..['license'] = body['license']
+          ..['contact_number'] = body['contact_number']
+          ..['additional_phone_number'] = body['additional_phone_number']
+          ..['email'] = body['email'];
+        return _json({'data': driver});
+      }
+
+      if (request.method == 'DELETE') {
+        drivers.remove(driver);
+        deletedDrivers.add(id);
+        return _json({'message': 'Driver "${driver['name']}" was deleted.'});
+      }
+
+      return _json({'data': driver});
+    }
+
+    if (path == '/admin/customers' && request.method == 'GET') {
+      final search = (request.url.queryParameters['search'] ?? '').toLowerCase();
+      final page = int.parse(request.url.queryParameters['page'] ?? '1');
+      final matching = customers
+          .where((c) => search.isEmpty || '${c['name']} ${c['phone']} ${c['email'] ?? ''}'.toLowerCase().contains(search))
+          .toList()
+        ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+      final start = (page - 1) * pageSize;
+      return _json({
+        'data': matching.skip(start).take(pageSize).toList(),
+        'meta': {'current_page': page, 'last_page': (matching.length / pageSize).ceil().clamp(1, 999)},
+      });
+    }
+
+    if (path == '/admin/customers' && request.method == 'POST') {
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      if ((body['name'] as String? ?? '').isEmpty) {
+        return _json({'message': 'The name field is required.', 'errors': {'name': ['The name field is required.']}}, 422);
+      }
+      if ((body['phone'] as String? ?? '').isEmpty) {
+        return _json({'message': 'The phone field is required.', 'errors': {'phone': ['The phone field is required.']}}, 422);
+      }
+      createdCustomers.add(body);
+      final customer = customerJson(
+        id: 300 + createdCustomers.length,
+        name: body['name'] as String,
+        phone: body['phone'] as String,
+        email: body['email'] as String?,
+        nicPassport: body['nic_passport'] as String?,
+        address: body['address'] as String?,
+        notes: body['notes'] as String?,
+      );
+      customers.add(customer);
+      return _json({'data': customer}, 201);
+    }
+
+    final customerOne = RegExp(r'^/admin/customers/(\d+)$').firstMatch(path);
+    if (customerOne != null) {
+      final id = int.parse(customerOne.group(1)!);
+      final customer = customers.where((c) => c['id'] == id).firstOrNull;
+      if (customer == null) return _json({'message': 'Not found.'}, 404);
+
+      if (request.method == 'PUT') {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        updatedCustomers.add((id: id, body: body));
+        customer
+          ..['name'] = body['name']
+          ..['phone'] = body['phone']
+          ..['email'] = body['email']
+          ..['nic_passport'] = body['nic_passport']
+          ..['address'] = body['address']
+          ..['notes'] = body['notes'];
+        return _json({'data': customer});
+      }
+
+      if (request.method == 'DELETE') {
+        customers.remove(customer);
+        deletedCustomers.add(id);
+        return _json({'message': 'Customer "${customer['name']}" was deleted.'});
+      }
+
+      return _json({'data': customer});
     }
 
     if (path == '/admin/hires/reference-data') {
@@ -635,6 +860,44 @@ Map<String, dynamic> vehicleJson({
       'pax': pax,
       'description': description,
       'stats': stats ?? zeroStats(),
+    };
+
+/// A driver in the API's shape — mirrors Api\Admin\DriverResource.
+Map<String, dynamic> driverJson({
+  required int id,
+  String name = 'ZZZ Test Driver',
+  String license = 'ZZZ-LIC-001',
+  String contactNumber = '0770000001',
+  String? additionalPhoneNumber,
+  String email = 'zzz.driver@example.test',
+}) =>
+    {
+      'id': id,
+      'name': name,
+      'license': license,
+      'contact_number': contactNumber,
+      'additional_phone_number': additionalPhoneNumber,
+      'email': email,
+    };
+
+/// A customer in the API's shape — mirrors Api\Admin\CustomerResource.
+Map<String, dynamic> customerJson({
+  required int id,
+  String name = 'ZZZ Test Customer',
+  String phone = '0770000001',
+  String? email,
+  String? nicPassport,
+  String? address,
+  String? notes,
+}) =>
+    {
+      'id': id,
+      'name': name,
+      'phone': phone,
+      'email': email,
+      'nic_passport': nicPassport,
+      'address': address,
+      'notes': notes,
     };
 
 /// A hire in the API's shape. [tab] is the fake's own routing tag, and so is

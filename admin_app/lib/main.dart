@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
-import 'screens/vehicles_dashboard_screen.dart';
 import 'services/api_client.dart';
 import 'theme/app_theme.dart';
 
@@ -49,6 +49,6 @@ class _SplashGateState extends State<_SplashGate> {
     if (_loggedIn == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    return _loggedIn! ? const VehiclesDashboardScreen() : const LoginScreen();
+    return _loggedIn! ? const HomeScreen() : const LoginScreen();
   }
 }

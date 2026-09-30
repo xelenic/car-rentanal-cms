@@ -111,6 +111,30 @@ test('a multi day hire maps pickup → stops → end in day order', function () 
         ->toBe(['pickup:Kandy', 'stop:Ella', 'end:Galle']);
 });
 
+test('a day tour maps from → its stays (in order) → to', function () {
+    [, $hire] = driverWithHire(['tour_type' => 'day_tour']);
+    hireLocation($hire, 'to', Location::create(['name' => 'Colombo Fort', 'latitude' => 6.9344, 'longitude' => 79.8428]));
+    hireLocation($hire, 'from', Location::create(['name' => 'Colombo Fort', 'latitude' => 6.9344, 'longitude' => 79.8428]));
+    hireLocation($hire, 'stay', Location::create(['name' => 'Kandy', 'latitude' => 7.29, 'longitude' => 80.63]), ['order' => 2]);
+    hireLocation($hire, 'stay', Location::create(['name' => 'Sigiriya', 'latitude' => 7.95, 'longitude' => 80.76]), ['order' => 1]);
+
+    $response = $this->getJson('/api/driver/hires')->assertOk();
+
+    expect(collect($response->json('data.0.map_locations'))->map(fn ($p) => $p['role'].':'.$p['name'])->all())
+        ->toBe(['pickup:Colombo Fort', 'stop:Sigiriya', 'stop:Kandy', 'end:Colombo Fort']);
+});
+
+test('a day tour with no stays just maps from → to, like a drop-and-pickup', function () {
+    [, $hire] = driverWithHire(['tour_type' => 'day_tour']);
+    hireLocation($hire, 'from', Location::create(['name' => 'Colombo Fort', 'latitude' => 6.9344, 'longitude' => 79.8428]));
+    hireLocation($hire, 'to', Location::create(['name' => 'Ella', 'latitude' => 6.87, 'longitude' => 81.05]));
+
+    $response = $this->getJson('/api/driver/hires')->assertOk();
+
+    expect(collect($response->json('data.0.map_locations'))->map(fn ($p) => $p['role'].':'.$p['name'])->all())
+        ->toBe(['pickup:Colombo Fort', 'end:Ella']);
+});
+
 test('a package hire maps its itinerary stops', function () {
     $package = Package::create(['name' => 'Hill Country', 'hours' => 24, 'price' => 5000]);
     PackageItinerary::create(['package_id' => $package->id, 'location_id' => Location::create(['name' => 'Nuwara Eliya', 'latitude' => 6.97, 'longitude' => 80.78])->id, 'order' => 2]);

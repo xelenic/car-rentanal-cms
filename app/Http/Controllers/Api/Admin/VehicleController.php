@@ -59,6 +59,24 @@ class VehicleController extends Controller
             ->setStatusCode(201);
     }
 
+    public function update(Request $request, Vehicle $vehicle): VehicleResource
+    {
+        abort_unless($request->user()->can('vehicles.update'), 403, 'You do not have permission to edit vehicles.');
+
+        $vehicle->update($request->validate(Vehicle::rules()));
+
+        return new VehicleResource(Vehicle::query()->withHireStats()->findOrFail($vehicle->id));
+    }
+
+    public function destroy(Request $request, Vehicle $vehicle): JsonResponse
+    {
+        abort_unless($request->user()->can('vehicles.delete'), 403, 'You do not have permission to delete vehicles.');
+
+        $vehicle->delete();
+
+        return response()->json(['message' => "Vehicle \"{$vehicle->model}\" was deleted."]);
+    }
+
     /** Optionally for one year (and month): every number then covers just that period. */
     public function show(Request $request, Vehicle $vehicle): VehicleResource
     {

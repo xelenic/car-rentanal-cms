@@ -2,6 +2,7 @@
 
 use App\Models\Driver;
 use App\Models\Hire;
+use App\Models\HirePayment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -171,6 +172,63 @@ describe('periods', function () {
 
     test('an unknown status is refused', function () {
         $this->getJson('/api/driver/hires/periods?status=nonsense')->assertStatus(422);
+    });
+});
+
+describe('payment status', function () {
+    test('a cash hire is unpaid by default — no payments are ever claimed against it', function () {
+        $driver = listingDriver();
+        listedHire($driver, ['payment_type' => 'cash', 'hire_full_value' => 5000]);
+
+        $response = $this->getJson('/api/driver/hires')->assertOk();
+
+        $response->assertJsonPath('data.0.payment_status', 'unpaid')
+            ->assertJsonPath('data.0.paid_amount', 0)
+            ->assertJsonPath('data.0.balance_remaining', 5000);
+    });
+
+    test('a credit hire with nothing claimed yet is "unpaid"', function () {
+        $driver = listingDriver();
+        listedHire($driver, ['payment_type' => 'credit', 'hire_full_value' => 5000]);
+
+        $this->getJson('/api/driver/hires')->assertOk()
+            ->assertJsonPath('data.0.payment_status', 'unpaid')
+            ->assertJsonPath('data.0.paid_amount', 0)
+            ->assertJsonPath('data.0.balance_remaining', 5000);
+    });
+
+    test('a credit hire with some of it claimed is "partial"', function () {
+        $driver = listingDriver();
+        $hire = listedHire($driver, ['payment_type' => 'credit', 'hire_full_value' => 5000]);
+        HirePayment::create(['hire_id' => $hire->id, 'amount' => 2000, 'paid_at' => now()]);
+
+        $this->getJson('/api/driver/hires')->assertOk()
+            ->assertJsonPath('data.0.payment_status', 'partial')
+            ->assertJsonPath('data.0.paid_amount', 2000)
+            ->assertJsonPath('data.0.balance_remaining', 3000);
+    });
+
+    test('a credit hire fully claimed is "paid", with nothing left owing', function () {
+        $driver = listingDriver();
+        $hire = listedHire($driver, ['payment_type' => 'credit', 'hire_full_value' => 5000]);
+        HirePayment::create(['hire_id' => $hire->id, 'amount' => 3000, 'paid_at' => now()]);
+        HirePayment::create(['hire_id' => $hire->id, 'amount' => 2000, 'paid_at' => now()]);
+
+        $this->getJson('/api/driver/hires')->assertOk()
+            ->assertJsonPath('data.0.payment_status', 'paid')
+            ->assertJsonPath('data.0.paid_amount', 5000)
+            ->assertJsonPath('data.0.balance_remaining', 0);
+    });
+
+    test('the single-hire endpoint carries the same payment fields', function () {
+        $driver = listingDriver();
+        $hire = listedHire($driver, ['payment_type' => 'credit', 'hire_full_value' => 5000]);
+        HirePayment::create(['hire_id' => $hire->id, 'amount' => 1000, 'paid_at' => now()]);
+
+        $this->getJson("/api/driver/hires/{$hire->id}")->assertOk()
+            ->assertJsonPath('data.payment_status', 'partial')
+            ->assertJsonPath('data.paid_amount', 1000)
+            ->assertJsonPath('data.balance_remaining', 4000);
     });
 });
 
