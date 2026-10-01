@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\LocationController;
 use App\Http\Controllers\Admin\LogController;
 use App\Http\Controllers\Admin\MyExpenseCategoryController;
 use App\Http\Controllers\Admin\MyExpenseController;
+use App\Http\Controllers\Admin\OtherCompanyRevenueController;
 use App\Http\Controllers\Admin\OtherIncomeController;
 use App\Http\Controllers\Admin\PackageController;
 use App\Http\Controllers\Admin\PayrollController;
@@ -69,6 +70,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::resource('my-expenses', MyExpenseController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::resource('my-expense-categories', MyExpenseCategoryController::class)->only(['store', 'update', 'destroy']);
     Route::resource('other-incomes', OtherIncomeController::class)->only(['store', 'update', 'destroy']);
+    Route::resource('other-company-revenues', OtherCompanyRevenueController::class)->only(['store', 'update', 'destroy']);
     Route::get('salary-advances', [SalaryAdvanceController::class, 'index'])->name('salary-advances.index');
     Route::put('salary-advances/{salaryAdvance}', [SalaryAdvanceController::class, 'update'])->name('salary-advances.update');
     Route::resource('users', UserController::class)->except(['show', 'create', 'edit']);

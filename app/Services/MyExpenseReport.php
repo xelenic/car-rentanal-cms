@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Hire;
 use App\Models\MyExpense;
 use App\Models\MyExpenseCategory;
+use App\Models\OtherCompanyRevenue;
 use App\Models\OtherIncome;
 use App\Support\MonthlyPeriods;
 use Illuminate\Support\Arr;
@@ -27,6 +28,7 @@ class MyExpenseReport
      * @return array{
      *     total: float, record_count: int, by_category: Collection<string, float>,
      *     other_income_total: float, other_income_count: int,
+     *     other_company_revenue_total: float, other_company_revenue_count: int,
      *     profit: array<string, mixed>, profit_before_expenses: float, my_profit: float
      * }
      */
@@ -45,6 +47,11 @@ class MyExpenseReport
         $monthIncome = OtherIncome::query()->inMonth($year, $month);
         $otherIncomeTotal = round((float) (clone $monthIncome)->sum('amount'), 2);
 
+        // Only the credited amount — what has actually been received from the
+        // other company — counts as realized income here.
+        $monthRevenue = OtherCompanyRevenue::query()->inMonth($year, $month);
+        $otherCompanyRevenueTotal = round((float) (clone $monthRevenue)->sum('credited_amount'), 2);
+
         $profit = ProfitCalculator::breakdownFor($year, $month);
 
         return [
@@ -53,9 +60,11 @@ class MyExpenseReport
             'by_category' => $byCategory,
             'other_income_total' => $otherIncomeTotal,
             'other_income_count' => (clone $monthIncome)->count(),
+            'other_company_revenue_total' => $otherCompanyRevenueTotal,
+            'other_company_revenue_count' => (clone $monthRevenue)->count(),
             'profit' => $profit,
             'profit_before_expenses' => $profit['profit_total'],
-            'my_profit' => round($profit['profit_total'] + $otherIncomeTotal - $total, 2),
+            'my_profit' => round($profit['profit_total'] + $otherIncomeTotal + $otherCompanyRevenueTotal - $total, 2),
         ];
     }
 
@@ -82,6 +91,8 @@ class MyExpenseReport
             'profit_before_expenses' => $report['profit_before_expenses'],
             'other_income_total' => $report['other_income_total'],
             'other_income_count' => $report['other_income_count'],
+            'other_company_revenue_total' => $report['other_company_revenue_total'],
+            'other_company_revenue_count' => $report['other_company_revenue_count'],
             'my_profit' => $report['my_profit'],
             'by_category' => $report['by_category']->map(fn (float $total, string $key) => [
                 'key' => $key,
@@ -105,7 +116,8 @@ class MyExpenseReport
     public static function availableYears(int $selectedYear): array
     {
         $expenseYears = MyExpense::query()->pluck('expense_date')->map(fn ($date) => $date->year)
-            ->merge(OtherIncome::query()->pluck('income_date')->map(fn ($date) => $date->year));
+            ->merge(OtherIncome::query()->pluck('income_date')->map(fn ($date) => $date->year))
+            ->merge(OtherCompanyRevenue::query()->pluck('revenue_date')->map(fn ($date) => $date->year));
         $hireYears = MonthlyPeriods::fromTimestamps(
             Hire::query()->get(['start_time', 'created_at'])->pluck('effective_month_date')
         )['years'];

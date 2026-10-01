@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\MyExpense;
 use App\Models\MyExpenseCategory;
+use App\Models\OtherCompanyRevenue;
 use App\Models\OtherIncome;
 use App\Services\MyExpenseReport;
 use App\Services\MyExpenseService;
@@ -39,11 +40,12 @@ class MyExpenseController extends Controller implements HasMiddleware
     {
         $now = now();
         [$year, $month] = MyExpenseReport::periodFrom($request->integer('year') ?: null, $request->has('month') ? $request->integer('month') : null);
-        $tab = $request->string('tab')->toString() === 'income' ? 'income' : 'expenses';
+        $tabParam = $request->string('tab')->toString();
+        $tab = in_array($tabParam, ['income', 'revenue'], true) ? $tabParam : 'expenses';
         $categoryList = MyExpenseCategory::query()->withCount('expenses')->orderBy('name')->get();
         $categories = $categoryList->pluck('name', 'key');
         $category = $request->string('category')->toString();
-        // A category only narrows the expenses; on the income tab it is ignored.
+        // A category only narrows the expenses; on the other tabs it is ignored.
         $category = $tab === 'expenses' && $categories->has($category) ? $category : null;
         $search = $request->string('search')->toString();
 
@@ -54,11 +56,17 @@ class MyExpenseController extends Controller implements HasMiddleware
         $filteredTotal = 0.0;
         $incomes = null;
         $filteredIncomeTotal = 0.0;
+        $revenues = null;
+        $filteredRevenueTotal = 0.0;
 
         if ($tab === 'income') {
             $incomeQuery = OtherIncome::query()->inMonth($year, $month)->matching($search);
             $incomes = (clone $incomeQuery)->orderByDesc('income_date')->orderByDesc('id')->paginate(15)->withQueryString();
             $filteredIncomeTotal = round((float) $incomeQuery->sum('amount'), 2);
+        } elseif ($tab === 'revenue') {
+            $revenueQuery = OtherCompanyRevenue::query()->inMonth($year, $month)->matching($search);
+            $revenues = (clone $revenueQuery)->orderByDesc('revenue_date')->orderByDesc('id')->paginate(15)->withQueryString();
+            $filteredRevenueTotal = round((float) $revenueQuery->sum('credited_amount'), 2);
         } else {
             $listQuery = MyExpense::query()->inMonth($year, $month)->matching($category, $search);
             $expenses = (clone $listQuery)->with('categoryRecord')->orderByDesc('expense_date')->orderByDesc('id')->paginate(15)->withQueryString();
@@ -71,8 +79,12 @@ class MyExpenseController extends Controller implements HasMiddleware
             'filteredTotal' => $filteredTotal,
             'incomes' => $incomes,
             'filteredIncomeTotal' => $filteredIncomeTotal,
+            'revenues' => $revenues,
+            'filteredRevenueTotal' => $filteredRevenueTotal,
             'otherIncomeTotal' => $report['other_income_total'],
             'otherIncomeCount' => $report['other_income_count'],
+            'otherCompanyRevenueTotal' => $report['other_company_revenue_total'],
+            'otherCompanyRevenueCount' => $report['other_company_revenue_count'],
             'total' => $report['total'],
             'recordCount' => $report['record_count'],
             'byCategory' => $report['by_category'],

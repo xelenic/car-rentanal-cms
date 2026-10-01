@@ -11,6 +11,9 @@
             </button>
         @endcanany
         @can('my-expenses.create')
+            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modal-revenue-create" id="add-revenue">
+                <i class="bi bi-plus-lg me-1"></i> Add Revenue
+            </button>
             <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#modal-income-create" id="add-income">
                 <i class="bi bi-plus-lg me-1"></i> Add Income
             </button>
@@ -31,7 +34,7 @@
 @endphp
 
 @section('content')
-    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-2 mb-2" id="my-expenses-cards">
+    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-5 g-2 mb-2" id="my-expenses-cards">
         <div class="col">
             <div class="card border-0 h-100" id="card-hire-profit">
                 <div class="card-body d-flex align-items-center gap-2">
@@ -56,6 +59,20 @@
                         <div class="text-muted small">Other Income &middot; {{ $periodLabel }}</div>
                         <div class="fs-5 fw-bold text-success">{{ $money($otherIncomeTotal) }}</div>
                         <div class="text-muted" style="font-size: .7rem;">{{ number_format($otherIncomeCount) }} {{ $otherIncomeCount === 1 ? 'entry' : 'entries' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card border-0 h-100" id="card-other-company-revenue">
+                <div class="card-body d-flex align-items-center gap-2">
+                    <div class="stat-icon" style="background: #eef2ff; color: #4338ca;">
+                        <i class="bi bi-building"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Other Company Revenue &middot; {{ $periodLabel }}</div>
+                        <div class="fs-5 fw-bold text-success">{{ $money($otherCompanyRevenueTotal) }}</div>
+                        <div class="text-muted" style="font-size: .7rem;">{{ number_format($otherCompanyRevenueCount) }} {{ $otherCompanyRevenueCount === 1 ? 'entry' : 'entries' }}</div>
                     </div>
                 </div>
             </div>
@@ -116,6 +133,11 @@
                 Other Income <span class="badge text-bg-light border ms-1">{{ number_format($otherIncomeCount) }}</span>
             </a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link {{ $tab === 'revenue' ? 'active' : '' }}" id="tab-revenue" href="{{ route('admin.my-expenses.index', ['tab' => 'revenue'] + $periodQuery) }}">
+                Revenues from Other Companies <span class="badge text-bg-light border ms-1">{{ number_format($otherCompanyRevenueCount) }}</span>
+            </a>
+        </li>
     </ul>
 
     <div class="card border-0 mb-2">
@@ -128,7 +150,7 @@
                 <div class="position-relative" style="max-width: 240px; flex: 1 1 190px;">
                     <i class="bi bi-search position-absolute" style="left: .65rem; top: 50%; transform: translateY(-50%); color: #a3aab8; font-size: .8rem;"></i>
                     <input type="search" name="search" value="{{ $search }}" class="form-control" style="padding-left: 1.85rem;"
-                        placeholder="{{ $tab === 'income' ? 'Search income or notes...' : 'Search expense or notes...' }}">
+                        placeholder="{{ $tab === 'income' ? 'Search income or notes...' : ($tab === 'revenue' ? 'Search hire, booking # or vehicle...' : 'Search expense or notes...') }}">
                 </div>
 
                 @if ($tab === 'expenses')
@@ -242,6 +264,80 @@
         @if ($expenses->hasPages())
             <div class="card-footer bg-white">
                 {{ $expenses->links() }}
+            </div>
+        @endif
+    </div>
+    @elseif ($tab === 'revenue')
+    <div class="card border-0">
+        <div class="table-responsive">
+            <table class="table align-middle mb-0" id="my-revenue-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Hire</th>
+                        <th>Booking Number</th>
+                        <th>Vehicle</th>
+                        <th class="text-end">Full Amount</th>
+                        <th class="text-end">Credited</th>
+                        <th class="text-end">Balance</th>
+                        <th class="text-end">Vehicle Amount</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($revenues as $revenue)
+                        <tr>
+                            <td class="text-muted text-nowrap">{{ $revenue->revenue_date->format('M j, Y') }}</td>
+                            <td class="fw-semibold" style="font-size: .8rem;">{{ $revenue->hire }}</td>
+                            <td class="text-muted" style="font-size: .8rem;">{{ $revenue->booking_number }}</td>
+                            <td style="font-size: .8rem;">{{ $revenue->vehicle }}</td>
+                            <td class="text-end text-nowrap">Rs. {{ number_format($revenue->full_amount, 2) }}</td>
+                            <td class="text-end fw-semibold text-success text-nowrap">Rs. {{ number_format($revenue->credited_amount, 2) }}</td>
+                            <td class="text-end text-nowrap {{ $revenue->balance > 0 ? 'text-danger' : '' }}">Rs. {{ number_format($revenue->balance, 2) }}</td>
+                            <td class="text-end text-nowrap">Rs. {{ number_format($revenue->vehicle_amount, 2) }}</td>
+                            <td class="text-end">
+                                <div class="d-inline-flex gap-1">
+                                    @can('my-expenses.update')
+                                        <button type="button" class="btn btn-sm btn-light border btn-icon" data-bs-toggle="modal" data-bs-target="#modal-revenue-edit-{{ $revenue->id }}">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                    @endcan
+                                    @can('my-expenses.delete')
+                                        <form method="POST" action="{{ route('admin.other-company-revenues.destroy', $revenue) }}" onsubmit="return confirm('Delete this revenue entry?');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-light border btn-icon text-danger">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    @endcan
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">
+                                <i class="bi bi-building fs-4 d-block mb-1"></i>
+                                {{ $isFiltered ? 'No revenue entries match your search.' : 'No revenue from other companies recorded for '.$periodLabel.'.' }}
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+                @if ($isFiltered && $revenues->total() > 0)
+                    <tfoot>
+                        <tr>
+                            <td colspan="5" class="text-muted text-end">Total credited of the {{ number_format($revenues->total()) }} shown</td>
+                            <td class="text-end fw-bold text-success text-nowrap" id="filtered-revenue-total">Rs. {{ number_format($filteredRevenueTotal, 2) }}</td>
+                            <td colspan="3"></td>
+                        </tr>
+                    </tfoot>
+                @endif
+            </table>
+        </div>
+
+        @if ($revenues->hasPages())
+            <div class="card-footer bg-white">
+                {{ $revenues->links() }}
             </div>
         @endif
     </div>
@@ -374,6 +470,35 @@
         @endforeach
     @endcan
 
+    @can('my-expenses.create')
+        <x-modal id="modal-revenue-create" title="Add Revenue from Another Company">
+            <form id="form-create-revenue" method="POST" action="{{ route('admin.other-company-revenues.store') }}">
+                @csrf
+                @include('admin.my-expenses._revenue_form', ['revenue' => null, 'idPrefix' => 'revenue-create'])
+            </form>
+            <x-slot:footer>
+                <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" form="form-create-revenue" class="btn btn-secondary">Add Revenue</button>
+            </x-slot:footer>
+        </x-modal>
+    @endcan
+
+    @can('my-expenses.update')
+        @foreach ($revenues ?? [] as $revenue)
+            <x-modal id="modal-revenue-edit-{{ $revenue->id }}" title="Edit Revenue">
+                <form id="form-edit-revenue-{{ $revenue->id }}" method="POST" action="{{ route('admin.other-company-revenues.update', $revenue) }}">
+                    @csrf
+                    @method('PUT')
+                    @include('admin.my-expenses._revenue_form', ['revenue' => $revenue, 'idPrefix' => 'revenue-edit-'.$revenue->id])
+                </form>
+                <x-slot:footer>
+                    <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" form="form-edit-revenue-{{ $revenue->id }}" class="btn btn-secondary">Update Revenue</button>
+                </x-slot:footer>
+            </x-modal>
+        @endforeach
+    @endcan
+
     @canany(['my-expenses.create', 'my-expenses.update', 'my-expenses.delete'])
         <x-modal id="modal-categories" title="Expense Categories">
             @php $categoryFormFailed = old('form_id') === 'categories' && $errors->has('name'); @endphp
@@ -475,6 +600,11 @@
                 <span class="text-success" style="font-size: .85rem;">+Rs. {{ number_format($otherIncomeTotal, 2) }}</span>
             </div>
 
+            <div class="d-flex align-items-center justify-content-between">
+                <span style="font-size: .85rem;">Add: Other Company Revenue ({{ number_format($otherCompanyRevenueCount) }} {{ $otherCompanyRevenueCount === 1 ? 'entry' : 'entries' }})</span>
+                <span class="text-success" style="font-size: .85rem;">+Rs. {{ number_format($otherCompanyRevenueTotal, 2) }}</span>
+            </div>
+
             <div class="border-top pt-2">
                 <div class="text-muted mb-1" style="font-size: .78rem;">Less: My Expenses</div>
                 @forelse ($byCategory as $category => $amount)
@@ -499,6 +629,7 @@
             <div class="text-muted mt-2" style="font-size: .72rem;">
                 Profit From Hires ({{ $money($profitBeforeExpenses) }})
                 + Other Income (Rs. {{ number_format($otherIncomeTotal, 2) }})
+                + Other Company Revenue (Rs. {{ number_format($otherCompanyRevenueTotal, 2) }})
                 − My Expenses (Rs. {{ number_format($total, 2) }})
                 = {{ $money($myProfit) }}.
             </div>
