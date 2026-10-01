@@ -146,6 +146,14 @@ class _OverviewBodyState extends State<_OverviewBody> with SingleTickerProviderS
         color: const Color(0xFFF59E0B),
       ),
       _StatTile(
+        icon: Icons.percent_rounded,
+        label: 'Total Commission',
+        // Full value minus what the company actually keeps — same definition
+        // as the admin panel's own commission figures.
+        value: salary != null ? 'Rs. ${(salary.hireFullValueTotal - salary.ourHireValueTotal).toStringAsFixed(2)}' : '—',
+        color: const Color(0xFF2563EB),
+      ),
+      _StatTile(
         icon: Icons.savings_outlined,
         label: 'Your Salary (${salary?.salaryPercentage.toStringAsFixed(0) ?? '20'}%)',
         value: salary != null ? 'Rs. ${salary.salary.toStringAsFixed(2)}' : '—',
