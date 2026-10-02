@@ -171,6 +171,58 @@ class ProfitBreakdown {
   }
 }
 
+/// One piece of revenue from a booking made through another rental company —
+/// mirrors Api\Admin\OtherCompanyRevenueResource. Every field is entered by
+/// hand; the credited amount is what counts toward My Profit.
+class OtherCompanyRevenue {
+  const OtherCompanyRevenue({
+    required this.id,
+    required this.hire,
+    required this.bookingNumber,
+    required this.vehicle,
+    required this.fullAmount,
+    required this.creditedAmount,
+    required this.balance,
+    required this.vehicleAmount,
+    required this.date,
+    this.slipUrl,
+  });
+
+  final int id;
+  final String hire;
+  final String bookingNumber;
+  final String vehicle;
+  final double fullAmount;
+
+  /// What has actually been received from the other company — counts toward My Profit.
+  final double creditedAmount;
+
+  /// Independent of fullAmount/creditedAmount — entered by hand, can be negative.
+  final double balance;
+  final double vehicleAmount;
+
+  /// A calendar date (no time, no zone).
+  final DateTime date;
+
+  /// A photo of the bank slip, proving the credited amount was deposited — if one was attached.
+  final String? slipUrl;
+
+  factory OtherCompanyRevenue.fromJson(Map<String, dynamic> json) {
+    return OtherCompanyRevenue(
+      id: json['id'] as int,
+      hire: json['hire'] as String? ?? '',
+      bookingNumber: json['booking_number'] as String? ?? '',
+      vehicle: json['vehicle'] as String? ?? '',
+      fullAmount: _number(json['full_amount']),
+      creditedAmount: _number(json['credited_amount']),
+      balance: _number(json['balance']),
+      vehicleAmount: _number(json['vehicle_amount']),
+      date: parseCalendarDate(json['revenue_date'] as String?),
+      slipUrl: json['slip_url'] as String?,
+    );
+  }
+}
+
 /// The cards above a month's list. Always the whole month — a category or a
 /// search only narrows the list.
 class ExpenseSummary {
@@ -183,6 +235,8 @@ class ExpenseSummary {
     this.profitBeforeExpenses = 0,
     this.otherIncomeTotal = 0,
     this.otherIncomeCount = 0,
+    this.otherCompanyRevenueTotal = 0,
+    this.otherCompanyRevenueCount = 0,
     this.myProfit = 0,
     this.byCategory = const [],
     this.breakdown = const ProfitBreakdown(),
@@ -201,6 +255,10 @@ class ExpenseSummary {
   final double otherIncomeTotal;
   final int otherIncomeCount;
 
+  /// Credited revenue from bookings made through other rental companies — added to My Profit.
+  final double otherCompanyRevenueTotal;
+  final int otherCompanyRevenueCount;
+
   /// [profitBeforeExpenses] + [otherIncomeTotal] − [total].
   final double myProfit;
   final List<CategoryTotal> byCategory;
@@ -216,6 +274,8 @@ class ExpenseSummary {
       profitBeforeExpenses: _number(json['profit_before_expenses']),
       otherIncomeTotal: _number(json['other_income_total']),
       otherIncomeCount: _int(json['other_income_count']),
+      otherCompanyRevenueTotal: _number(json['other_company_revenue_total']),
+      otherCompanyRevenueCount: _int(json['other_company_revenue_count']),
       myProfit: _number(json['my_profit']),
       byCategory: (json['by_category'] as List<dynamic>? ?? [])
           .map((e) => CategoryTotal.fromJson(e as Map<String, dynamic>))
@@ -290,6 +350,43 @@ class OtherIncomePage {
     final meta = json['meta'] as Map<String, dynamic>?;
     return OtherIncomePage(
       incomes: (json['data'] as List<dynamic>? ?? []).map((e) => OtherIncome.fromJson(e as Map<String, dynamic>)).toList(),
+      currentPage: (meta?['current_page'] as int?) ?? 1,
+      lastPage: (meta?['last_page'] as int?) ?? 1,
+      summary: ExpenseSummary.fromJson(json['summary'] as Map<String, dynamic>? ?? const {}),
+      filteredTotal: _number(json['filtered_total']),
+      years: (json['years'] as List<dynamic>? ?? []).map((e) => _int(e)).toList(),
+    );
+  }
+}
+
+/// A page of a month's revenue from other companies from GET
+/// /admin/other-company-revenues — with the same month summary as the
+/// expenses list, so the cards stay right whichever tab is open.
+class OtherCompanyRevenuePage {
+  const OtherCompanyRevenuePage({
+    required this.revenues,
+    required this.currentPage,
+    required this.lastPage,
+    required this.summary,
+    required this.filteredTotal,
+    required this.years,
+  });
+
+  final List<OtherCompanyRevenue> revenues;
+  final int currentPage;
+  final int lastPage;
+  final ExpenseSummary summary;
+
+  /// The credited total of everything the current search matches (the whole month when nothing is searched).
+  final double filteredTotal;
+  final List<int> years;
+
+  bool get hasMore => currentPage < lastPage;
+
+  factory OtherCompanyRevenuePage.fromJson(Map<String, dynamic> json) {
+    final meta = json['meta'] as Map<String, dynamic>?;
+    return OtherCompanyRevenuePage(
+      revenues: (json['data'] as List<dynamic>? ?? []).map((e) => OtherCompanyRevenue.fromJson(e as Map<String, dynamic>)).toList(),
       currentPage: (meta?['current_page'] as int?) ?? 1,
       lastPage: (meta?['last_page'] as int?) ?? 1,
       summary: ExpenseSummary.fromJson(json['summary'] as Map<String, dynamic>? ?? const {}),

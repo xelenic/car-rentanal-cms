@@ -83,4 +83,19 @@
             <div class="invalid-feedback">{{ $formErrors->first('vehicle_amount') }}</div>
         @endif
     </div>
+
+    <div class="col-12">
+        <label for="{{ $idPrefix }}-slip" class="form-label">Bank Slip (optional)</label>
+        <input id="{{ $idPrefix }}-slip" type="file" name="slip" accept="image/*"
+            class="form-control @if ($formErrors->has('slip')) is-invalid @endif">
+        @if ($formErrors->has('slip'))
+            <div class="invalid-feedback">{{ $formErrors->first('slip') }}</div>
+        @elseif ($revenue?->slip_url)
+            <div class="form-text">
+                <a href="{{ $revenue->slip_url }}" target="_blank" rel="noopener">View current slip</a> &middot; choosing a new file replaces it.
+            </div>
+        @else
+            <div class="form-text">A photo of the deposit slip, as proof the credited amount was received.</div>
+        @endif
+    </div>
 </div>

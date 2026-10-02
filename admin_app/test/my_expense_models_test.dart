@@ -58,6 +58,65 @@ void main() {
     });
   });
 
+  group('OtherCompanyRevenue.fromJson', () {
+    test('reads a revenue entry', () {
+      final revenue = OtherCompanyRevenue.fromJson(revenueJson(
+        id: 9,
+        hire: 'ZZZ Galle Fort Tour',
+        bookingNumber: 'ZZZ-BK-999',
+        vehicle: 'ZZZ Hiace',
+        fullAmount: 15000.5,
+        creditedAmount: 9000.25,
+        balance: -500.75,
+        vehicleAmount: 5000.1,
+        date: '2026-09-12',
+        slipUrl: 'http://localhost/fake-slip/slip.jpg',
+      ));
+
+      expect(revenue.id, 9);
+      expect(revenue.hire, 'ZZZ Galle Fort Tour');
+      expect(revenue.bookingNumber, 'ZZZ-BK-999');
+      expect(revenue.vehicle, 'ZZZ Hiace');
+      expect(revenue.fullAmount, 15000.5);
+      expect(revenue.creditedAmount, 9000.25);
+      expect(revenue.balance, -500.75);
+      expect(revenue.vehicleAmount, 5000.1);
+      expect(revenue.date, DateTime(2026, 9, 12));
+      expect(revenue.slipUrl, 'http://localhost/fake-slip/slip.jpg');
+    });
+
+    test('has no slip when none was attached', () {
+      final revenue = OtherCompanyRevenue.fromJson(revenueJson(id: 1, date: '2026-09-12'));
+
+      expect(revenue.slipUrl, isNull);
+    });
+  });
+
+  test('OtherCompanyRevenuePage reads the list, paging, filtered total, years and the month summary', () {
+    final page = OtherCompanyRevenuePage.fromJson({
+      'data': [revenueJson(id: 1, date: '2026-09-02')],
+      'meta': {'current_page': 2, 'last_page': 3},
+      'summary': {
+        'year': 2026,
+        'month': 9,
+        'label': 'September 2026',
+        'other_company_revenue_total': 1500,
+        'other_company_revenue_count': 2,
+        'my_profit': 7900,
+      },
+      'filtered_total': 1500,
+      'years': [2026, 2025],
+    });
+
+    expect(page.revenues, hasLength(1));
+    expect(page.currentPage, 2);
+    expect(page.hasMore, isTrue);
+    expect(page.filteredTotal, 1500);
+    expect(page.years, [2026, 2025]);
+    expect(page.summary.otherCompanyRevenueTotal, 1500);
+    expect(page.summary.myProfit, 7900);
+  });
+
   test('OtherIncomePage reads the list, paging, filtered total, years and the month summary', () {
     final page = OtherIncomePage.fromJson({
       'data': [incomeJson(id: 1, date: '2026-09-02')],
@@ -128,6 +187,8 @@ void main() {
       'profit_before_expenses': 6400,
       'other_income_total': 1750.5,
       'other_income_count': 2,
+      'other_company_revenue_total': 900.25,
+      'other_company_revenue_count': 1,
       'my_profit': 6150.5,
       'by_category': [
         {'key': 'rent', 'name': 'Rent', 'total': 1500.5},
@@ -152,6 +213,8 @@ void main() {
     expect(summary.profitBeforeExpenses, 6400);
     expect(summary.otherIncomeTotal, 1750.5);
     expect(summary.otherIncomeCount, 2);
+    expect(summary.otherCompanyRevenueTotal, 900.25);
+    expect(summary.otherCompanyRevenueCount, 1);
     expect(summary.byCategory.map((c) => c.name), ['Rent', 'Fuel']);
     expect(summary.byCategory.first.total, 1500.5);
     expect(summary.breakdown.salaryPercentage, 20);
@@ -165,6 +228,8 @@ void main() {
     expect(summary.total, 0);
     expect(summary.otherIncomeTotal, 0);
     expect(summary.otherIncomeCount, 0);
+    expect(summary.otherCompanyRevenueTotal, 0);
+    expect(summary.otherCompanyRevenueCount, 0);
     expect(summary.byCategory, isEmpty);
     expect(summary.breakdown.profitTotal, 0);
   });

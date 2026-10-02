@@ -40,6 +40,11 @@ class ProfitBreakdownSheet extends StatelessWidget {
               '+${formatRsExact(summary.otherIncomeTotal)}',
               positive: true,
             ),
+            _line(
+              'Add: Other Company Revenue (${countOf(summary.otherCompanyRevenueCount, 'entry', 'entries')})',
+              '+${formatRsExact(summary.otherCompanyRevenueTotal)}',
+              positive: true,
+            ),
             const SizedBox(height: 10),
             const Text('Less: My Expenses', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
             const SizedBox(height: 4),
@@ -80,6 +85,7 @@ class ProfitBreakdownSheet extends StatelessWidget {
             Text(
               'Profit From Hires (${formatRsExact(summary.profitBeforeExpenses)}) '
               '+ Other Income (${formatRsExact(summary.otherIncomeTotal)}) '
+              '+ Other Company Revenue (${formatRsExact(summary.otherCompanyRevenueTotal)}) '
               '− My Expenses (${formatRsExact(summary.total)}) = ${formatRsExact(summary.myProfit)}.',
               style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
             ),

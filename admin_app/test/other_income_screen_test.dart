@@ -82,7 +82,7 @@ void main() {
 
       expect(_inCard('tab-expenses', 'Expenses'), findsOneWidget);
       expect(_inCard('tab-expenses', '2'), findsOneWidget);
-      expect(_inCard('tab-income', 'Other Income'), findsOneWidget);
+      expect(_inCard('tab-income', 'Income'), findsOneWidget);
       expect(_inCard('tab-income', '2'), findsOneWidget);
     });
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\OtherCompanyRevenueController;
 use App\Http\Controllers\Api\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Api\Admin\CustomerController as AdminCustomerController;
 use App\Http\Controllers\Api\Admin\DashboardController as AdminDashboardController;
@@ -7,6 +8,7 @@ use App\Http\Controllers\Api\Admin\DriverController as AdminDriverController;
 use App\Http\Controllers\Api\Admin\HireController as AdminHireController;
 use App\Http\Controllers\Api\Admin\MyExpenseCategoryController as AdminMyExpenseCategoryController;
 use App\Http\Controllers\Api\Admin\MyExpenseController as AdminMyExpenseController;
+use App\Http\Controllers\Api\Admin\OtherCompanyRevenueController as AdminOtherCompanyRevenueController;
 use App\Http\Controllers\Api\Admin\OtherIncomeController as AdminOtherIncomeController;
 use App\Http\Controllers\Api\Admin\PlaceController as AdminPlaceController;
 use App\Http\Controllers\Api\Admin\VehicleController as AdminVehicleController;
@@ -34,6 +36,9 @@ Route::get('/deposit-transfers/{depositTransfer}/slip', [DriverDepositTransferCo
 
 Route::get('/vehicle-maintenance/{vehicleMaintenanceRecord}/bill', [VehicleMaintenanceController::class, 'bill'])
     ->name('vehicle-maintenance.bill');
+
+Route::get('/other-company-revenues/{otherCompanyRevenue}/slip', [OtherCompanyRevenueController::class, 'slip'])
+    ->name('other-company-revenues.slip');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -102,6 +107,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/admin/other-incomes', [AdminOtherIncomeController::class, 'store']);
     Route::put('/admin/other-incomes/{otherIncome}', [AdminOtherIncomeController::class, 'update']);
     Route::delete('/admin/other-incomes/{otherIncome}', [AdminOtherIncomeController::class, 'destroy']);
+    Route::get('/admin/other-company-revenues', [AdminOtherCompanyRevenueController::class, 'index']);
+    Route::post('/admin/other-company-revenues', [AdminOtherCompanyRevenueController::class, 'store']);
+    Route::put('/admin/other-company-revenues/{otherCompanyRevenue}', [AdminOtherCompanyRevenueController::class, 'update']);
+    Route::delete('/admin/other-company-revenues/{otherCompanyRevenue}', [AdminOtherCompanyRevenueController::class, 'destroy']);
     Route::get('/admin/my-expense-categories', [AdminMyExpenseCategoryController::class, 'index']);
     Route::post('/admin/my-expense-categories', [AdminMyExpenseCategoryController::class, 'store']);
     Route::put('/admin/my-expense-categories/{myExpenseCategory}', [AdminMyExpenseCategoryController::class, 'update']);

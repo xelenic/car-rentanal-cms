@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
  * Hire records); counts toward the month it's dated in, and the credited
  * amount adds to My Profit, same as OtherIncome.
  */
-#[Fillable(['hire', 'booking_number', 'vehicle', 'full_amount', 'credited_amount', 'balance', 'vehicle_amount', 'revenue_date'])]
+#[Fillable(['hire', 'booking_number', 'vehicle', 'full_amount', 'credited_amount', 'balance', 'vehicle_amount', 'revenue_date', 'slip_path'])]
 class OtherCompanyRevenue extends Model
 {
     protected function casts(): array
@@ -24,6 +24,12 @@ class OtherCompanyRevenue extends Model
             'vehicle_amount' => 'decimal:2',
             'revenue_date' => 'date',
         ];
+    }
+
+    /** The bank slip's public URL, if one was attached. */
+    public function getSlipUrlAttribute(): ?string
+    {
+        return $this->slip_path ? route('other-company-revenues.slip', $this) : null;
     }
 
     /** Narrows to entries whose hire, booking number or vehicle contain the search. Blank means no narrowing. */

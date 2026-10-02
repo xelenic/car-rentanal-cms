@@ -39,7 +39,7 @@ FakeServer _van() {
 }
 
 Future<void> _show(WidgetTester tester, FakeServer server) async {
-  tester.view.physicalSize = const Size(412, 1400);
+  tester.view.physicalSize = const Size(412, 2600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 

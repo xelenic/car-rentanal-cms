@@ -19,6 +19,13 @@ const _paymentTypes = {
   'credit': 'Credit',
 };
 
+const _hireStatuses = {
+  'pending': 'Pending',
+  'started': 'Driver Hire Started',
+  'completed': 'Completed',
+  'cancelled': 'Cancelled',
+};
+
 /// The hire form: books a new hire, or — given [hire] — edits an existing one.
 /// Pops with the saved [Hire].
 class HireFormScreen extends StatefulWidget {
@@ -46,6 +53,8 @@ class _HireFormScreenState extends State<HireFormScreen> {
 
   String _tourType = 'drop_pickup';
   String _paymentType = 'cash';
+  String _status = 'pending';
+  final _cancelReason = TextEditingController();
 
   bool _isNewCustomer = false;
   int? _customerId;
@@ -97,6 +106,7 @@ class _HireFormScreenState extends State<HireFormScreen> {
   void dispose() {
     _newCustomerName.dispose();
     _newCustomerPhone.dispose();
+    _cancelReason.dispose();
     _hireFullValue.dispose();
     _ourHireValue.dispose();
     _description.dispose();
@@ -149,6 +159,8 @@ class _HireFormScreenState extends State<HireFormScreen> {
 
     if (_tourTypes.containsKey(hire.tourType)) _tourType = hire.tourType;
     if (_paymentTypes.containsKey(hire.paymentType)) _paymentType = hire.paymentType;
+    if (_hireStatuses.containsKey(hire.status)) _status = hire.status;
+    _cancelReason.text = hire.cancelReason ?? '';
     _customerId = offered(hire.customer?.id, reference.customers);
     _driverId = offered(hire.driver?.id, reference.drivers);
     _vehicleId = offered(hire.vehicle?.id, reference.vehicles);
@@ -214,10 +226,12 @@ class _HireFormScreenState extends State<HireFormScreen> {
   bool get _needsDays => _tourType == 'multi_day';
   bool get _isPackage => _tourType == 'package';
 
-  /// A new hire can't start much before today, but an existing one may already
-  /// be in the past — the picker must still be able to show its date.
+  /// Reaches well into the past — a hire can be entered for the first time
+  /// long after it actually happened (see the Status field above), not just
+  /// scheduled ahead. An existing hire further back than that still shows
+  /// its own date.
   DateTime _earliestPickable(DateTime? current) {
-    final earliest = DateTime.now().subtract(const Duration(days: 1));
+    final earliest = DateTime.now().subtract(const Duration(days: 730));
     if (current == null || !current.isBefore(earliest)) return DateTime(earliest.year, earliest.month, earliest.day);
     return DateTime(current.year, current.month, current.day);
   }
@@ -278,7 +292,12 @@ class _HireFormScreenState extends State<HireFormScreen> {
       'driver_id': _driverId,
       'vehicle_id': _vehicleId,
       'description': _description.text.trim().isEmpty ? null : _description.text.trim(),
+      'status': _status,
     };
+
+    if (_status == 'cancelled') {
+      data['cancel_reason'] = _cancelReason.text.trim().isEmpty ? null : _cancelReason.text.trim();
+    }
 
     if (_isNewCustomer) {
       data['customer_id'] = 'new';
@@ -486,6 +505,46 @@ class _HireFormScreenState extends State<HireFormScreen> {
               );
             }).toList(),
           ),
+          const SizedBox(height: 20),
+
+          const _SectionLabel('Status'),
+          const SizedBox(height: 4),
+          const Text(
+            'For a hire that already happened and was never entered, set its real '
+            'state directly — this never has to start out as Pending.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _hireStatuses.entries.map((entry) {
+              final selected = _status == entry.key;
+              return ChoiceChip(
+                key: Key('status-${entry.key}'),
+                label: Text(entry.value),
+                selected: selected,
+                onSelected: (_) => setState(() => _status = entry.key),
+                selectedColor: AppColors.surfaceElevated,
+                labelStyle: TextStyle(
+                  color: selected ? AppColors.primary : AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12.5,
+                ),
+                side: BorderSide(color: selected ? AppColors.primary : AppColors.border),
+                backgroundColor: AppColors.surface,
+              );
+            }).toList(),
+          ),
+          if (_status == 'cancelled') ...[
+            const SizedBox(height: 12),
+            TextFormField(
+              key: const Key('cancel-reason'),
+              controller: _cancelReason,
+              maxLines: 2,
+              decoration: const InputDecoration(labelText: 'Cancellation reason (optional)'),
+            ),
+          ],
           const SizedBox(height: 20),
 
           const _SectionLabel('Customer'),

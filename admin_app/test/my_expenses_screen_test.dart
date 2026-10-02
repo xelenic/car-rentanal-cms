@@ -311,7 +311,10 @@ void main() {
       expect(inSheet('Total My Expenses'), findsOneWidget);
       expect(find.byKey(const Key('breakdown-my-profit')), findsOneWidget);
       expect(
-        inSheet('Profit From Hires (Rs. 6,400.00) + Other Income (Rs. 0.00) − My Expenses (Rs. 2,000.00) = Rs. 4,400.00.'),
+        inSheet(
+          'Profit From Hires (Rs. 6,400.00) + Other Income (Rs. 0.00) + Other Company Revenue (Rs. 0.00) '
+          '− My Expenses (Rs. 2,000.00) = Rs. 4,400.00.',
+        ),
         findsOneWidget,
       );
     });
@@ -333,7 +336,10 @@ void main() {
       expect(inSheet('Add: Other Income (2 entries)'), findsOneWidget);
       expect(inSheet('+Rs. 1,750.50'), findsOneWidget);
       expect(
-        inSheet('Profit From Hires (Rs. 6,400.00) + Other Income (Rs. 1,750.50) − My Expenses (Rs. 2,000.00) = Rs. 6,150.50.'),
+        inSheet(
+          'Profit From Hires (Rs. 6,400.00) + Other Income (Rs. 1,750.50) + Other Company Revenue (Rs. 0.00) '
+          '− My Expenses (Rs. 2,000.00) = Rs. 6,150.50.',
+        ),
         findsOneWidget,
       );
     });

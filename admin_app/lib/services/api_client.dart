@@ -528,6 +528,83 @@ class ApiClient {
     throw ApiException(_extractError(response));
   }
 
+  Future<OtherCompanyRevenuePage> fetchOtherCompanyRevenues({int? year, int? month, String? search, int page = 1}) async {
+    final uri = Uri.parse('$baseUrl/admin/other-company-revenues').replace(
+      queryParameters: {
+        if (year != null) 'year': '$year',
+        if (month != null) 'month': '$month',
+        if (search != null && search.isNotEmpty) 'search': search,
+        'page': '$page',
+      },
+    );
+    final response = await _http.get(uri, headers: await _headers(auth: true));
+
+    if (response.statusCode == 200) {
+      return OtherCompanyRevenuePage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// Adds a piece of revenue from another company, or — given [id] — saves
+  /// changes to one. Always sent as multipart (even with no [slipBytes]) so
+  /// create and edit share one code path; editing without picking a new
+  /// photo leaves whatever slip the entry already has untouched server-side.
+  /// A real PUT can't carry a file through PHP's upload handling, so an edit
+  /// is sent as POST with a spoofed "_method", the same way the web form does.
+  Future<OtherCompanyRevenue> saveOtherCompanyRevenue({
+    int? id,
+    required String hire,
+    required String bookingNumber,
+    required String vehicle,
+    required String fullAmount,
+    required String creditedAmount,
+    required String balance,
+    required String vehicleAmount,
+    required DateTime date,
+    List<int>? slipBytes,
+    String? slipFilename,
+  }) async {
+    final uri = Uri.parse('$baseUrl/admin/other-company-revenues${id == null ? '' : '/$id'}');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers.addAll(await _headers(auth: true)..remove('Content-Type'));
+    if (id != null) request.fields['_method'] = 'PUT';
+    request.fields['hire'] = hire;
+    request.fields['booking_number'] = bookingNumber;
+    request.fields['vehicle'] = vehicle;
+    request.fields['full_amount'] = fullAmount;
+    request.fields['credited_amount'] = creditedAmount;
+    request.fields['balance'] = balance;
+    request.fields['vehicle_amount'] = vehicleAmount;
+    request.fields['revenue_date'] = formatCalendarDate(date);
+    if (slipBytes != null) {
+      request.files.add(http.MultipartFile.fromBytes('slip', slipBytes, filename: slipFilename ?? 'slip.jpg'));
+    }
+
+    // request.send() would quietly open its own real Client, bypassing
+    // _http (and with it, useHttpClient() — the hook tests rely on).
+    final streamed = await _http.send(request);
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return OtherCompanyRevenue.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  Future<void> deleteOtherCompanyRevenue(int id) async {
+    final response = await _http.delete(
+      Uri.parse('$baseUrl/admin/other-company-revenues/$id'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 204) return;
+
+    throw ApiException(_extractError(response));
+  }
+
   /// Every expense category A to Z, each with how many expenses are filed under it.
   Future<List<ExpenseCategory>> fetchExpenseCategories() async {
     final response = await _http.get(

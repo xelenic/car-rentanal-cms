@@ -94,8 +94,11 @@ class HireController extends Controller
     }
 
     /**
-     * Edits a hire — the same fields and rules as creating one. Status,
-     * tracking and cancellation are the driver's business and stay as they are.
+     * Edits a hire — the same fields and rules as creating one. Status and
+     * cancellation can be set by hand here too (see HireService::statusAttributes()),
+     * for a hire that already happened and was never entered at the time, or
+     * to correct one later. Live tracking itself (tracking_started_at/
+     * tracking_stopped_at) stays the driver app's business — untouched here.
      */
     public function update(Request $request, Hire $hire): HireResource
     {

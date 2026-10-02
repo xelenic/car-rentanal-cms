@@ -297,6 +297,11 @@
                             <td class="text-end text-nowrap">Rs. {{ number_format($revenue->vehicle_amount, 2) }}</td>
                             <td class="text-end">
                                 <div class="d-inline-flex gap-1">
+                                    @if ($revenue->slip_url)
+                                        <a href="{{ $revenue->slip_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-light border btn-icon" title="View Bank Slip">
+                                            <i class="bi bi-paperclip"></i>
+                                        </a>
+                                    @endif
                                     @can('my-expenses.update')
                                         <button type="button" class="btn btn-sm btn-light border btn-icon" data-bs-toggle="modal" data-bs-target="#modal-revenue-edit-{{ $revenue->id }}">
                                             <i class="bi bi-pencil"></i>
@@ -472,7 +477,7 @@
 
     @can('my-expenses.create')
         <x-modal id="modal-revenue-create" title="Add Revenue from Another Company">
-            <form id="form-create-revenue" method="POST" action="{{ route('admin.other-company-revenues.store') }}">
+            <form id="form-create-revenue" method="POST" action="{{ route('admin.other-company-revenues.store') }}" enctype="multipart/form-data">
                 @csrf
                 @include('admin.my-expenses._revenue_form', ['revenue' => null, 'idPrefix' => 'revenue-create'])
             </form>
@@ -486,7 +491,7 @@
     @can('my-expenses.update')
         @foreach ($revenues ?? [] as $revenue)
             <x-modal id="modal-revenue-edit-{{ $revenue->id }}" title="Edit Revenue">
-                <form id="form-edit-revenue-{{ $revenue->id }}" method="POST" action="{{ route('admin.other-company-revenues.update', $revenue) }}">
+                <form id="form-edit-revenue-{{ $revenue->id }}" method="POST" action="{{ route('admin.other-company-revenues.update', $revenue) }}" enctype="multipart/form-data">
                     @csrf
                     @method('PUT')
                     @include('admin.my-expenses._revenue_form', ['revenue' => $revenue, 'idPrefix' => 'revenue-edit-'.$revenue->id])

@@ -6,7 +6,9 @@ use App\Models\OtherCompanyRevenue;
 use App\Models\User;
 use App\Services\MyExpenseReport;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Permission;
 
 uses(RefreshDatabase::class);
@@ -371,6 +373,79 @@ describe('editing and deleting revenue', function () {
             ->assertSee('value="ZZZ-BK-777"', false)
             ->assertSee('value="1234.50"', false)
             ->assertSee('value="2026-09-03"', false);
+    });
+});
+
+describe('the bank slip', function () {
+    it('stores an uploaded slip and shows a View current slip link when editing', function () {
+        Storage::fake('public');
+        revenueOwner();
+
+        $this->post('/admin/other-company-revenues', revenueBody() + [
+            'slip' => UploadedFile::fake()->image('slip.jpg'),
+        ])->assertRedirect();
+
+        $revenue = OtherCompanyRevenue::first();
+        Storage::disk('public')->assertExists($revenue->slip_path);
+
+        $this->get('/admin/my-expenses?tab=revenue')->assertOk()
+            ->assertSee('View current slip')
+            ->assertSee($revenue->slip_url, false);
+
+        $this->get($revenue->slip_url)->assertOk()->assertHeader('Content-Type', 'image/jpeg');
+    });
+
+    it('replaces the old slip file when a new one is uploaded on update, and deletes it with the record', function () {
+        Storage::fake('public');
+        revenueOwner();
+        $this->post('/admin/other-company-revenues', revenueBody() + [
+            'slip' => UploadedFile::fake()->image('first.jpg'),
+        ]);
+        $revenue = OtherCompanyRevenue::first();
+        $oldPath = $revenue->slip_path;
+
+        $this->put("/admin/other-company-revenues/{$revenue->id}", revenueBody() + [
+            'slip' => UploadedFile::fake()->image('second.jpg'),
+        ])->assertRedirect();
+
+        Storage::disk('public')->assertMissing($oldPath);
+        $newPath = $revenue->fresh()->slip_path;
+        Storage::disk('public')->assertExists($newPath);
+        expect($newPath)->not->toBe($oldPath);
+
+        $this->delete("/admin/other-company-revenues/{$revenue->id}");
+        Storage::disk('public')->assertMissing($newPath);
+    });
+
+    it('keeps the existing slip when an edit does not send a new one', function () {
+        Storage::fake('public');
+        revenueOwner();
+        $this->post('/admin/other-company-revenues', revenueBody() + [
+            'slip' => UploadedFile::fake()->image('slip.jpg'),
+        ]);
+        $revenue = OtherCompanyRevenue::first();
+        $originalPath = $revenue->slip_path;
+
+        $this->put("/admin/other-company-revenues/{$revenue->id}", revenueBody(['hire' => 'ZZZ No New Slip']))->assertRedirect();
+
+        expect($revenue->fresh()->slip_path)->toBe($originalPath);
+    });
+
+    it('is optional — adding revenue without one works as before', function () {
+        revenueOwner();
+
+        $this->post('/admin/other-company-revenues', revenueBody())->assertRedirect();
+
+        expect(OtherCompanyRevenue::first()->slip_path)->toBeNull();
+    });
+
+    it('rejects a non-image file', function () {
+        Storage::fake('public');
+        revenueOwner();
+
+        $this->post('/admin/other-company-revenues', revenueBody() + [
+            'slip' => UploadedFile::fake()->create('notes.txt', 10),
+        ])->assertSessionHasErrors('slip');
     });
 });
 

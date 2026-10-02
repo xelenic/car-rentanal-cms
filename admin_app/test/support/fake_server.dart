@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:mime/mime.dart';
 
 /// A tiny in-memory stand-in for the Laravel admin API, so the real screens
 /// and the real [ApiClient] run end to end in widget tests. Anything a test
@@ -39,6 +40,7 @@ class FakeServer {
     List<Map<String, dynamic>>? expenses,
     List<Map<String, dynamic>>? expenseCategories,
     List<Map<String, dynamic>>? incomes,
+    List<Map<String, dynamic>>? revenues,
     List<Map<String, dynamic>>? drivers,
     List<Map<String, dynamic>>? customers,
     List<Map<String, dynamic>>? referenceDrivers,
@@ -46,6 +48,8 @@ class FakeServer {
     this.profitBeforeExpenses = 6400,
     this.otherIncomeTotal = 0,
     this.otherIncomeCount = 0,
+    this.otherCompanyRevenueTotal = 0,
+    this.otherCompanyRevenueCount = 0,
     Map<int, Map<String, dynamic>>? periods,
     Map<String, Map<String, dynamic>>? statsByPeriod,
   })  : vehicles = vehicles ?? [],
@@ -54,6 +58,7 @@ class FakeServer {
         expenses = expenses ?? [],
         expenseCategories = expenseCategories ?? defaultExpenseCategories(),
         incomes = incomes ?? [],
+        revenues = revenues ?? [],
         drivers = drivers ?? [],
         customers = customers ?? [],
         referenceDrivers = referenceDrivers ?? [
@@ -145,12 +150,19 @@ class FakeServer {
   /// The owner's other income, in the API's shape.
   final List<Map<String, dynamic>> incomes;
 
+  /// Revenue from bookings made through other rental companies, in the API's shape.
+  final List<Map<String, dynamic>> revenues;
+
   /// The month's profit from hires — whatever month is asked for.
   num profitBeforeExpenses;
 
   /// Other income (not a hire) for whatever month is asked for; it is added to My Profit.
   num otherIncomeTotal;
   int otherIncomeCount;
+
+  /// Credited revenue from other companies for whatever month is asked for; it is added to My Profit.
+  num otherCompanyRevenueTotal;
+  int otherCompanyRevenueCount;
 
 
   /// Per vehicle id: the {years, months_by_year} the periods endpoint answers with.
@@ -179,6 +191,8 @@ class FakeServer {
   final List<int> deletedExpenses = [];
   final List<({int? id, Map<String, dynamic> body})> savedIncomes = [];
   final List<int> deletedIncomes = [];
+  final List<({int? id, Map<String, String> fields, String? slipFilename})> savedRevenues = [];
+  final List<int> deletedRevenues = [];
   final List<String> createdCategories = [];
   final List<({int id, String name})> renamedCategories = [];
   final List<int> deletedCategories = [];
@@ -260,6 +274,9 @@ class FakeServer {
     final total = inMonth.fold<double>(0, (sum, e) => sum + (e['amount'] as num));
     final incomeInMonth = incomes.where((i) => _inMonth(i, 'income_date', year, month)).toList();
     final income = otherIncomeTotal + incomeInMonth.fold<double>(0, (sum, i) => sum + (i['amount'] as num));
+    final revenueInMonth = revenues.where((r) => _inMonth(r, 'revenue_date', year, month)).toList();
+    final revenue =
+        otherCompanyRevenueTotal + revenueInMonth.fold<double>(0, (sum, r) => sum + (r['credited_amount'] as num));
 
     final byCategory = <String, double>{};
     for (final e in inMonth) {
@@ -276,7 +293,9 @@ class FakeServer {
       'profit_before_expenses': profitBeforeExpenses,
       'other_income_total': income,
       'other_income_count': otherIncomeCount + incomeInMonth.length,
-      'my_profit': profitBeforeExpenses + income - total,
+      'other_company_revenue_total': revenue,
+      'other_company_revenue_count': otherCompanyRevenueCount + revenueInMonth.length,
+      'my_profit': profitBeforeExpenses + income + revenue - total,
       'by_category': [for (final e in sorted) {'key': e.key, 'name': _categoryName(e.key), 'total': e.value}],
       'breakdown': {
         'our_hire_value_total': 8000,
@@ -298,6 +317,7 @@ class FakeServer {
       year,
       ...expenses.map((e) => yearOf(e, 'expense_date')),
       ...incomes.map((i) => yearOf(i, 'income_date')),
+      ...revenues.map((r) => yearOf(r, 'revenue_date')),
     }.toList()
       ..sort((a, b) => b.compareTo(a));
   }
@@ -370,6 +390,116 @@ class FakeServer {
     }
 
     return _json({'data': saved}, id == null ? 201 : 200);
+  }
+
+  http.Response _revenuesList(http.Request request) {
+    final p = _period(request);
+
+    final matching = revenues
+        .where((r) => _inMonth(r, 'revenue_date', p.year, p.month))
+        .where((r) =>
+            p.search.isEmpty ||
+            '${r['hire']} ${r['booking_number']} ${r['vehicle']}'.toLowerCase().contains(p.search))
+        .toList()
+      ..sort((a, b) => (b['revenue_date'] as String).compareTo(a['revenue_date'] as String));
+
+    final start = (p.page - 1) * pageSize;
+    return _json({
+      'data': matching.skip(start).take(pageSize).toList(),
+      'meta': {'current_page': p.page, 'last_page': (matching.length / pageSize).ceil().clamp(1, 999)},
+      'summary': _summary(p.year, p.month),
+      'filtered_total': matching.fold<double>(0, (sum, r) => sum + (r['credited_amount'] as num)),
+      'years': _years(p.year),
+    });
+  }
+
+  /// [saveOtherCompanyRevenue] always sends multipart (even with no photo),
+  /// so this parses fields/file out of the raw body itself rather than
+  /// `jsonDecode`-ing it the way [_incomeSave] does.
+  Future<http.Response> _revenueSave(http.Request request, int? id) async {
+    final multipart = await _parseMultipart(request);
+    final fields = multipart.fields;
+    savedRevenues.add((id: id, fields: fields, slipFilename: multipart.slipFilename));
+
+    http.Response invalid(String field, String message) =>
+        _json({'message': message, 'errors': {field: [message]}}, 422);
+
+    for (final field in ['hire', 'booking_number', 'vehicle']) {
+      if ((fields[field] ?? '').trim().isEmpty) return invalid(field, 'The $field field is required.');
+    }
+    final fullAmount = num.tryParse(fields['full_amount'] ?? '');
+    if (fullAmount == null || fullAmount < 0) return invalid('full_amount', 'The full amount field must be at least 0.');
+    final creditedAmount = num.tryParse(fields['credited_amount'] ?? '');
+    if (creditedAmount == null || creditedAmount < 0) {
+      return invalid('credited_amount', 'The credited amount field must be at least 0.');
+    }
+    final balance = num.tryParse(fields['balance'] ?? '');
+    if (balance == null) return invalid('balance', 'The balance field must be a number.');
+    final vehicleAmount = num.tryParse(fields['vehicle_amount'] ?? '');
+    if (vehicleAmount == null || vehicleAmount < 0) {
+      return invalid('vehicle_amount', 'The vehicle amount field must be at least 0.');
+    }
+
+    final existing = id == null ? null : revenues.where((r) => r['id'] == id).firstOrNull;
+    if (id != null && existing == null) return _json({'message': 'Not found.'}, 404);
+
+    final saved = {
+      'id': id ?? (revenues.map((r) => r['id'] as int).fold<int>(0, (a, b) => a > b ? a : b)) + 1,
+      'hire': fields['hire']!.trim(),
+      'booking_number': fields['booking_number']!.trim(),
+      'vehicle': fields['vehicle']!.trim(),
+      'full_amount': fullAmount,
+      'credited_amount': creditedAmount,
+      'balance': balance,
+      'vehicle_amount': vehicleAmount,
+      'revenue_date': fields['revenue_date'],
+      // A newly uploaded photo replaces whatever slip the entry already had;
+      // no new photo on an edit leaves the existing one untouched.
+      'slip_url': multipart.slipFilename != null
+          ? 'http://localhost/fake-slip/${multipart.slipFilename}'
+          : existing?['slip_url'],
+    };
+
+    if (id == null) {
+      revenues.add(saved);
+    } else {
+      final index = revenues.indexWhere((r) => r['id'] == id);
+      revenues[index] = saved;
+    }
+
+    return _json({'data': saved}, id == null ? 201 : 200);
+  }
+
+  /// Pulls the text fields and an optional "slip" file's filename out of a
+  /// multipart/form-data request body — [ApiClient.saveOtherCompanyRevenue]
+  /// always sends one (it's the only multipart upload admin_app does), and
+  /// [MockClient] hands this handler the raw encoded bytes, not pre-parsed
+  /// fields, so this is the one place in the test harness that needs to
+  /// speak multipart itself.
+  Future<({Map<String, String> fields, String? slipFilename})> _parseMultipart(http.Request request) async {
+    final contentType = request.headers['content-type'] ?? '';
+    final boundaryMatch = RegExp(r'boundary=(.+)$').firstMatch(contentType);
+    final fields = <String, String>{};
+    String? slipFilename;
+    if (boundaryMatch == null) return (fields: fields, slipFilename: slipFilename);
+
+    final boundary = boundaryMatch.group(1)!.replaceAll('"', '');
+    final parts = await MimeMultipartTransformer(boundary).bind(Stream.value(request.bodyBytes)).toList();
+
+    for (final part in parts) {
+      final disposition = part.headers['content-disposition'] ?? '';
+      final name = RegExp(r'name="([^"]*)"').firstMatch(disposition)?.group(1) ?? '';
+      final filename = RegExp(r'filename="([^"]*)"').firstMatch(disposition)?.group(1);
+      final bytes = await part.fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
+
+      if (filename != null && filename.isNotEmpty) {
+        slipFilename = filename;
+      } else {
+        fields[name] = utf8.decode(bytes);
+      }
+    }
+
+    return (fields: fields, slipFilename: slipFilename);
   }
 
   static const _monthNames = [
@@ -481,6 +611,24 @@ class FakeServer {
       incomes.remove(found);
       deletedIncomes.add(id);
       return _json({'message': 'Income "${found['title']}" was deleted.'});
+    }
+
+    // Always POST — create goes straight here, and an edit is spoofed as PUT
+    // via a "_method" field (a true multipart PUT can't carry a file through
+    // PHP's upload handling), so the id in the path is what tells them apart.
+    if (path == '/admin/other-company-revenues' && request.method == 'GET') return _revenuesList(request);
+    if (path == '/admin/other-company-revenues' && request.method == 'POST') return _revenueSave(request, null);
+    final revenueOne = RegExp(r'^/admin/other-company-revenues/(\d+)$').firstMatch(path);
+    if (revenueOne != null && request.method == 'POST') {
+      return _revenueSave(request, int.parse(revenueOne.group(1)!));
+    }
+    if (revenueOne != null && request.method == 'DELETE') {
+      final id = int.parse(revenueOne.group(1)!);
+      final found = revenues.where((r) => r['id'] == id).firstOrNull;
+      if (found == null) return _json({'message': 'Not found.'}, 404);
+      revenues.remove(found);
+      deletedRevenues.add(id);
+      return _json({'message': 'Revenue "${found['hire']}" was deleted.'});
     }
 
     if (path == '/admin/my-expense-categories' && request.method == 'GET') {
@@ -1127,3 +1275,30 @@ Map<String, dynamic> incomeJson({
   String? notes,
 }) =>
     {'id': id, 'title': title, 'amount': amount, 'income_date': date, 'notes': notes};
+
+/// A revenue-from-another-company row in the API's shape — mirrors
+/// Api\Admin\OtherCompanyRevenueResource.
+Map<String, dynamic> revenueJson({
+  required int id,
+  String hire = 'ZZZ Colombo to Kandy',
+  String bookingNumber = 'ZZZ-BK-001',
+  String vehicle = 'ZZZ Toyota Aqua',
+  num fullAmount = 10000,
+  num creditedAmount = 7000,
+  num balance = 3000,
+  num vehicleAmount = 6000,
+  required String date,
+  String? slipUrl,
+}) =>
+    {
+      'id': id,
+      'hire': hire,
+      'booking_number': bookingNumber,
+      'vehicle': vehicle,
+      'full_amount': fullAmount,
+      'credited_amount': creditedAmount,
+      'balance': balance,
+      'vehicle_amount': vehicleAmount,
+      'revenue_date': date,
+      'slip_url': slipUrl,
+    };

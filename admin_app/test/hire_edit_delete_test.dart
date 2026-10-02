@@ -91,6 +91,14 @@ FakeServer _server() => FakeServer(
             customer: 'ZZZ Old Customer',
             startTime: '2020-01-15T09:00:00+00:00',
           ),
+          hireJson(
+            id: 17,
+            vehicleId: 1,
+            tab: 'cancelled',
+            status: 'cancelled',
+            customer: 'ZZZ Cancelled Customer',
+            cancelReason: 'ZZZ original reason',
+          ),
         ],
       },
     );
@@ -222,6 +230,7 @@ void main() {
       expect(sent.body['hire_full_value'], '31000');
       expect(sent.body['our_hire_value'], '24000');
       expect(sent.body['description'], 'ZZZ after');
+      expect(sent.body['status'], 'pending');
 
       // Back on the hire page, showing the saved hire.
       expect(find.text('Edit Hire'), findsNothing);
@@ -256,7 +265,11 @@ void main() {
       await _openForm(tester, server, 16);
 
       await tester.ensureVisible(find.text('Scheduled date & time'));
-      await tester.tap(find.text('Scheduled date & time'));
+      // warnIfMissed: false — the longer form (now with a Status section
+      // above) puts this right at a scroll boundary, where the label's exact
+      // hit-test point can land a pixel outside its own text; the InkWell
+      // around the whole field still gets it, as the dialog below confirms.
+      await tester.tap(find.text('Scheduled date & time'), warnIfMissed: false);
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
@@ -334,6 +347,65 @@ void main() {
       expect(server.updatedHires, isEmpty);
       expect(find.text('ZZZ never saved'), findsNothing);
       expect(find.text('ZZZ before'), findsOneWidget);
+    });
+  });
+
+  group('changing status by hand', () {
+    testWidgets('pre-selects the hire\'s current status', (tester) async {
+      await _openForm(tester, _server(), 15); // status: 'started'
+
+      expect(tester.widget<ChoiceChip>(find.byKey(const Key('status-started'))).selected, isTrue);
+      expect(tester.widget<ChoiceChip>(find.byKey(const Key('status-pending'))).selected, isFalse);
+    });
+
+    testWidgets('marking a hire Completed by hand saves it', (tester) async {
+      final server = _server();
+      await _openForm(tester, server, 11); // status: 'pending'
+
+      await tester.tap(find.byKey(const Key('status-completed')));
+      await tester.pumpAndSettle();
+      await _save(tester);
+
+      expect(server.updatedHires.single.body['status'], 'completed');
+    });
+
+    testWidgets('choosing Cancelled reveals a reason field, sent along with the status', (tester) async {
+      final server = _server();
+      await _openForm(tester, server, 11);
+
+      expect(find.byKey(const Key('cancel-reason')), findsNothing);
+      await tester.tap(find.byKey(const Key('status-cancelled')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('cancel-reason')), findsOneWidget);
+
+      await tester.enterText(find.byKey(const Key('cancel-reason')), 'ZZZ customer backed out');
+      await _save(tester);
+
+      final sent = server.updatedHires.single.body;
+      expect(sent['status'], 'cancelled');
+      expect(sent['cancel_reason'], 'ZZZ customer backed out');
+    });
+
+    testWidgets('an already-cancelled hire opens with its reason prefilled', (tester) async {
+      await _openForm(tester, _server(), 17);
+
+      expect(find.byKey(const Key('cancel-reason')), findsOneWidget);
+      expect(_text(tester, 'Cancellation reason (optional)'), 'ZZZ original reason');
+    });
+
+    testWidgets('moving a cancelled hire to another status hides the reason field', (tester) async {
+      final server = _server();
+      await _openForm(tester, server, 17);
+
+      await tester.tap(find.byKey(const Key('status-pending')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('cancel-reason')), findsNothing);
+
+      await _save(tester);
+
+      final sent = server.updatedHires.single.body;
+      expect(sent['status'], 'pending');
+      expect(sent.containsKey('cancel_reason'), isFalse);
     });
   });
 

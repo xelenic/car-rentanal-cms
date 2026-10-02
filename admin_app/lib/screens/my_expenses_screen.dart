@@ -13,6 +13,7 @@ import '../widgets/state_views.dart';
 import 'expense_categories_screen.dart';
 import 'expense_form_screen.dart';
 import 'income_form_screen.dart';
+import 'revenue_form_screen.dart';
 
 /// The owner's own expenses and other income, a month at a time: My Profit
 /// (the month's profit from hires plus other income, less the expenses) and
@@ -29,7 +30,7 @@ class MyExpensesScreen extends StatefulWidget {
   State<MyExpensesScreen> createState() => _MyExpensesScreenState();
 }
 
-enum _Tab { expenses, income }
+enum _Tab { expenses, income, revenue }
 
 class _MyExpensesScreenState extends State<MyExpensesScreen> {
   final _searchController = TextEditingController();
@@ -42,6 +43,7 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
 
   List<MyExpense> _expenses = [];
   List<OtherIncome> _incomes = [];
+  List<OtherCompanyRevenue> _revenues = [];
   ExpenseSummary? _summary;
   List<ExpenseCategory> _categories = [];
   List<int> _years = [];
@@ -63,6 +65,7 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
   bool get _searching => _searchController.text.trim().isNotEmpty;
   bool get _filtering => _searching || _category != null;
   bool get _onIncome => _tab == _Tab.income;
+  bool get _onRevenue => _tab == _Tab.revenue;
   bool get _hasActions => _user.canUpdateMyExpenses || _user.canDeleteMyExpenses;
 
   @override
@@ -107,6 +110,21 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
         if (!mounted || generation != _generation) return;
         setState(() {
           _incomes = page.incomes;
+          _summary = page.summary;
+          _years = page.years;
+          _filteredTotal = page.filteredTotal;
+          _hasMore = page.hasMore;
+          _page = page.currentPage;
+        });
+      } else if (_onRevenue) {
+        final page = await ApiClient.instance.fetchOtherCompanyRevenues(
+          year: _year,
+          month: _month,
+          search: _searchController.text.trim(),
+        );
+        if (!mounted || generation != _generation) return;
+        setState(() {
+          _revenues = page.revenues;
           _summary = page.summary;
           _years = page.years;
           _filteredTotal = page.filteredTotal;
@@ -158,6 +176,20 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
         final known = _incomes.map((e) => e.id).toSet();
         setState(() {
           _incomes = [..._incomes, ...page.incomes.where((e) => !known.contains(e.id))];
+          _hasMore = page.hasMore;
+          _page = page.currentPage;
+        });
+      } else if (_onRevenue) {
+        final page = await ApiClient.instance.fetchOtherCompanyRevenues(
+          year: _year,
+          month: _month,
+          search: _searchController.text.trim(),
+          page: _page + 1,
+        );
+        if (!mounted || generation != _generation) return;
+        final known = _revenues.map((e) => e.id).toSet();
+        setState(() {
+          _revenues = [..._revenues, ...page.revenues.where((e) => !known.contains(e.id))];
           _hasMore = page.hasMore;
           _page = page.currentPage;
         });
@@ -365,6 +397,57 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
     }
   }
 
+  Future<void> _openRevenueForm({OtherCompanyRevenue? revenue}) async {
+    final saved = await Navigator.of(context).push<OtherCompanyRevenue>(
+      MaterialPageRoute(builder: (_) => RevenueFormScreen(initialDate: _defaultDate, revenue: revenue)),
+    );
+    if (saved == null || !mounted) return;
+
+    _snack('${saved.hire} ${revenue == null ? 'added' : 'updated'}.');
+    // Straight to the month it landed in, so it doesn't seem to have vanished.
+    _year = saved.date.year;
+    _month = saved.date.month;
+    _load(silent: true);
+  }
+
+  Future<void> _confirmDeleteRevenue(OtherCompanyRevenue revenue) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete "${revenue.hire}"?'),
+        content: Text(
+          '${formatRsExact(revenue.creditedAmount)} comes out of ${DateFormat('MMMM y').format(revenue.date)}\'s '
+          'other company revenue and out of My Profit. This can\'t be undone.',
+        ),
+        actions: [
+          TextButton(
+            key: const Key('keep-revenue'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep it'),
+          ),
+          TextButton(
+            key: const Key('confirm-delete-revenue'),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ApiClient.instance.deleteOtherCompanyRevenue(revenue.id);
+      if (!mounted) return;
+      _snack('${revenue.hire} deleted.');
+      _load(silent: true);
+    } on ApiException catch (e) {
+      if (mounted) _snack(e.message);
+    } catch (_) {
+      if (mounted) _snack('Could not reach the server. Nothing was deleted.');
+    }
+  }
+
   void _showProfitBreakdown() {
     final summary = _summary;
     if (summary == null) return;
@@ -384,10 +467,10 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
       appBar: AppBar(title: const Text('Expenses')),
       floatingActionButton: _user.canCreateMyExpenses
           ? FloatingActionButton.extended(
-              key: Key(_onIncome ? 'add-income' : 'add-expense'),
-              onPressed: () => _onIncome ? _openIncomeForm() : _openForm(),
+              key: Key(_onIncome ? 'add-income' : (_onRevenue ? 'add-revenue' : 'add-expense')),
+              onPressed: _onIncome ? _openIncomeForm : (_onRevenue ? _openRevenueForm : _openForm),
               icon: const Icon(Icons.add_rounded),
-              label: Text(_onIncome ? 'Add Income' : 'Add Expense'),
+              label: Text(_onIncome ? 'Add Income' : (_onRevenue ? 'Add Revenue' : 'Add Expense')),
             )
           : null,
       body: Column(
@@ -403,6 +486,7 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
             tab: _tab,
             expenseCount: _summary?.recordCount,
             incomeCount: _summary?.otherIncomeCount,
+            revenueCount: _summary?.otherCompanyRevenueCount,
             onChanged: _setTab,
           ),
           const Divider(height: 1),
@@ -442,7 +526,7 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
           children: [
             _ProfitCard(summary: summary, onTap: _showProfitBreakdown),
             const SizedBox(height: 10),
-            // The three that add up to My Profit, side by side and the same height.
+            // The four that add up to My Profit, two to a row and each row the same height.
             IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -468,6 +552,24 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
                       color: AppColors.success,
                     ),
                   ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _StatCard(
+                      key: const Key('card-other-revenue'),
+                      label: 'Other Company Revenue',
+                      value: formatRsExact(summary.otherCompanyRevenueTotal),
+                      caption: countOf(summary.otherCompanyRevenueCount, 'entry', 'entries'),
+                      icon: Icons.apartment_rounded,
+                      color: const Color(0xFF0D9488),
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: _StatCard(
@@ -488,7 +590,9 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
               controller: _searchController,
               onChanged: _onSearchChanged,
               decoration: InputDecoration(
-                hintText: _onIncome ? 'Search income or notes…' : 'Search expense or notes…',
+                hintText: _onIncome
+                    ? 'Search income or notes…'
+                    : (_onRevenue ? 'Search hire, booking # or vehicle…' : 'Search expense or notes…'),
                 prefixIcon: const Icon(Icons.search_rounded, size: 20),
                 suffixIcon: _searching
                     ? IconButton(
@@ -504,21 +608,23 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
                     : null,
               ),
             ),
-            if (!_onIncome && _categories.isNotEmpty) ...[
+            if (_tab == _Tab.expenses && _categories.isNotEmpty) ...[
               const SizedBox(height: 10),
               _CategoryFilter(categories: _categories, selected: _category, onSelected: _setCategory),
             ],
             const SizedBox(height: 12),
-            if ((_onIncome ? _incomes : _expenses).isEmpty)
+            if ((_onIncome ? _incomes.length : (_onRevenue ? _revenues.length : _expenses.length)) == 0)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 28),
                 child: EmptyState(
-                  icon: _onIncome ? Icons.payments_outlined : Icons.wallet_rounded,
+                  icon: _onIncome ? Icons.payments_outlined : (_onRevenue ? Icons.apartment_rounded : Icons.wallet_rounded),
                   title: _onIncome
                       ? (_filtering ? 'No income matches' : 'No other income yet')
-                      : (_filtering ? 'No expenses match' : 'No expenses yet'),
+                      : (_onRevenue
+                          ? (_filtering ? 'No revenue matches' : 'No revenue from other companies yet')
+                          : (_filtering ? 'No expenses match' : 'No expenses yet')),
                   message: _filtering
-                      ? (_onIncome ? 'Try a different search.' : 'Try a different search or category.')
+                      ? (_onRevenue ? 'Try a different search.' : (_onIncome ? 'Try a different search.' : 'Try a different search or category.'))
                       : 'Nothing recorded for ${summary.label}.',
                 ),
               )
@@ -536,6 +642,18 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
                     onTap: _user.canUpdateMyExpenses ? () => _openIncomeForm(income: income) : null,
                     onEdit: _user.canUpdateMyExpenses ? () => _openIncomeForm(income: income) : null,
                     onDelete: _user.canDeleteMyExpenses ? () => _confirmDeleteIncome(income) : null,
+                    showMenu: _hasActions,
+                  ),
+                  const SizedBox(height: 8),
+                ]
+              else if (_onRevenue)
+                for (final revenue in _revenues) ...[
+                  _RevenueTile(
+                    revenue: revenue,
+                    dateLabel: _shortDate.format(revenue.date),
+                    onTap: _user.canUpdateMyExpenses ? () => _openRevenueForm(revenue: revenue) : null,
+                    onEdit: _user.canUpdateMyExpenses ? () => _openRevenueForm(revenue: revenue) : null,
+                    onDelete: _user.canDeleteMyExpenses ? () => _confirmDeleteRevenue(revenue) : null,
                     showMenu: _hasActions,
                   ),
                   const SizedBox(height: 8),
@@ -568,7 +686,9 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
                   child: Text(
                     _onIncome
                         ? 'Total of the ${countOf(_incomes.length, 'entry', 'entries')} shown: ${formatRsExact(_filteredTotal)}'
-                        : 'Total of the ${countOf(_expenses.length, 'expense')} shown: ${formatRsExact(_filteredTotal)}',
+                        : (_onRevenue
+                            ? 'Credited total of the ${countOf(_revenues.length, 'entry', 'entries')} shown: ${formatRsExact(_filteredTotal)}'
+                            : 'Total of the ${countOf(_expenses.length, 'expense')} shown: ${formatRsExact(_filteredTotal)}'),
                     key: const Key('filtered-total'),
                     textAlign: TextAlign.end,
                     style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
@@ -903,14 +1023,102 @@ class _EntryTile extends StatelessWidget {
   }
 }
 
-/// "Expenses 2 | Other Income 1" — the two lists the page switches between.
+/// One revenue entry from another rental company: hire, booking number and
+/// vehicle, the credited amount as the headline figure, a secondary line
+/// with the full/balance/vehicle amounts, and a small clip icon when a bank
+/// slip is attached — with the same Edit / Delete menu as [_EntryTile].
+class _RevenueTile extends StatelessWidget {
+  const _RevenueTile({
+    required this.revenue,
+    required this.dateLabel,
+    required this.showMenu,
+    this.onTap,
+    this.onEdit,
+    this.onDelete,
+  });
+
+  final OtherCompanyRevenue revenue;
+  final String dateLabel;
+  final bool showMenu;
+  final VoidCallback? onTap;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        key: Key('revenue-${revenue.id}'),
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(revenue.hire, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Pill(label: revenue.bookingNumber, color: AppColors.primary),
+                        Text(revenue.vehicle, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                        Text(dateLabel, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                        if (revenue.slipUrl != null) const Icon(Icons.attach_file_rounded, size: 14, color: AppColors.textMuted),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Full ${formatRsExact(revenue.fullAmount)} · Balance ${formatRsExact(revenue.balance)} · '
+                      'Vehicle ${formatRsExact(revenue.vehicleAmount)}',
+                      style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: EdgeInsets.only(top: showMenu ? 10 : 0, right: showMenu ? 0 : 8),
+                child: Text(
+                  formatRsExact(revenue.creditedAmount),
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: AppColors.success),
+                ),
+              ),
+              if (showMenu)
+                PopupMenuButton<String>(
+                  key: Key('revenue-menu-${revenue.id}'),
+                  tooltip: 'More',
+                  icon: const Icon(Icons.more_vert_rounded, size: 20, color: AppColors.textMuted),
+                  onSelected: (value) => value == 'edit' ? onEdit?.call() : onDelete?.call(),
+                  itemBuilder: (_) => [
+                    if (onEdit != null) const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                    if (onDelete != null)
+                      const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: AppColors.danger))),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Expenses 2 | Other Income 1 | Revenue 1" — the three lists the page switches between.
 class _TabSwitch extends StatelessWidget {
-  const _TabSwitch({required this.tab, required this.onChanged, this.expenseCount, this.incomeCount});
+  const _TabSwitch({required this.tab, required this.onChanged, this.expenseCount, this.incomeCount, this.revenueCount});
 
   final _Tab tab;
   final ValueChanged<_Tab> onChanged;
   final int? expenseCount;
   final int? incomeCount;
+  final int? revenueCount;
 
   @override
   Widget build(BuildContext context) {
@@ -922,7 +1130,10 @@ class _TabSwitch extends StatelessWidget {
             child: _tab('tab-expenses', 'Expenses', expenseCount, _Tab.expenses),
           ),
           Expanded(
-            child: _tab('tab-income', 'Other Income', incomeCount, _Tab.income),
+            child: _tab('tab-income', 'Income', incomeCount, _Tab.income),
+          ),
+          Expanded(
+            child: _tab('tab-revenue', 'Revenue', revenueCount, _Tab.revenue),
           ),
         ],
       ),
@@ -937,23 +1148,30 @@ class _TabSwitch extends StatelessWidget {
       key: Key(key),
       onTap: () => onChanged(value),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 2),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: selected ? AppColors.primary : Colors.transparent, width: 2.5)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(label, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: color)),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5, color: color),
+              ),
+            ),
             if (count != null) ...[
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
                 ),
-                child: Text('$count', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: color)),
+                child: Text('$count', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: color)),
               ),
             ],
           ],

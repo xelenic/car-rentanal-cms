@@ -34,6 +34,13 @@ class HireService
             'vehicle_id' => ['nullable', 'integer', 'exists:vehicles,id'],
             'description' => ['nullable', 'string'],
             'payment_type' => ['required', Rule::in(array_keys(Hire::PAYMENT_TYPES))],
+            // Optional — lets the admin app/panel record a hire that already
+            // happened (and wasn't entered at the time) directly in whatever
+            // state it's actually in, or correct a hire's state by hand later.
+            // Left out entirely, status is untouched on an update, and
+            // defaults to the column's own 'pending' on create.
+            'status' => ['sometimes', Rule::in(array_keys(Hire::STATUSES))],
+            'cancel_reason' => ['nullable', 'string'],
         ];
 
         if ($isNewCustomer) {
@@ -101,14 +108,15 @@ class HireService
         return DB::transaction(function () use ($data) {
             $data['customer_id'] = $this->resolveCustomerId($data);
             $data = $this->resolveLocationFields($data);
-            $hire = Hire::create($this->hireAttributes($data));
+            $hire = Hire::create([...$this->hireAttributes($data), ...$this->statusAttributes($data, null)]);
             $this->syncLocations($hire, $data);
 
-            // hireAttributes() never sets 'status' — it's left to the
-            // column's own DB default ('pending'), which create() doesn't
-            // pull back into the in-memory model on its own. Callers that
-            // serialize the returned hire directly (the admin app's API)
-            // need status/status_label populated, not left null.
+            // When $data carries no 'status' at all, hireAttributes() leaves
+            // it unset and it's left to the column's own DB default
+            // ('pending'), which create() doesn't pull back into the
+            // in-memory model on its own. Callers that serialize the
+            // returned hire directly (the admin app's API) need
+            // status/status_label populated, not left null.
             return $hire->fresh();
         });
     }
@@ -118,11 +126,43 @@ class HireService
         DB::transaction(function () use ($hire, $data) {
             $data['customer_id'] = $this->resolveCustomerId($data);
             $data = $this->resolveLocationFields($data);
-            $hire->update($this->hireAttributes($data));
+            $hire->update([...$this->hireAttributes($data), ...$this->statusAttributes($data, $hire)]);
             $this->syncLocations($hire, $data);
         });
 
         return $hire->fresh();
+    }
+
+    /**
+     * Status is normally the driver app's business (see
+     * HireTrackingController) — but the admin side also needs to be able to
+     * set it directly, both for a hire that already happened and was never
+     * entered at the time, and to correct a hire's state by hand later. Left
+     * out of $data entirely, this returns nothing and the hire's current
+     * status (or the column default, on create) is untouched.
+     */
+    private function statusAttributes(array $data, ?Hire $existing): array
+    {
+        if (!array_key_exists('status', $data)) {
+            return [];
+        }
+
+        $status = $data['status'];
+        $attributes = ['status' => $status];
+
+        if ($status === Hire::STATUS_CANCELLED) {
+            $attributes['cancel_reason'] = $data['cancel_reason'] ?? null;
+            // A hire that was already cancelled keeps the moment it was
+            // actually cancelled; one newly turning cancelled is timestamped now.
+            if ($existing === null || $existing->status !== Hire::STATUS_CANCELLED) {
+                $attributes['cancelled_at'] = now();
+            }
+        } else {
+            $attributes['cancelled_at'] = null;
+            $attributes['cancel_reason'] = null;
+        }
+
+        return $attributes;
     }
 
     private function resolveCustomerId(array $data): int

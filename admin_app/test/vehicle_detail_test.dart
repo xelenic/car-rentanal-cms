@@ -346,6 +346,46 @@ void main() {
       final all = find.byKey(const Key('tab-all'));
       expect(find.descendant(of: all, matching: find.text('7')), findsOneWidget); // was 6
     });
+
+    testWidgets('can be entered already marked Completed, for one that already happened', (tester) async {
+      tester.view.physicalSize = const Size(412, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final server = _vanWithHires();
+      await server.install();
+      await tester.pumpWidget(MaterialApp(
+        theme: buildAdminAppTheme(),
+        home: VehicleDetailScreen(vehicle: Vehicle.fromJson(server.vehicles.first), user: _user()),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('new-hire')));
+      await tester.pumpAndSettle();
+
+      // Defaults to Pending.
+      expect(tester.widget<ChoiceChip>(find.byKey(const Key('status-pending'))).selected, isTrue);
+
+      await tester.tap(find.byKey(const Key('status-completed')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButtonFormField<int>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ZZZ Test Customer · 0770000000').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextFormField, 'From location'), 'ZZZ Pickup Place');
+      await tester.enterText(find.widgetWithText(TextFormField, 'To location'), 'ZZZ Drop Place');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Hire full value (Rs.)'), '25000');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Our hire value (Rs.)'), '20000');
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final create = find.widgetWithText(ElevatedButton, 'Create Hire');
+      await tester.ensureVisible(create);
+      await tester.tap(create);
+      await tester.pumpAndSettle();
+
+      expect(server.createdHires, hasLength(1));
+      expect(server.createdHires.single['status'], 'completed');
+    });
   });
 
   group('editing and deleting the vehicle', () {
