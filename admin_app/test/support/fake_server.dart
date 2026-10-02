@@ -41,6 +41,8 @@ class FakeServer {
     List<Map<String, dynamic>>? incomes,
     List<Map<String, dynamic>>? drivers,
     List<Map<String, dynamic>>? customers,
+    List<Map<String, dynamic>>? referenceDrivers,
+    List<Map<String, dynamic>>? referenceCustomers,
     this.profitBeforeExpenses = 6400,
     this.otherIncomeTotal = 0,
     this.otherIncomeCount = 0,
@@ -54,6 +56,12 @@ class FakeServer {
         incomes = incomes ?? [],
         drivers = drivers ?? [],
         customers = customers ?? [],
+        referenceDrivers = referenceDrivers ?? [
+          {'id': 1, 'name': 'ZZZ Test Driver'},
+        ],
+        referenceCustomers = referenceCustomers ?? [
+          {'id': 1, 'name': 'ZZZ Test Customer', 'phone': '0770000000'},
+        ],
         periods = periods ?? {},
         statsByPeriod = statsByPeriod ?? {};
 
@@ -95,6 +103,12 @@ class FakeServer {
   /// The driver roster and customer list, each in the API's JSON shape.
   final List<Map<String, dynamic>> drivers;
   final List<Map<String, dynamic>> customers;
+
+  /// Id/name options for the hire form's and hire filter's driver/customer
+  /// dropdowns (GET /admin/hires/reference-data) — independent of [drivers]
+  /// and [customers] above, which back the full Drivers/Customers list pages.
+  final List<Map<String, dynamic>> referenceDrivers;
+  final List<Map<String, dynamic>> referenceCustomers;
 
   /// The signed-in user the fake's flags describe — for a test that mounts a
   /// tab screen (VehiclesDashboardScreen, DriversTab, ...) directly instead
@@ -729,15 +743,11 @@ class FakeServer {
 
     if (path == '/admin/hires/reference-data') {
       return _json({
-        'drivers': [
-          {'id': 1, 'name': 'ZZZ Test Driver'},
-        ],
+        'drivers': referenceDrivers,
         'vehicles': [
           for (final v in vehicles) {'id': v['id'], 'model': v['model']},
         ],
-        'customers': [
-          {'id': 1, 'name': 'ZZZ Test Customer', 'phone': '0770000000'},
-        ],
+        'customers': referenceCustomers,
         'packages': [
           {'id': 1, 'name': 'ZZZ Test Package'},
         ],
@@ -747,10 +757,20 @@ class FakeServer {
     if (path == '/admin/hires' && request.method == 'GET') {
       final search = (request.url.queryParameters['search'] ?? '').toLowerCase();
       final upcoming = request.url.queryParameters['upcoming'] == '1';
+      final driverId = request.url.queryParameters['driver_id'];
+      final vehicleId = request.url.queryParameters['vehicle_id'];
+      final customerId = request.url.queryParameters['customer_id'];
+      final dateFrom = request.url.queryParameters['date_from'];
+      final dateTo = request.url.queryParameters['date_to'];
       final page = int.parse(request.url.queryParameters['page'] ?? '1');
       final matching = allHires
           .where((h) => search.isEmpty || '${h['customer']?['name']} ${h['description']}'.toLowerCase().contains(search))
           .where((h) => !upcoming || h['is_upcoming'] == true)
+          .where((h) => driverId == null || '${(h['driver'] as Map<String, dynamic>?)?['id']}' == driverId)
+          .where((h) => vehicleId == null || '${(h['vehicle'] as Map<String, dynamic>?)?['id']}' == vehicleId)
+          .where((h) => customerId == null || '${(h['customer'] as Map<String, dynamic>?)?['id']}' == customerId)
+          .where((h) => dateFrom == null || ((h['start_time'] as String?)?.compareTo(dateFrom) ?? -1) >= 0)
+          .where((h) => dateTo == null || ((h['start_time'] as String?)?.compareTo('$dateTo 23:59:59') ?? 1) <= 0)
           .toList();
       final start = (page - 1) * pageSize;
       return _json({

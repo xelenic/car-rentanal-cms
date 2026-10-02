@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/admin_user.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
+import '../widgets/initials_avatar.dart';
 import 'customers_tab.dart';
 import 'drivers_tab.dart';
 import 'hires_screen.dart';
@@ -158,24 +159,78 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Car Rental CMS'), actions: [logoutButton]),
-      body: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: shortcuts.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisSpacing: 14,
-          crossAxisSpacing: 14,
-          childAspectRatio: 1.05,
-        ),
-        itemBuilder: (context, index) {
-          final shortcut = shortcuts[index];
-          return _ShortcutCard(
-            key: Key('shortcut-${shortcut.title.toLowerCase()}'),
-            shortcut: shortcut,
-            onTap: () => _open(shortcut),
-          );
-        },
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: _ProfileHeader(user: user),
+          ),
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              itemCount: shortcuts.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 14,
+                crossAxisSpacing: 14,
+                childAspectRatio: 1.05,
+              ),
+              itemBuilder: (context, index) {
+                final shortcut = shortcuts[index];
+                return _ShortcutCard(
+                  key: Key('shortcut-${shortcut.title.toLowerCase()}'),
+                  shortcut: shortcut,
+                  onTap: () => _open(shortcut),
+                );
+              },
+            ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+/// Greets the signed-in user by name, right above the shortcut grid — the
+/// same avatar + "Welcome back" + name pattern the driver app's own home
+/// screen uses.
+class _ProfileHeader extends StatelessWidget {
+  const _ProfileHeader({required this.user});
+
+  final AdminUser user;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        InitialsAvatar(name: user.name, size: 52),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Welcome back',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                user.name,
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w700),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                user.email,
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -201,7 +256,7 @@ class _ShortcutCard extends StatelessWidget {
             border: Border.all(color: AppColors.border),
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
@@ -217,6 +272,7 @@ class _ShortcutCard extends StatelessWidget {
               const SizedBox(height: 14),
               Text(
                 shortcut.title,
+                textAlign: TextAlign.center,
                 style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 15.5),
               ),
             ],

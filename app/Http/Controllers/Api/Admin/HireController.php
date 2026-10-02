@@ -13,6 +13,7 @@ use App\Services\HireService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Carbon;
 
 /**
  * The admin mobile app's Hires API: list, show, create, edit and delete.
@@ -53,6 +54,11 @@ class HireController extends Controller
                     ->whereNotNull('start_time')
                     ->where('start_time', '>=', now());
             })
+            ->when($request->filled('driver_id'), fn ($query) => $query->where('driver_id', $request->integer('driver_id')))
+            ->when($request->filled('vehicle_id'), fn ($query) => $query->where('vehicle_id', $request->integer('vehicle_id')))
+            ->when($request->filled('customer_id'), fn ($query) => $query->where('customer_id', $request->integer('customer_id')))
+            ->when($this->parseDate($request, 'date_from'), fn ($query, $date) => $query->whereDate('start_time', '>=', $date))
+            ->when($this->parseDate($request, 'date_to'), fn ($query, $date) => $query->whereDate('start_time', '<=', $date))
             ->when($showUpcoming, fn ($query) => $query->orderBy('start_time'), fn ($query) => $query->latest())
             ->paginate(20);
 
@@ -137,5 +143,18 @@ class HireController extends Controller
     private function authorizeView(Request $request): void
     {
         abort_unless($request->user()->can('hires.view'), 403, 'You do not have permission to view hires.');
+    }
+
+    private function parseDate(Request $request, string $key): ?Carbon
+    {
+        if ($request->isNotFilled($key)) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($request->string($key)->toString());
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

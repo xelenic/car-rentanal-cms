@@ -156,11 +156,25 @@ class ApiClient {
     throw ApiException(_extractError(response));
   }
 
-  Future<HirePage> fetchHires({String? search, bool upcoming = false, int page = 1}) async {
+  Future<HirePage> fetchHires({
+    String? search,
+    bool upcoming = false,
+    int? driverId,
+    int? vehicleId,
+    int? customerId,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+    int page = 1,
+  }) async {
     final uri = Uri.parse('$baseUrl/admin/hires').replace(
       queryParameters: {
         if (search != null && search.isNotEmpty) 'search': search,
         if (upcoming) 'upcoming': '1',
+        if (driverId != null) 'driver_id': '$driverId',
+        if (vehicleId != null) 'vehicle_id': '$vehicleId',
+        if (customerId != null) 'customer_id': '$customerId',
+        if (dateFrom != null) 'date_from': _dateOnly(dateFrom),
+        if (dateTo != null) 'date_to': _dateOnly(dateTo),
         'page': '$page',
       },
     );
@@ -185,6 +199,13 @@ class ApiClient {
     }
 
     throw ApiException(_extractError(response));
+  }
+
+  static String _dateOnly(DateTime date) {
+    final y = date.year.toString().padLeft(4, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
   }
 
   /// The fleet, a page at a time, each vehicle with its hire numbers.
