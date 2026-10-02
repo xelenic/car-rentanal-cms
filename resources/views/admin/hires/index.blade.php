@@ -62,14 +62,31 @@
 
     <div class="card border-0" id="hires-table">
         <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <form method="GET" style="max-width: 280px;">
+            <form method="GET" class="d-flex flex-wrap gap-2 flex-grow-1" style="max-width: 640px;">
                 @if ($showUpcoming)
                     <input type="hidden" name="upcoming" value="1">
                 @endif
-                <div class="position-relative">
+                <div class="position-relative flex-grow-1" style="min-width: 200px;">
                     <i class="bi bi-search position-absolute" style="left: .65rem; top: 50%; transform: translateY(-50%); color: #a3aab8; font-size: .8rem;"></i>
                     <input type="search" name="search" value="{{ $search }}" class="form-control" style="padding-left: 1.85rem;" placeholder="Search by customer or description...">
                 </div>
+                <select name="driver_id" class="form-select" style="max-width: 170px;" onchange="this.form.submit()">
+                    <option value="">All Drivers</option>
+                    @foreach ($drivers as $driver)
+                        <option value="{{ $driver->id }}" @selected($selectedDriverId === $driver->id)>{{ $driver->name }}</option>
+                    @endforeach
+                </select>
+                <select name="vehicle_id" class="form-select" style="max-width: 170px;" onchange="this.form.submit()">
+                    <option value="">All Vehicles</option>
+                    @foreach ($vehicles as $vehicle)
+                        <option value="{{ $vehicle->id }}" @selected($selectedVehicleId === $vehicle->id)>{{ $vehicle->model }}</option>
+                    @endforeach
+                </select>
+                @if ($selectedDriverId || $selectedVehicleId || $search)
+                    <a href="{{ route('admin.hires.index', $showUpcoming ? ['upcoming' => 1] : []) }}" class="btn btn-light border" title="Clear filters">
+                        <i class="bi bi-x-lg"></i>
+                    </a>
+                @endif
             </form>
             @if ($showUpcoming)
                 <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">

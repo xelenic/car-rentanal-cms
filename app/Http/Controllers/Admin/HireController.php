@@ -54,6 +54,11 @@ class HireController extends Controller implements HasMiddleware
                         });
                 });
             })
+            // Driver-wise / car-wise filters — "All Drivers"/"All Vehicles" in
+            // the view post back as empty strings, so filled() (not present())
+            // correctly treats those as no filter.
+            ->when($request->filled('driver_id'), fn ($query) => $query->where('driver_id', $request->integer('driver_id')))
+            ->when($request->filled('vehicle_id'), fn ($query) => $query->where('vehicle_id', $request->integer('vehicle_id')))
             ->when($showUpcoming, $upcomingScope)
             // Upcoming hires read soonest-first; otherwise newest-created-first, as before.
             ->when($showUpcoming, fn ($query) => $query->orderBy('start_time'), fn ($query) => $query->latest())
@@ -63,6 +68,8 @@ class HireController extends Controller implements HasMiddleware
         return view('admin.hires.index', [
             'hires' => $hires,
             'search' => $request->string('search')->toString(),
+            'selectedDriverId' => $request->filled('driver_id') ? $request->integer('driver_id') : null,
+            'selectedVehicleId' => $request->filled('vehicle_id') ? $request->integer('vehicle_id') : null,
             'showUpcoming' => $showUpcoming,
             'upcomingCount' => Hire::query()->tap($upcomingScope)->count(),
             'packages' => Package::orderBy('name')->get(),
