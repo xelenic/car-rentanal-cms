@@ -62,27 +62,44 @@
 
     <div class="card border-0" id="hires-table">
         <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <form method="GET" class="d-flex flex-wrap gap-2 flex-grow-1" style="max-width: 640px;">
+            <form method="GET" class="d-flex flex-wrap gap-2 align-items-center flex-grow-1">
                 @if ($showUpcoming)
                     <input type="hidden" name="upcoming" value="1">
                 @endif
-                <div class="position-relative flex-grow-1" style="min-width: 200px;">
+                <div class="position-relative flex-grow-1" style="min-width: 200px; max-width: 280px;">
                     <i class="bi bi-search position-absolute" style="left: .65rem; top: 50%; transform: translateY(-50%); color: #a3aab8; font-size: .8rem;"></i>
                     <input type="search" name="search" value="{{ $search }}" class="form-control" style="padding-left: 1.85rem;" placeholder="Search by customer or description...">
                 </div>
-                <select name="driver_id" class="form-select" style="max-width: 170px;" onchange="this.form.submit()">
+                <select name="driver_id" class="form-select" style="max-width: 160px;" onchange="this.form.submit()">
                     <option value="">All Drivers</option>
                     @foreach ($drivers as $driver)
                         <option value="{{ $driver->id }}" @selected($selectedDriverId === $driver->id)>{{ $driver->name }}</option>
                     @endforeach
                 </select>
-                <select name="vehicle_id" class="form-select" style="max-width: 170px;" onchange="this.form.submit()">
+                <select name="vehicle_id" class="form-select" style="max-width: 160px;" onchange="this.form.submit()">
                     <option value="">All Vehicles</option>
                     @foreach ($vehicles as $vehicle)
                         <option value="{{ $vehicle->id }}" @selected($selectedVehicleId === $vehicle->id)>{{ $vehicle->model }}</option>
                     @endforeach
                 </select>
-                @if ($selectedDriverId || $selectedVehicleId || $search)
+                <select name="customer_id" class="form-select" style="max-width: 160px;" onchange="this.form.submit()">
+                    <option value="">All Customers</option>
+                    @foreach ($customers as $customer)
+                        <option value="{{ $customer->id }}" @selected($selectedCustomerId === $customer->id)>{{ $customer->name }}</option>
+                    @endforeach
+                </select>
+                <select name="payment_type" class="form-select" style="max-width: 140px;" onchange="this.form.submit()">
+                    <option value="">Cash &amp; Credit</option>
+                    @foreach (\App\Models\Hire::PAYMENT_TYPES as $value => $label)
+                        <option value="{{ $value }}" @selected($selectedPaymentType === $value)>{{ $label }}</option>
+                    @endforeach
+                </select>
+                <div class="d-flex align-items-center gap-1">
+                    <input type="date" name="date_from" value="{{ $dateFrom }}" class="form-control" style="width: 145px;" onchange="this.form.submit()" title="From">
+                    <span class="text-muted small">to</span>
+                    <input type="date" name="date_to" value="{{ $dateTo }}" class="form-control" style="width: 145px;" onchange="this.form.submit()" title="To">
+                </div>
+                @if ($selectedDriverId || $selectedVehicleId || $selectedCustomerId || $selectedPaymentType || $dateFrom || $dateTo || $search)
                     <a href="{{ route('admin.hires.index', $showUpcoming ? ['upcoming' => 1] : []) }}" class="btn btn-light border" title="Clear filters">
                         <i class="bi bi-x-lg"></i>
                     </a>
