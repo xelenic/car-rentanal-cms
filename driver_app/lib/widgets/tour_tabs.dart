@@ -25,12 +25,18 @@ class TourTabs extends StatefulWidget {
   /// it (the default is [TourListScreen]).
   final Widget Function(HireTab tab)? listPageBuilder;
 
+  /// An optional filter control shown above the selected tab's list — used
+  /// for the Completed tab's own month filter. Called with the currently
+  /// selected tab on every build; returning null shows nothing.
+  final Widget? Function(HireTab tab)? filterBuilder;
+
   const TourTabs({
     super.key,
     required this.tabs,
     this.now,
     this.onChanged,
     this.listPageBuilder,
+    this.filterBuilder,
   });
 
   @override
@@ -63,11 +69,12 @@ class _TourTabsState extends State<TourTabs> {
   Widget build(BuildContext context) {
     final hires = _hiresOf(_tab);
     final shown = hires.items.take(kHomeTabLimit).toList();
+    final filter = widget.filterBuilder?.call(_tab);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
+        Row(
           children: [
             Icon(Icons.assignment_outlined, color: AppColors.neon, size: 18),
             SizedBox(width: 8),
@@ -94,6 +101,7 @@ class _TourTabsState extends State<TourTabs> {
           ],
         ),
         const SizedBox(height: 14),
+        if (filter != null) ...[filter, const SizedBox(height: 10)],
         HireListOrEmpty(
           key: ValueKey('tour-list-${_tab.name}'),
           hires: shown,
@@ -112,7 +120,7 @@ class _TourTabsState extends State<TourTabs> {
                 label: const Text('More'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.neonDeep,
-                  side: const BorderSide(color: AppColors.neon),
+                  side: BorderSide(color: AppColors.neon),
                   padding: const EdgeInsets.symmetric(vertical: 13),
                   textStyle: const TextStyle(fontWeight: FontWeight.w700),
                 ),
@@ -207,7 +215,7 @@ class HireListOrEmpty extends StatelessWidget {
         child: Text(
           emptyText,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
         ),
       );
     }

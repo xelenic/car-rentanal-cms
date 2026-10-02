@@ -68,7 +68,7 @@ class _SalaryScreenState extends State<SalaryScreen> {
         future: _periodsFuture,
         builder: (context, periodsSnapshot) {
           if (periodsSnapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.neon));
+            return Center(child: CircularProgressIndicator(color: AppColors.neon));
           }
 
           if (periodsSnapshot.hasError) {
@@ -113,7 +113,7 @@ class _SalaryScreenState extends State<SalaryScreen> {
                   future: _salaryFuture,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState != ConnectionState.done) {
-                      return const Padding(
+                      return Padding(
                         padding: EdgeInsets.symmetric(vertical: 60),
                         child: Center(child: CircularProgressIndicator(color: AppColors.neon)),
                       );
@@ -156,7 +156,7 @@ class _SalaryContent extends StatelessWidget {
           padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(22),
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [AppColors.neon, AppColors.neonDeep],
@@ -177,7 +177,7 @@ class _SalaryContent extends StatelessWidget {
                   Expanded(
                     child: Text(
                       '$monthLabel ${salary.year} · ${salary.salaryPercentage.toStringAsFixed(0)}% Salary',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.onNeon,
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
@@ -191,7 +191,7 @@ class _SalaryContent extends StatelessWidget {
                         color: AppColors.onNeon.withValues(alpha: 0.16),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.check_circle, size: 12, color: AppColors.onNeon),
@@ -212,7 +212,7 @@ class _SalaryContent extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 'Rs. ${salary.amountDue.toStringAsFixed(2)}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.onNeon,
                   fontWeight: FontWeight.w900,
                   fontSize: 36,
@@ -222,13 +222,13 @@ class _SalaryContent extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 'from ${salary.hireCount} hire${salary.hireCount == 1 ? '' : 's'} this month',
-                style: const TextStyle(color: AppColors.onNeon, fontSize: 12),
+                style: TextStyle(color: AppColors.onNeon, fontSize: 12),
               ),
               if (salary.isPaid) ...[
                 const SizedBox(height: 2),
                 Text(
                   'Paid Rs. ${salary.paidAmount.toStringAsFixed(2)}${paidDateLabel != null ? ' on $paidDateLabel' : ''}',
-                  style: const TextStyle(color: AppColors.onNeon, fontSize: 12),
+                  style: TextStyle(color: AppColors.onNeon, fontSize: 12),
                 ),
               ] else if (salary.paidAmount > 0) ...[
                 const SizedBox(height: 2),
@@ -236,13 +236,13 @@ class _SalaryContent extends StatelessWidget {
                   'Rs. ${salary.paidAmount.toStringAsFixed(2)} already paid'
                   '${paidDateLabel != null ? ' on $paidDateLabel' : ''} · '
                   'Rs. ${salary.amountDue.toStringAsFixed(2)} new from more hires',
-                  style: const TextStyle(color: AppColors.onNeon, fontSize: 12),
+                  style: TextStyle(color: AppColors.onNeon, fontSize: 12),
                 ),
               ] else if (salary.advanceDeductionTotal > 0) ...[
                 const SizedBox(height: 2),
                 Text(
                   'Rs. ${salary.salary.toStringAsFixed(2)} salary − Rs. ${salary.advanceDeductionTotal.toStringAsFixed(2)} advance deduction',
-                  style: const TextStyle(color: AppColors.onNeon, fontSize: 12),
+                  style: TextStyle(color: AppColors.onNeon, fontSize: 12),
                 ),
               ],
             ],
@@ -260,7 +260,7 @@ class _SalaryContent extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Breakdown',
                 style: TextStyle(
                   color: AppColors.neon,
@@ -270,7 +270,7 @@ class _SalaryContent extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               _BreakdownRow(label: 'Our Hire Value Total', value: salary.ourHireValueTotal),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Divider(color: AppColors.border, height: 1),
               ),
@@ -285,7 +285,7 @@ class _SalaryContent extends StatelessWidget {
                 ),
               ),
               _BreakdownRow(label: 'Total Expenses', value: -salary.expensesTotal),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Divider(color: AppColors.border, height: 1),
               ),
@@ -326,7 +326,7 @@ class _SalaryContent extends StatelessWidget {
                     muted: true,
                   ),
                 ],
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
                   child: Divider(color: AppColors.border, height: 1),
                 ),
@@ -337,7 +337,7 @@ class _SalaryContent extends StatelessWidget {
                 ),
               ],
               if (salary.paidAmount > 0) ...[
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
                   child: Divider(color: AppColors.border, height: 1),
                 ),
@@ -351,11 +351,11 @@ class _SalaryContent extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     'Paid on $paidDateLabel',
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
                   ),
                 ],
                 if (salary.amountDue > 0) ...[
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
                     child: Divider(color: AppColors.border, height: 1),
                   ),
@@ -409,7 +409,7 @@ class _DepositCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Deposit',
             style: TextStyle(color: AppColors.neon, fontWeight: FontWeight.w700, fontSize: 13),
           ),
@@ -419,7 +419,7 @@ class _DepositCard extends StatelessWidget {
           _BreakdownRow(label: 'Cash Payments', value: salary.cashHireFullValue, muted: true),
           const SizedBox(height: 6),
           _BreakdownRow(label: 'Credit Payments', value: salary.creditHireFullValue, muted: true),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Divider(color: AppColors.border, height: 1),
           ),
@@ -428,19 +428,19 @@ class _DepositCard extends StatelessWidget {
             const SizedBox(height: 6),
             _BreakdownRow(label: 'Already Transferred', value: -deposit.transferredTotal, muted: true),
           ],
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Divider(color: AppColors.border, height: 1),
           ),
           _BreakdownRow(label: 'Balance', value: deposit.balance, highlight: true),
           const SizedBox(height: 12),
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: Divider(color: AppColors.border, height: 1),
           ),
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Net Payable Salary',
                   style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w800, fontSize: 14),
@@ -457,14 +457,14 @@ class _DepositCard extends StatelessWidget {
             'Net Salary (without Deposit Deduction) (Rs. ${salary.netSalaryPayable.toStringAsFixed(2)}) '
             '- Deposit Balance (Rs. ${deposit.balance.toStringAsFixed(2)}) '
             '= ${finalNetPayable < 0 ? '-' : ''}Rs. ${finalNetPayable.abs().toStringAsFixed(2)}.',
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
           ),
           if (deposit.isSettledByLoan) ...[
             const SizedBox(height: 4),
             Text(
               'Covered by an Arrears Loan of Rs. ${deposit.arrearsLoanTotal.toStringAsFixed(2)} — '
               'settled, nothing further owed for this shortfall.',
-              style: const TextStyle(color: AppColors.neon, fontSize: 11, fontWeight: FontWeight.w600),
+              style: TextStyle(color: AppColors.neon, fontSize: 11, fontWeight: FontWeight.w600),
             ),
           ],
           if (deposit.arrearsLoans.isNotEmpty) ...[
@@ -491,12 +491,12 @@ class _ArrearsLoanTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           children: [
-            const Icon(Icons.receipt_long, size: 14, color: AppColors.neon),
+            Icon(Icons.receipt_long, size: 14, color: AppColors.neon),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
                 'Arrears Loan: Rs. ${loan.amount.toStringAsFixed(2)} · ${loan.deductionTypeLabel}',
-                style: const TextStyle(color: AppColors.neon, fontSize: 12, fontWeight: FontWeight.w600),
+                style: TextStyle(color: AppColors.neon, fontSize: 12, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -521,12 +521,12 @@ class _ArrearsLoanTile extends StatelessWidget {
             children: [
               Text(
                 loan.deductionTypeLabel,
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
               ),
               const SizedBox(height: 2),
               Text(
                 'Rs. ${loan.amount.toStringAsFixed(2)} total',
-                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 16),
+                style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 16),
               ),
               const SizedBox(height: 14),
               ...loan.deductions.map(
@@ -537,12 +537,12 @@ class _ArrearsLoanTile extends StatelessWidget {
                       Expanded(
                         child: Text(
                           DateFormat.yMMMM().format(DateTime(d.year, d.month)),
-                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                          style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
                         ),
                       ),
                       Text(
                         'Rs. ${d.amount.toStringAsFixed(2)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppColors.textPrimary,
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
@@ -610,7 +610,7 @@ class _EmptyPeriodState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
+    return Padding(
       padding: EdgeInsets.symmetric(vertical: 60),
       child: Column(
         children: [
@@ -638,12 +638,12 @@ class _ErrorText extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 100),
       child: Column(
         children: [
-          const Icon(Icons.error_outline, size: 44, color: AppColors.textMuted),
+          Icon(Icons.error_outline, size: 44, color: AppColors.textMuted),
           const SizedBox(height: 12),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
           ),
         ],
       ),

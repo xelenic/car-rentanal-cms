@@ -7,6 +7,7 @@ use App\Models\Driver;
 use App\Models\DriverDepositTransfer;
 use App\Models\Hire;
 use App\Models\SalaryAdvanceRequest;
+use App\Models\Vehicle;
 use App\Services\DriverSalaryCalculator;
 use App\Services\ProfitCalculator;
 use Illuminate\Support\Carbon;
@@ -29,6 +30,7 @@ class DashboardController extends Controller
             'salary_total' => $current['salary_total'],
             'commission_total' => $current['commission_total'],
             'hire_full_value_total' => $current['hire_full_value_total'],
+            'expenses_total' => $current['expenses_total'],
             'profit_total' => $current['profit_total'],
         ];
 
@@ -37,6 +39,7 @@ class DashboardController extends Controller
             'salary_total' => $this->percentDelta($current['salary_total'], $previous['salary_total']),
             'commission_total' => $this->percentDelta($current['commission_total'], $previous['commission_total']),
             'hire_full_value_total' => $this->percentDelta($current['hire_full_value_total'], $previous['hire_full_value_total']),
+            'expenses_total' => $this->percentDelta($current['expenses_total'], $previous['expenses_total']),
             'profit_total' => $this->percentDelta($current['profit_total'], $previous['profit_total']),
         ];
 
@@ -55,7 +58,38 @@ class DashboardController extends Controller
             'periodLabel' => $now->format('F Y'),
             'secondary' => $this->secondaryMetricsFor($now),
             'profitBreakdown' => $this->profitBreakdownFor($now),
+            'vehicleCards' => $this->vehicleCardsFor($now),
         ]);
+    }
+
+    /**
+     * The same six summary figures as the page's main cards, one set per
+     * vehicle — so an admin can see at a glance which vehicles are actually
+     * earning this month. Salary here is the 20% cut on this vehicle's own
+     * hires (the same linear formula as the fleet-wide total, just scoped
+     * down — see DriverSalaryCalculator::calculateForVehicle), not a literal
+     * payment to the vehicle.
+     */
+    private function vehicleCardsFor(Carbon $date): array
+    {
+        $year = (int) $date->format('Y');
+        $month = (int) $date->format('n');
+
+        return Vehicle::all()->map(function (Vehicle $vehicle) use ($year, $month) {
+            $data = DriverSalaryCalculator::calculateForVehicle($vehicle, $year, $month);
+            $leasingInstallmentTotal = ProfitCalculator::leasingInstallmentTotalForVehicle($vehicle, $year, $month);
+            $repairCostTotal = ProfitCalculator::repairCostTotalForVehicle($vehicle, $year, $month);
+
+            return [
+                'vehicle' => $vehicle,
+                'hire_full_value_total' => $data['hire_full_value_total'],
+                'our_hire_value_total' => $data['our_hire_value_total'],
+                'commission_total' => round($data['hire_full_value_total'] - $data['our_hire_value_total'], 2),
+                'expenses_total' => $data['expenses_total'],
+                'salary_total' => $data['salary'],
+                'profit_total' => ProfitCalculator::profitFrom($data, $leasingInstallmentTotal, $repairCostTotal),
+            ];
+        })->values()->all();
     }
 
     /**
@@ -140,6 +174,8 @@ class DashboardController extends Controller
      * - commission_total: the company's margin per hire — hire_full_value - our_hire_value
      *   (mirrors Hire::getCommissionAttribute(), summed across the month).
      * - hire_full_value_total: the full amount charged to customers.
+     * - expenses_total: deductible hire expenses (fuel, highway, food, room,
+     *   parking) across the month — see DriverSalaryCalculator::DEDUCTIBLE_CATEGORIES.
      * - profit_total: our_hire_value_total, minus expenses, minus the driver salary
      *   paid out of it, minus that month's leasing/loan settlements and vehicle
      *   repair costs — Our Hire Value's net_before_salary minus salary minus
@@ -158,6 +194,7 @@ class DashboardController extends Controller
             'salary_total' => $data['salary'],
             'commission_total' => round($data['hire_full_value_total'] - $data['our_hire_value_total'], 2),
             'hire_full_value_total' => $data['hire_full_value_total'],
+            'expenses_total' => $data['expenses_total'],
             'profit_total' => ProfitCalculator::profitFrom(
                 $data,
                 ProfitCalculator::leasingInstallmentTotalFor($year, $month),

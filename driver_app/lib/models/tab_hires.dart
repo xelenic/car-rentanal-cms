@@ -13,12 +13,25 @@ class TabHires {
   static const empty = TabHires(items: [], total: 0);
 }
 
+/// One history tab's (Completed or Cancelled) [TabHires] from its
+/// status-filtered page — used both by [buildHomeTabs] and on its own, to
+/// refresh just that tab after its own date filter changes without touching
+/// the others.
+///
+/// Uses the server's exact total — unless the server ignored the status
+/// filter (an older one), in which case the page holds hires of every status
+/// and only what is actually in this tab can be counted.
+TabHires tabHiresFromHistoryPage(HireTab tab, HirePage page, {DateTime? now}) {
+  final items = hiresForTab(page.items, tab, now: now);
+  final filteredByServer = page.items.every((hire) => hireTabOf(hire, now: now) == tab);
+
+  return TabHires(items: items, total: filteredByServer ? page.total : items.length);
+}
+
 /// Builds the four Home tabs from three status-filtered responses.
 ///
 /// Today and Scheduled both come from the open hires, split by the driver's own
-/// date. Completed and Cancelled use the server's exact total — unless the
-/// server ignored the status filter (an older one), in which case the page holds
-/// hires of every status and only what is actually in this tab can be counted.
+/// date.
 Map<HireTab, TabHires> buildHomeTabs({
   required HirePage open,
   required HirePage completed,
@@ -30,17 +43,10 @@ Map<HireTab, TabHires> buildHomeTabs({
     return TabHires(items: items, total: items.length);
   }
 
-  TabHires fromHistory(HireTab tab, HirePage page) {
-    final items = hiresForTab(page.items, tab, now: now);
-    final filteredByServer = page.items.every((hire) => hireTabOf(hire, now: now) == tab);
-
-    return TabHires(items: items, total: filteredByServer ? page.total : items.length);
-  }
-
   return {
     HireTab.today: fromOpen(HireTab.today),
     HireTab.scheduled: fromOpen(HireTab.scheduled),
-    HireTab.completed: fromHistory(HireTab.completed, completed),
-    HireTab.cancelled: fromHistory(HireTab.cancelled, cancelled),
+    HireTab.completed: tabHiresFromHistoryPage(HireTab.completed, completed, now: now),
+    HireTab.cancelled: tabHiresFromHistoryPage(HireTab.cancelled, cancelled, now: now),
   };
 }

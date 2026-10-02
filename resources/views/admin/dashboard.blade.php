@@ -15,20 +15,20 @@
 
             $cards = [
                 [
+                    'label' => 'Total Hire Value',
+                    'value' => $summary['hire_full_value_total'],
+                    'delta' => $deltaDisplay($deltas['hire_full_value_total']),
+                    'icon' => 'cash-coin',
+                    'bg' => '#fef3e0',
+                    'fg' => '#b3810a',
+                ],
+                [
                     'label' => 'Total Our Hire Value',
                     'value' => $summary['our_hire_value_total'],
                     'delta' => $deltaDisplay($deltas['our_hire_value_total']),
                     'icon' => 'cash-stack',
                     'bg' => '#eaf2fc',
                     'fg' => '#2a78d6',
-                ],
-                [
-                    'label' => 'Total All Drivers Salary',
-                    'value' => $summary['salary_total'],
-                    'delta' => $deltaDisplay($deltas['salary_total']),
-                    'icon' => 'wallet2',
-                    'bg' => '#fdeee7',
-                    'fg' => '#c95a26',
                 ],
                 [
                     'label' => 'Total Commission',
@@ -39,12 +39,20 @@
                     'fg' => '#158f66',
                 ],
                 [
-                    'label' => 'Total Hire Full Value',
-                    'value' => $summary['hire_full_value_total'],
-                    'delta' => $deltaDisplay($deltas['hire_full_value_total']),
-                    'icon' => 'cash-coin',
-                    'bg' => '#fef3e0',
-                    'fg' => '#b3810a',
+                    'label' => 'Total Expenses',
+                    'value' => $summary['expenses_total'],
+                    'delta' => $deltaDisplay($deltas['expenses_total']),
+                    'icon' => 'receipt',
+                    'bg' => '#fdecec',
+                    'fg' => '#c23b3b',
+                ],
+                [
+                    'label' => 'Total All Drivers Salary',
+                    'value' => $summary['salary_total'],
+                    'delta' => $deltaDisplay($deltas['salary_total']),
+                    'icon' => 'wallet2',
+                    'bg' => '#fdeee7',
+                    'fg' => '#c95a26',
                 ],
                 [
                     'label' => 'Total Profit',
@@ -58,7 +66,7 @@
             ];
         @endphp
 
-        <div class="row row-cols-2 row-cols-md-2 row-cols-xl-5 g-2 mb-2">
+        <div class="row row-cols-2 row-cols-md-3 row-cols-xl-6 g-2 mb-2">
             @foreach ($cards as $card)
                 <div class="col">
                     <div class="card border-0 h-100 {{ isset($card['modal']) ? 'profit-card-clickable' : '' }}"
@@ -200,6 +208,68 @@
                 </div>
             @endforeach
         </div>
+
+        @can('vehicles.view')
+            @php
+                $vehicleMetricList = fn ($vc) => [
+                    ['label' => 'Hire Value', 'value' => $vc['hire_full_value_total'], 'icon' => 'cash-coin'],
+                    ['label' => 'Our Hire Value', 'value' => $vc['our_hire_value_total'], 'icon' => 'cash-stack'],
+                    ['label' => 'Commission', 'value' => $vc['commission_total'], 'icon' => 'piggy-bank'],
+                    ['label' => 'Expenses', 'value' => $vc['expenses_total'], 'icon' => 'receipt'],
+                    ['label' => 'Salary', 'value' => $vc['salary_total'], 'icon' => 'wallet2'],
+                    ['label' => 'Profit', 'value' => $vc['profit_total'], 'icon' => 'graph-up-arrow'],
+                ];
+            @endphp
+
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="fw-semibold">Vehicle Cards &middot; {{ $periodLabel }}</span>
+            </div>
+
+            @if (count($vehicleCards) === 0)
+                <div class="card border-0 mb-2">
+                    <div class="card-body text-center text-muted py-5">
+                        <i class="bi bi-car-front fs-3 d-block mb-2"></i>
+                        No vehicles yet — add one to see its numbers here.
+                    </div>
+                </div>
+            @else
+                <div class="row row-cols-1 row-cols-md-2 g-2 mb-2">
+                    @foreach ($vehicleCards as $vc)
+                        <div class="col">
+                            <div class="card border-0 h-100">
+                                <div class="card-header bg-transparent border-0 pb-0 d-flex align-items-center justify-content-between">
+                                    <span class="fw-semibold">{{ $vc['vehicle']->model }}</span>
+                                    <span class="badge text-bg-light border">{{ $vc['vehicle']->condition }}</span>
+                                </div>
+                                <div class="card-body pt-2">
+                                    <div class="row row-cols-2 row-cols-sm-3 g-2">
+                                        @foreach ($vehicleMetricList($vc) as $metric)
+                                            <div class="col">
+                                                <div class="d-flex align-items-start gap-1">
+                                                    <i class="bi bi-{{ $metric['icon'] }} text-muted dashboard-vehicle-metric-icon"></i>
+                                                    <div>
+                                                        <div class="text-muted" style="font-size: .65rem;">{{ $metric['label'] }}</div>
+                                                        <div class="fw-semibold {{ $metric['value'] < 0 ? 'text-danger' : '' }}" style="font-size: .8rem;">
+                                                            {{ $metric['value'] < 0 ? '-' : '' }}Rs. {{ number_format(abs($metric['value']), 2) }}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+
+            @push('styles')
+                <style>
+                    .dashboard-vehicle-metric-icon { font-size: .8rem; margin-top: 2px; }
+                </style>
+            @endpush
+        @endcan
 
         <div class="card border-0">
             <div class="card-header d-flex align-items-center justify-content-between">

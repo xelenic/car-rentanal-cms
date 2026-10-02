@@ -12,16 +12,32 @@ void main() {
   runApp(const DriverApp());
 }
 
-class DriverApp extends StatelessWidget {
+class DriverApp extends StatefulWidget {
   const DriverApp({super.key});
 
   @override
+  State<DriverApp> createState() => _DriverAppState();
+}
+
+class _DriverAppState extends State<DriverApp> {
+  @override
+  void initState() {
+    super.initState();
+    ThemeController.instance.load();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Driver App',
-      debugShowCheckedModeBanner: false,
-      theme: buildDriverAppTheme(),
-      home: const _StartupGate(),
+    return AnimatedBuilder(
+      animation: ThemeController.instance,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'Driver App',
+          debugShowCheckedModeBanner: false,
+          theme: buildDriverAppTheme(),
+          home: const _StartupGate(),
+        );
+      },
     );
   }
 }
@@ -42,7 +58,7 @@ class _StartupGateState extends State<_StartupGate> {
       future: _loggedInFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
+          return Scaffold(
             body: Center(child: CircularProgressIndicator(color: AppColors.neon)),
           );
         }

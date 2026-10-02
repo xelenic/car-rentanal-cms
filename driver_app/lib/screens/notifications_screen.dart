@@ -69,7 +69,7 @@ class _AssignedToursTabState extends State<_AssignedToursTab> {
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(
+            return Center(
               child: CircularProgressIndicator(color: AppColors.neon),
             );
           }
@@ -140,7 +140,7 @@ class _UnpaidCreditTabState extends State<_UnpaidCreditTab> {
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(
+            return Center(
               child: CircularProgressIndicator(color: AppColors.neon),
             );
           }
@@ -205,7 +205,7 @@ class _EmptyState extends StatelessWidget {
         Text(
           title,
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.w700,
             fontSize: 15,
@@ -215,7 +215,7 @@ class _EmptyState extends StatelessWidget {
         Text(
           subtitle,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
         ),
       ],
     );

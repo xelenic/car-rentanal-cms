@@ -231,7 +231,7 @@ class _TourListScreenState extends State<TourListScreen> {
                         ? 'Loading…'
                         : '$count ${count == 1 ? 'tour' : 'tours'} · $_periodLabel',
                     key: const Key('tour-list-summary'),
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
                   ),
                 ),
                 if (!_isDefaultPeriod)
@@ -250,7 +250,7 @@ class _TourListScreenState extends State<TourListScreen> {
             ),
             const SizedBox(height: 8),
             if (_loading && _loaded.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
                 child: Center(child: CircularProgressIndicator(color: AppColors.neon)),
               )
@@ -271,11 +271,11 @@ class _TourListScreenState extends State<TourListScreen> {
                     onPressed: _loadingMore ? null : _loadMore,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.neonDeep,
-                      side: const BorderSide(color: AppColors.neon),
+                      side: BorderSide(color: AppColors.neon),
                       padding: const EdgeInsets.symmetric(vertical: 13),
                     ),
                     child: _loadingMore
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.neon),
@@ -310,7 +310,7 @@ class _ErrorBox extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text(message, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+          Text(message, textAlign: TextAlign.center, style: TextStyle(color: AppColors.danger, fontSize: 12)),
           const SizedBox(height: 6),
           TextButton(onPressed: onRetry, child: const Text('Try again')),
         ],

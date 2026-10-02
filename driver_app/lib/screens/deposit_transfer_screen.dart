@@ -49,10 +49,13 @@ class _DepositTransferScreenState extends State<DepositTransferScreen> {
     super.dispose();
   }
 
-  Future<void> _takePhoto() async {
+  Future<void> _pickSlipPhoto() async {
+    final source = await _chooseImageSource();
+    if (source == null) return;
+
     try {
       final photo = await _picker.pickImage(
-        source: ImageSource.camera,
+        source: source,
         maxWidth: 1600,
         imageQuality: 85,
       );
@@ -61,8 +64,55 @@ class _DepositTransferScreenState extends State<DepositTransferScreen> {
       setState(() => _slip = photo);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = 'Could not open the camera: $e');
+      setState(() {
+        _error = source == ImageSource.camera
+            ? 'Could not open the camera: $e'
+            : 'Could not open the gallery: $e';
+      });
     }
+  }
+
+  /// Lets the driver pick between the camera and their photo gallery for the
+  /// bank slip, rather than forcing a fresh photo every time — some slips
+  /// are already saved as a photo or screenshot from the bank's own app.
+  Future<ImageSource?> _chooseImageSource() {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: Icon(Icons.camera_alt_outlined, color: AppColors.neon),
+                title: const Text('Take Photo'),
+                onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
+              ),
+              ListTile(
+                leading: Icon(Icons.photo_library_outlined, color: AppColors.neon),
+                title: const Text('Choose from Gallery'),
+                onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _submit() async {
@@ -120,7 +170,7 @@ class _DepositTransferScreenState extends State<DepositTransferScreen> {
               children: [
                 Text(
                   'Deposit for ${widget.monthLabel} ${widget.year}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.neon,
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
@@ -130,21 +180,21 @@ class _DepositTransferScreenState extends State<DepositTransferScreen> {
                 TextField(
                   controller: _amountController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  style: const TextStyle(color: AppColors.textPrimary),
+                  style: TextStyle(color: AppColors.textPrimary),
                   decoration: const InputDecoration(
                     labelText: 'Deposited Amount',
                     prefixText: 'Rs. ',
                   ),
                 ),
                 const SizedBox(height: 14),
-                _SlipPhotoPicker(photo: _slip, onTap: _takePhoto),
+                _SlipPhotoPicker(photo: _slip, onTap: _pickSlipPhoto),
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: _saving ? null : _submit,
                     child: _saving
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
@@ -159,7 +209,7 @@ class _DepositTransferScreenState extends State<DepositTransferScreen> {
                   const SizedBox(height: 10),
                   Text(
                     _error!,
-                    style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                    style: TextStyle(color: AppColors.danger, fontSize: 12),
                   ),
                 ],
               ],
@@ -210,24 +260,29 @@ class _SlipPhotoPicker extends StatelessWidget {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                          Icon(Icons.sync, color: Colors.white, size: 14),
                           SizedBox(width: 4),
-                          Text('Retake', style: TextStyle(color: Colors.white, fontSize: 11)),
+                          Text('Change', style: TextStyle(color: Colors.white, fontSize: 11)),
                         ],
                       ),
                     ),
                   ),
                 ],
               )
-            : const Center(
+            : Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.camera_alt_outlined, color: AppColors.neon, size: 26),
+                    Icon(Icons.add_a_photo_outlined, color: AppColors.neon, size: 26),
                     SizedBox(height: 6),
                     Text(
-                      'Take Photo of Bank Slip',
+                      'Add Photo of Bank Slip',
                       style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Camera or Gallery',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 10.5),
                     ),
                   ],
                 ),

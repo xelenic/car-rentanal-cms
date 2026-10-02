@@ -34,9 +34,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 
   Future<_OverviewData> _load() async {
+    final now = DateTime.now();
+
     final results = await Future.wait([
       // Only its counted total is used: how many hires there are that count.
-      ApiClient.instance.fetchHires(perPage: 1),
+      // Scoped to this month, same as the salary figures below — omitting
+      // year/month here would have the server count the driver's entire
+      // hire history instead of just this month's.
+      ApiClient.instance.fetchHires(year: now.year, month: now.month, perPage: 1),
       _loadSalarySafely(),
     ]);
 
@@ -74,19 +79,19 @@ class _OverviewScreenState extends State<OverviewScreen> {
           future: _future,
           builder: (context, snapshot) {
             if (!snapshot.hasData && !snapshot.hasError) {
-              return const Center(child: CircularProgressIndicator(color: AppColors.neon));
+              return Center(child: CircularProgressIndicator(color: AppColors.neon));
             }
 
             if (snapshot.hasError) {
               return ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 160),
                 children: [
-                  const Icon(Icons.error_outline, size: 48, color: AppColors.textMuted),
+                  Icon(Icons.error_outline, size: 48, color: AppColors.textMuted),
                   const SizedBox(height: 12),
                   Text(
                     snapshot.error.toString(),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(color: AppColors.textSecondary),
                   ),
                 ],
               );
@@ -132,6 +137,8 @@ class _OverviewBodyState extends State<_OverviewBody> with SingleTickerProviderS
     final salary = widget.salary;
     final monthLabel = salary != null ? DateFormat.MMMM().format(DateTime(2000, salary.month)) : null;
 
+    // In the order the driver asked for: hires first, then the money figures
+    // from the full hire value down to what they personally take home.
     final tiles = [
       _StatTile(
         icon: Icons.local_shipping_outlined,
@@ -146,18 +153,20 @@ class _OverviewBodyState extends State<_OverviewBody> with SingleTickerProviderS
         color: const Color(0xFFF59E0B),
       ),
       _StatTile(
+        icon: Icons.account_balance_outlined,
+        label: 'Company Hire Value',
+        // What the company actually keeps before any deductions — the basis
+        // the driver's salary percentage is calculated from.
+        value: salary != null ? 'Rs. ${salary.ourHireValueTotal.toStringAsFixed(2)}' : '—',
+        color: const Color(0xFF6366F1),
+      ),
+      _StatTile(
         icon: Icons.percent_rounded,
         label: 'Total Commission',
         // Full value minus what the company actually keeps — same definition
         // as the admin panel's own commission figures.
         value: salary != null ? 'Rs. ${(salary.hireFullValueTotal - salary.ourHireValueTotal).toStringAsFixed(2)}' : '—',
         color: const Color(0xFF2563EB),
-      ),
-      _StatTile(
-        icon: Icons.savings_outlined,
-        label: 'Your Salary (${salary?.salaryPercentage.toStringAsFixed(0) ?? '20'}%)',
-        value: salary != null ? 'Rs. ${salary.salary.toStringAsFixed(2)}' : '—',
-        color: AppColors.success,
       ),
       _StatTile(
         icon: Icons.wallet_outlined,
@@ -167,15 +176,21 @@ class _OverviewBodyState extends State<_OverviewBody> with SingleTickerProviderS
       ),
       _StatTile(
         icon: Icons.payments_outlined,
-        label: 'Cash Payments',
+        label: 'Cash Payment',
         value: salary != null ? 'Rs. ${salary.cashHireFullValue.toStringAsFixed(2)}' : '—',
         color: const Color(0xFF0D9488),
       ),
       _StatTile(
         icon: Icons.credit_card_outlined,
-        label: 'Credit Payments',
+        label: 'Credit Payment',
         value: salary != null ? 'Rs. ${salary.creditHireFullValue.toStringAsFixed(2)}' : '—',
         color: const Color(0xFF8B5CF6),
+      ),
+      _StatTile(
+        icon: Icons.savings_outlined,
+        label: salary != null ? 'My Salary (${salary.salaryPercentage.toStringAsFixed(0)}%)' : 'My Salary',
+        value: salary != null ? 'Rs. ${salary.salary.toStringAsFixed(2)}' : '—',
+        color: AppColors.success,
       ),
     ];
 
@@ -256,7 +271,7 @@ class _SectionLabel extends StatelessWidget {
           child: Icon(icon, color: AppColors.neon, size: 15),
         ),
         const SizedBox(width: 10),
-        Text(label, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 15)),
+        Text(label, style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 15)),
       ],
     );
   }
@@ -277,7 +292,7 @@ class _OverviewHero extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -297,10 +312,10 @@ class _OverviewHero extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 alignment: Alignment.center,
-                child: const Icon(Icons.dashboard_outlined, color: AppColors.onNeon, size: 18),
+                child: Icon(Icons.dashboard_outlined, color: AppColors.onNeon, size: 18),
               ),
               const SizedBox(width: 10),
-              const Text(
+              Text(
                 'This Month',
                 style: TextStyle(color: AppColors.onNeon, fontWeight: FontWeight.w700, fontSize: 15),
               ),
@@ -314,7 +329,7 @@ class _OverviewHero extends StatelessWidget {
                   ),
                   child: Text(
                     monthLabel!,
-                    style: const TextStyle(color: AppColors.onNeon, fontSize: 11, fontWeight: FontWeight.w700),
+                    style: TextStyle(color: AppColors.onNeon, fontSize: 11, fontWeight: FontWeight.w700),
                   ),
                 ),
             ],
@@ -334,7 +349,7 @@ class _OverviewHero extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     salary != null ? 'Rs. ${salary!.amountDue.toStringAsFixed(2)}' : '—',
-                    style: const TextStyle(color: AppColors.onNeon, fontWeight: FontWeight.w900, fontSize: 34, height: 1.0),
+                    style: TextStyle(color: AppColors.onNeon, fontWeight: FontWeight.w900, fontSize: 34, height: 1.0),
                   ),
                 ),
               ),
@@ -348,7 +363,7 @@ class _OverviewHero extends StatelessWidget {
                       color: AppColors.onNeon.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Paid',
                       style: TextStyle(color: AppColors.onNeon, fontSize: 10.5, fontWeight: FontWeight.w800),
                     ),
@@ -408,13 +423,13 @@ class _StatTile extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               value,
-              style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w800, fontSize: 15),
+              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w800, fontSize: 15),
             ),
           ),
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 10.5, fontWeight: FontWeight.w600),
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 10.5, fontWeight: FontWeight.w600),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -488,7 +503,7 @@ class _LegendDot extends StatelessWidget {
       children: [
         Container(width: 9, height: 9, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11.5, fontWeight: FontWeight.w600)),
+        Text(label, style: TextStyle(color: AppColors.textSecondary, fontSize: 11.5, fontWeight: FontWeight.w600)),
       ],
     );
   }
@@ -518,7 +533,7 @@ class _DepositButton extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
-        child: const Padding(
+        child: Padding(
           padding: EdgeInsets.symmetric(vertical: 14),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -630,13 +645,13 @@ class _DepositSummarySheetState extends State<_DepositSummarySheet> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       alignment: Alignment.center,
-                      child: const Icon(Icons.account_balance_wallet_outlined, color: AppColors.neon, size: 18),
+                      child: Icon(Icons.account_balance_wallet_outlined, color: AppColors.neon, size: 18),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'Deposit Summary · ${widget.monthLabel} ${salary.year}',
-                        style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 15),
+                        style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 15),
                       ),
                     ),
                   ],
@@ -649,13 +664,13 @@ class _DepositSummarySheetState extends State<_DepositSummarySheet> {
                 _DepositRow(label: 'Credit Payments', value: -salary.creditHireFullValue, muted: true),
                 const SizedBox(height: 10),
                 _DepositRow(label: 'Total Expenses', value: -salary.expensesTotal, muted: true),
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(vertical: 12),
                   child: Divider(color: AppColors.border, height: 1),
                 ),
                 _DepositRow(label: 'Deposit Amount', value: deposit, highlight: true),
                 const SizedBox(height: 10),
-                const Text(
+                Text(
                   'Cash collected minus credit payments and this month\'s expenses — the amount to hand over to the company.',
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 11.5),
                 ),
@@ -664,7 +679,7 @@ class _DepositSummarySheetState extends State<_DepositSummarySheet> {
                   future: _transfersFuture,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState != ConnectionState.done) {
-                      return const Padding(
+                      return Padding(
                         padding: EdgeInsets.symmetric(vertical: 14),
                         child: Center(
                           child: SizedBox(
@@ -685,7 +700,7 @@ class _DepositSummarySheetState extends State<_DepositSummarySheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (transferredTotal > 0) ...[
-                          const Padding(
+                          Padding(
                             padding: EdgeInsets.symmetric(vertical: 12),
                             child: Divider(color: AppColors.border, height: 1),
                           ),
@@ -693,7 +708,7 @@ class _DepositSummarySheetState extends State<_DepositSummarySheet> {
                           const SizedBox(height: 10),
                           _DepositRow(label: 'Remaining to Transfer', value: remaining, highlight: true),
                         ],
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.symmetric(vertical: 12),
                           child: Divider(color: AppColors.border, height: 1),
                         ),
@@ -701,20 +716,20 @@ class _DepositSummarySheetState extends State<_DepositSummarySheet> {
                         if (remaining > 0) ...[
                           const SizedBox(height: 10),
                           _DepositRow(label: 'Remaining to Transfer', value: -remaining, muted: true),
-                          const Padding(
+                          Padding(
                             padding: EdgeInsets.symmetric(vertical: 12),
                             child: Divider(color: AppColors.border, height: 1),
                           ),
                           _DepositRow(label: 'Net Payment', value: netPayment, highlight: true),
                           const SizedBox(height: 10),
-                          const Text(
+                          Text(
                             'Any deposit still owed is deducted from your salary payment.',
                             style: TextStyle(color: AppColors.textSecondary, fontSize: 11.5),
                           ),
                         ],
                         if (transfers.isNotEmpty) ...[
                           const SizedBox(height: 16),
-                          const Text(
+                          Text(
                             'Transfer History',
                             style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 12.5),
                           ),
@@ -800,14 +815,14 @@ class _TransferHistoryTile extends StatelessWidget {
               children: [
                 Text(
                   'Rs. ${transfer.amount.toStringAsFixed(2)}',
-                  style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 13),
+                  style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 13),
                 ),
                 if (dateLabel != null)
-                  Text(dateLabel, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                  Text(dateLabel, style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
               ],
             ),
           ),
-          if (onViewSlip != null) const Icon(Icons.chevron_right, color: AppColors.textSecondary, size: 18),
+          if (onViewSlip != null) Icon(Icons.chevron_right, color: AppColors.textSecondary, size: 18),
         ],
       ),
     );
@@ -819,7 +834,7 @@ class _TransferHistoryTile extends StatelessWidget {
       height: 40,
       color: AppColors.surfaceElevated,
       alignment: Alignment.center,
-      child: const Icon(Icons.receipt_long, color: AppColors.textMuted, size: 18),
+      child: Icon(Icons.receipt_long, color: AppColors.textMuted, size: 18),
     );
   }
 }

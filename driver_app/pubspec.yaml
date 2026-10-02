@@ -18,6 +18,7 @@ dependencies:
   url_launcher: ^6.3.1
   flutter_foreground_task: ^11.0.3
   google_maps_flutter: ^2.18.1
+  flutter_colorpicker: ^1.1.0
 
 dev_dependencies:
   flutter_test:

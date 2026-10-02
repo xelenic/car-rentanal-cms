@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Vehicle;
 use App\Models\VehicleLeasingSettlement;
 use App\Models\VehicleMaintenanceRecord;
 
@@ -75,6 +76,33 @@ class ProfitCalculator
     public static function leasingInstallmentTotalFor(int $year, int $month): float
     {
         return round((float) VehicleLeasingSettlement::query()
+            ->where('year', $year)
+            ->where('month', $month)
+            ->sum('amount'), 2);
+    }
+
+    /**
+     * One vehicle's own repair cost for the month — same figure as
+     * {@see repairCostTotalFor}, just scoped down to its own maintenance
+     * records, for the dashboard's per-vehicle profit cards.
+     */
+    public static function repairCostTotalForVehicle(Vehicle $vehicle, int $year, int $month): float
+    {
+        return round((float) $vehicle->maintenanceRecords()
+            ->whereYear('created_at', $year)
+            ->whereMonth('created_at', $month)
+            ->sum('cost'), 2);
+    }
+
+    /**
+     * One vehicle's own leasing/loan settlements for the month — same figure
+     * as {@see leasingInstallmentTotalFor}, scoped to this vehicle's own
+     * financing records.
+     */
+    public static function leasingInstallmentTotalForVehicle(Vehicle $vehicle, int $year, int $month): float
+    {
+        return round((float) VehicleLeasingSettlement::query()
+            ->whereIn('leasing_id', $vehicle->leasings()->pluck('id'))
             ->where('year', $year)
             ->where('month', $month)
             ->sum('amount'), 2);

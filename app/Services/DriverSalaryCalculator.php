@@ -9,6 +9,7 @@ use App\Models\DriverPayrollCarryover;
 use App\Models\Hire;
 use App\Models\HireExpense;
 use App\Models\SalaryAdvanceDeduction;
+use App\Models\Vehicle;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 
 /**
@@ -37,6 +38,18 @@ class DriverSalaryCalculator
     public static function calculateForAllDrivers(int $year, int $month): array
     {
         return self::calculateForQuery(Hire::query(), $year, $month, null);
+    }
+
+    /**
+     * Same breakdown again, but scoped to one vehicle's hires — used for the
+     * dashboard's per-vehicle summary cards. The driver-specific fields
+     * (payroll, advances, deposit amount) still compute but aren't
+     * meaningful here — a vehicle isn't paid a salary, a driver is — so
+     * callers only read the hire/expense/salary totals off this.
+     */
+    public static function calculateForVehicle(Vehicle $vehicle, int $year, int $month): array
+    {
+        return self::calculateForQuery($vehicle->hires(), $year, $month, null);
     }
 
     private static function calculateForQuery(Builder $query, int $year, int $month, ?int $driverId): array

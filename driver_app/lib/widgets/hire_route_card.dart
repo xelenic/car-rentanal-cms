@@ -17,15 +17,20 @@ class HireRouteCard extends StatelessWidget {
 
   const HireRouteCard({super.key, required this.hire, this.onReturn});
 
-  /// When it is scheduled for, or — for a cancelled hire — when it was
-  /// cancelled: what a driver scanning a tab wants to see at a glance.
+  /// When it is scheduled for, when it finished, or — for a cancelled hire —
+  /// when it was cancelled: what a driver scanning a tab wants to see at a
+  /// glance.
   String? get _when {
     final format = DateFormat('MMM d, h:mm a');
 
     if (hire.isCancelled) {
       return hire.cancelledAt != null ? 'Cancelled ${format.format(hire.cancelledAt!.toLocal())}' : 'Cancelled';
     }
-    if (hire.isCompleted || hire.startTime == null) return null;
+    if (hire.isCompleted) {
+      final when = hire.trackingStoppedAt ?? hire.startTime;
+      return when != null ? 'Completed ${format.format(when.toLocal())}' : null;
+    }
+    if (hire.startTime == null) return null;
 
     return 'Scheduled ${format.format(hire.startTime!.toLocal())}';
   }
@@ -58,7 +63,7 @@ class HireRouteCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 alignment: Alignment.center,
-                child: const Icon(Icons.alt_route, color: AppColors.neon),
+                child: Icon(Icons.alt_route, color: AppColors.neon),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -70,7 +75,7 @@ class HireRouteCard extends StatelessWidget {
                         Flexible(
                           child: Text(
                             hire.tourTypeLabel,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppColors.textPrimary,
                               fontWeight: FontWeight.w700,
                               fontSize: 13,
@@ -85,7 +90,7 @@ class HireRouteCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       hire.routeSummary,
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -108,7 +113,7 @@ class HireRouteCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.textMuted),
+              Icon(Icons.chevron_right, color: AppColors.textMuted),
             ],
           ),
         ),

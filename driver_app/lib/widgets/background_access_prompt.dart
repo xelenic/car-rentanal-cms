@@ -31,11 +31,11 @@ Future<void> offerBackgroundAccess(BuildContext context) async {
     context: context,
     builder: (context) => AlertDialog(
       backgroundColor: AppColors.surface,
-      title: const Text(
+      title: Text(
         'Keep tracking when you switch apps',
         style: TextStyle(color: AppColors.textPrimary, fontSize: 17),
       ),
-      content: const Text(
+      content: Text(
         'So this hire keeps being recorded while you use Maps or other apps, '
         'or when the screen is off:\n\n'
         '1. Tap "Open Settings"\n'
@@ -49,7 +49,7 @@ Future<void> offerBackgroundAccess(BuildContext context) async {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Not now', style: TextStyle(color: AppColors.textSecondary)),
+          child: Text('Not now', style: TextStyle(color: AppColors.textSecondary)),
         ),
         ElevatedButton(
           onPressed: () => Navigator.of(context).pop(true),

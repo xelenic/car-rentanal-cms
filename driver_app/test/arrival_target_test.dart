@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 const _pickup = HireMapPoint(role: MapRole.pickup, name: 'Colombo Fort', latitude: 6.9344, longitude: 79.8428);
 const _stop = HireMapPoint(role: MapRole.stop, name: 'Kandy', latitude: 7.2906, longitude: 80.6337);
+const _stop2 = HireMapPoint(role: MapRole.stop, name: 'Nuwara Eliya', latitude: 6.9497, longitude: 80.7891);
 const _end = HireMapPoint(role: MapRole.end, name: 'Ella', latitude: 6.8667, longitude: 81.0466);
 
 Hire _hire({
@@ -60,10 +61,54 @@ void main() {
       expect(arrivalTargetFor(_hire(started: true), stage: HireStage.start)!.goal, ArrivalGoal.end);
     });
 
-    test('a multi day tour ends at its last stop, not a stop on the way', () {
+    test('a multi day tour watches its first stop before heading to the end', () {
       final hire = _hire(places: const [_pickup, _stop, _end], started: true);
 
-      expect(arrivalTargetFor(hire, stage: HireStage.inProgress)!.name, 'Ella');
+      final target = arrivalTargetFor(hire, stage: HireStage.inProgress)!;
+      expect(target.goal, ArrivalGoal.stop);
+      expect(target.name, 'Kandy');
+    });
+
+    test('once the recorded path shows the first stop was reached and left, the watch moves to the end', () {
+      final hire = _hire(places: const [_pickup, _stop, _end], started: true);
+      const path = [
+        TrackPoint(lat: 6.9344, lng: 79.8428), // at the pickup
+        TrackPoint(lat: 7.2906, lng: 80.6337), // reached Kandy
+        TrackPoint(lat: 6.90, lng: 80.90), // well clear of it again
+      ];
+
+      final target = arrivalTargetFor(hire, stage: HireStage.inProgress, path: path)!;
+      expect(target.goal, ArrivalGoal.end);
+      expect(target.name, 'Ella');
+    });
+
+    test('driving toward the first stop — still far from it — does not skip to the second', () {
+      final hire = _hire(places: const [_pickup, _stop, _stop2, _end], started: true);
+      // On the way from the pickup, nowhere near either stop yet.
+      const path = [TrackPoint(lat: 7.0, lng: 80.0), TrackPoint(lat: 7.1, lng: 80.2)];
+
+      final target = arrivalTargetFor(hire, stage: HireStage.inProgress, path: path)!;
+      expect(target.name, 'Kandy');
+    });
+
+    test('each stop on a multi-stop tour gets its own turn, in order', () {
+      final hire = _hire(places: const [_pickup, _stop, _stop2, _end], started: true);
+
+      expect(arrivalTargetFor(hire, stage: HireStage.inProgress)!.name, 'Kandy');
+
+      const pastFirstStop = [
+        TrackPoint(lat: 7.2906, lng: 80.6337),
+        TrackPoint(lat: 6.90, lng: 80.90),
+      ];
+      expect(arrivalTargetFor(hire, stage: HireStage.inProgress, path: pastFirstStop)!.name, 'Nuwara Eliya');
+
+      const pastBothStops = [
+        TrackPoint(lat: 7.2906, lng: 80.6337),
+        TrackPoint(lat: 6.90, lng: 80.90),
+        TrackPoint(lat: 6.9497, lng: 80.7891),
+        TrackPoint(lat: 6.80, lng: 81.10),
+      ];
+      expect(arrivalTargetFor(hire, stage: HireStage.inProgress, path: pastBothStops)!.name, 'Ella');
     });
 
     test('a hire with no end location with coordinates has nothing to watch for after starting', () {
@@ -113,6 +158,38 @@ void main() {
     test('a point just outside the arrival circle but inside the exit circle does not count as having left', () {
       // ~300 m north: past the 250 m arrival radius, inside the 350 m exit radius
       expect(pathHasLeft(const [TrackPoint(lat: 6.9344 + 0.0027, lng: 79.8428)], target), isFalse);
+    });
+  });
+
+  group('pathHasVisitedAndLeft', () {
+    const target = ArrivalTarget(goal: ArrivalGoal.stop, name: 'Kandy', latitude: 7.2906, longitude: 80.6337);
+
+    test('is false for an empty path', () {
+      expect(pathHasVisitedAndLeft(const [], target), isFalse);
+    });
+
+    test('is false when the path never came near it — still on the way, not skipped past', () {
+      expect(pathHasVisitedAndLeft(const [TrackPoint(lat: 6.0, lng: 80.0), TrackPoint(lat: 6.5, lng: 80.3)], target), isFalse);
+    });
+
+    test('is false while the path is still at the place', () {
+      expect(pathHasVisitedAndLeft(const [TrackPoint(lat: 7.2906, lng: 80.6337)], target), isFalse);
+    });
+
+    test('is true once the path reached it and then moved well clear', () {
+      expect(
+        pathHasVisitedAndLeft(const [
+          TrackPoint(lat: 6.0, lng: 80.0), // on the way, far from it
+          TrackPoint(lat: 7.2906, lng: 80.6337), // reached it
+          TrackPoint(lat: 6.90, lng: 80.90), // moved well clear
+        ], target),
+        isTrue,
+      );
+    });
+
+    test('moving far away before ever reaching it is not a visit', () {
+      // Passes nowhere near Kandy, ends up well past the exit radius anyway.
+      expect(pathHasVisitedAndLeft(const [TrackPoint(lat: 6.0, lng: 80.0), TrackPoint(lat: 6.90, lng: 80.90)], target), isFalse);
     });
   });
 }

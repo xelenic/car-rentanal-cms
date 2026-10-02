@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'appearance_screen.dart';
 import 'arrears_loan_screen.dart';
 import 'expense_entry_screen.dart';
 import 'placeholder_screen.dart';
@@ -22,18 +23,19 @@ class _OptionItem {
 // destinations at a glance, rather than eleven identical neon chips.
 // receiptRequired mirrors the hire detail quick actions' semantics: only
 // Fuel requires a photo, the rest are optional.
-const _options = <_OptionItem>[
+final _options = <_OptionItem>[
   _OptionItem('Fuel Expenses', Icons.local_gas_station_outlined, Color(0xFFFFA726), 'fuel', true),
   _OptionItem('Driver Foods', Icons.restaurant_outlined, Color(0xFFFF7043), 'food', false),
   _OptionItem('Room Charges', Icons.hotel_outlined, Color(0xFF42A5F5), 'room', false),
   _OptionItem('Parking Tickets', Icons.local_parking_outlined, Color(0xFFEC407A), 'parking', false),
   _OptionItem('Highway Charges', Icons.toll_outlined, Color(0xFF26C6DA), 'highway', false),
-  _OptionItem('Others', Icons.more_horiz_outlined, Color(0xFF9AA1AC)),
+  _OptionItem('Others', Icons.more_horiz_outlined, Color(0xFF9AA1AC), 'others', false),
   _OptionItem('My Salary', Icons.payments_outlined, AppColors.neon),
   _OptionItem('Salary Advance', Icons.request_quote_outlined, Color(0xFF5C6BC0)),
   _OptionItem('Loan Arrears', Icons.account_balance_outlined, Color(0xFF7E57C2)),
   _OptionItem('Payslips & Current Collection', Icons.receipt_long_outlined, Color(0xFF26A69A)),
   _OptionItem('Vehicle Repair', Icons.car_repair_outlined, Color(0xFFEF5350)),
+  _OptionItem('Appearance', Icons.palette_outlined, Color(0xFF8D6E63)),
 ];
 
 class OptionsScreen extends StatelessWidget {
@@ -73,6 +75,9 @@ class OptionsScreen extends StatelessWidget {
                     }
                     if (option.label == 'Vehicle Repair') {
                       return const VehicleRepairScreen();
+                    }
+                    if (option.label == 'Appearance') {
+                      return const AppearanceScreen();
                     }
                     if (option.category != null) {
                       return ExpenseEntryScreen(
@@ -145,7 +150,7 @@ class _OptionTile extends StatelessWidget {
               Text(
                 label,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w600,
                   fontSize: 12.5,

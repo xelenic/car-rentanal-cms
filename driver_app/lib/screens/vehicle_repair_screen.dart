@@ -115,7 +115,7 @@ class _TypeCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
@@ -124,12 +124,12 @@ class _TypeCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.textMuted),
+              Icon(Icons.chevron_right, color: AppColors.textMuted),
             ],
           ),
         ),

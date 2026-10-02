@@ -134,12 +134,12 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
               ),
               const SizedBox(height: 8),
               ListTile(
-                leading: const Icon(Icons.camera_alt_outlined, color: AppColors.neon),
+                leading: Icon(Icons.camera_alt_outlined, color: AppColors.neon),
                 title: const Text('Take Photo'),
                 onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library_outlined, color: AppColors.neon),
+                leading: Icon(Icons.photo_library_outlined, color: AppColors.neon),
                 title: const Text('Choose from Gallery'),
                 onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
               ),
@@ -222,7 +222,7 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
               children: [
                 Text(
                   'Add ${widget.title}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.neon,
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
@@ -232,7 +232,7 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
                 TextField(
                   controller: _amountController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  style: const TextStyle(color: AppColors.textPrimary),
+                  style: TextStyle(color: AppColors.textPrimary),
                   decoration: const InputDecoration(
                     labelText: 'Amount',
                     prefixText: 'Rs. ',
@@ -250,7 +250,7 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
                   child: ElevatedButton(
                     onPressed: _saving ? null : _save,
                     child: _saving
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
@@ -265,7 +265,7 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
                   const SizedBox(height: 10),
                   Text(
                     _error!,
-                    style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                    style: TextStyle(color: AppColors.danger, fontSize: 12),
                   ),
                 ],
               ],
@@ -274,7 +274,7 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
           const SizedBox(height: 16),
           Row(
             children: [
-              const Text(
+              Text(
                 'History',
                 style: TextStyle(
                   color: AppColors.textPrimary,
@@ -285,7 +285,7 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
               const Spacer(),
               Text(
                 'Total: Rs. ${_total.toStringAsFixed(2)}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textSecondary,
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
@@ -295,7 +295,7 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
           ),
           const SizedBox(height: 10),
           if (_loadingHistory)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
               child: Center(
                 child: CircularProgressIndicator(color: AppColors.neon),
@@ -307,7 +307,7 @@ class _ExpenseEntryScreenState extends State<ExpenseEntryScreen> {
               child: Center(
                 child: Text(
                   'No ${widget.title.toLowerCase()} recorded yet.',
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                 ),
               ),
             )
@@ -372,14 +372,14 @@ class _PhotoPicker extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.add_a_photo_outlined, color: AppColors.neon, size: 26),
+                    Icon(Icons.add_a_photo_outlined, color: AppColors.neon, size: 26),
                     const SizedBox(height: 6),
                     Text(
                       required ? 'Add Photo of Receipt' : 'Add Photo of Receipt (optional)',
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                     ),
                     const SizedBox(height: 2),
-                    const Text(
+                    Text(
                       'Camera or Gallery',
                       style: TextStyle(color: AppColors.textMuted, fontSize: 10.5),
                     ),
@@ -429,7 +429,7 @@ class _HistoryTile extends StatelessWidget {
               children: [
                 Text(
                   'Rs. ${expense.amount.toStringAsFixed(2)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
@@ -438,7 +438,7 @@ class _HistoryTile extends StatelessWidget {
                 if (expense.createdAt != null)
                   Text(
                     dateFormat.format(expense.createdAt!.toLocal()),
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
                   ),
               ],
             ),
@@ -454,7 +454,7 @@ class _HistoryTile extends StatelessWidget {
       height: 48,
       color: AppColors.surfaceElevated,
       alignment: Alignment.center,
-      child: const Icon(Icons.receipt_long, color: AppColors.textMuted, size: 20),
+      child: Icon(Icons.receipt_long, color: AppColors.textMuted, size: 20),
     );
   }
 }

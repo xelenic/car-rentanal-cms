@@ -54,7 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: RadialGradient(
             center: Alignment(-0.8, -0.9),
             radius: 1.4,
@@ -78,7 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         height: 68,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(20),
-                          gradient: const LinearGradient(
+                          gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [AppColors.neon, AppColors.neonDeep],
@@ -92,14 +92,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                         alignment: Alignment.center,
-                        child: const Icon(
+                        child: Icon(
                           Icons.local_taxi,
                           color: AppColors.onNeon,
                           size: 34,
                         ),
                       ),
                       const SizedBox(height: 20),
-                      const Text(
+                      Text(
                         'Driver App',
                         textAlign: TextAlign.center,
                         style: TextStyle(
@@ -109,7 +109,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
+                      Text(
                         'Sign in with your driver account',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: AppColors.textSecondary),
@@ -127,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           child: Text(
                             _errorMessage!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppColors.danger,
                               fontSize: 13,
                             ),
@@ -139,8 +139,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.next,
-                        style: const TextStyle(color: AppColors.textPrimary),
-                        decoration: const InputDecoration(
+                        style: TextStyle(color: AppColors.textPrimary),
+                        decoration: InputDecoration(
                           labelText: 'Email',
                           prefixIcon: Icon(
                             Icons.email_outlined,
@@ -159,8 +159,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: _passwordController,
                         obscureText: true,
                         textInputAction: TextInputAction.done,
-                        style: const TextStyle(color: AppColors.textPrimary),
-                        decoration: const InputDecoration(
+                        style: TextStyle(color: AppColors.textPrimary),
+                        decoration: InputDecoration(
                           labelText: 'Password',
                           prefixIcon: Icon(
                             Icons.lock_outline,
@@ -179,7 +179,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ElevatedButton(
                         onPressed: _isLoading ? null : _submit,
                         child: _isLoading
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(

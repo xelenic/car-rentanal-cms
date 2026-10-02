@@ -34,14 +34,14 @@ class PlaceholderScreen extends StatelessWidget {
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w800,
                   fontSize: 18,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'This feature is coming soon.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13),

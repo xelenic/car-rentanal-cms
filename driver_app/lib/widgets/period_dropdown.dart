@@ -37,18 +37,18 @@ class PeriodDropdown extends StatelessWidget {
           value: value,
           hint: Text(
             hint,
-            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
             overflow: TextOverflow.ellipsis,
           ),
           isExpanded: true,
           isDense: true,
           dropdownColor: AppColors.surfaceElevated,
           icon: Icon(Icons.keyboard_arrow_down, color: disabled ? AppColors.textMuted : AppColors.textSecondary, size: 18),
-          style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
           items: [
             DropdownMenuItem<int?>(
               value: null,
-              child: Text(hint, style: const TextStyle(color: AppColors.textSecondary)),
+              child: Text(hint, style: TextStyle(color: AppColors.textSecondary)),
             ),
             ...items.map(
               (item) => DropdownMenuItem<int?>(

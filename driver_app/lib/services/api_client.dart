@@ -320,6 +320,21 @@ class ApiClient {
     throw ApiException(_extractError(response));
   }
 
+  /// Pauses tracking without finishing the hire — a multi day tour's end of
+  /// day, resumed with [startTracking] once the next day's driving begins.
+  Future<TrackingStatus> stopTracking(int hireId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/driver/hires/$hireId/tracking/stop'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      return TrackingStatus.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
   Future<TrackingStatus> completeHire(int hireId) async {
     final response = await http.post(
       Uri.parse('$baseUrl/driver/hires/$hireId/tracking/complete'),

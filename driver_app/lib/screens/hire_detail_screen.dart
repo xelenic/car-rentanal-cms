@@ -125,6 +125,10 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
   /// been away from it; this remembers that they have.
   bool _leftEnd = false;
 
+  /// Stops on a day tour or multi day tour the driver has reached and then
+  /// left, watched live this session — see [arrivalTargetFor]'s `alsoPassed`.
+  final Set<ArrivalTarget> _passedStops = {};
+
   bool get _arrived => _arrival.arrived && !(_watchedGoal == ArrivalGoal.pickup && _hire.isScheduledInFuture);
 
   HireStage get _stage => hireStageOf(_hire, pickedUp: _pickedUp ?? false);
@@ -242,7 +246,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
   /// Hire at the end location (see [arrivalTargetFor]). Only runs while there is
   /// somewhere with saved coordinates to arrive at, and stops otherwise.
   Future<void> _syncArrivalWatch({bool requestPermission = false}) async {
-    final target = mounted ? arrivalTargetFor(_hire, stage: _stage) : null;
+    final target = mounted ? arrivalTargetFor(_hire, stage: _stage, path: _points, alsoPassed: _passedStops) : null;
     if (target == null) {
       await _stopArrivalWatch();
       return;
@@ -293,29 +297,44 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
   }
 
   void _onPosition(Position position) {
-    final target = arrivalTargetFor(_hire, stage: _stage);
-    if (!mounted || target == null) return;
+    // A loop, not a single check: leaving one stop can immediately put the
+    // driver within range of the next (or even the end, if several were
+    // skipped while out of signal) — each pass re-reads the now-current
+    // target against this same position until it settles on one still ahead.
+    while (mounted) {
+      final target = arrivalTargetFor(_hire, stage: _stage, path: _points, alsoPassed: _passedStops);
+      if (target == null) return;
 
-    final meters = distanceMeters(position.latitude, position.longitude, target.latitude, target.longitude);
+      final meters = distanceMeters(position.latitude, position.longitude, target.latitude, target.longitude);
 
-    // A round trip ends where it began, so being at the "end" right after
-    // pressing Start is not arriving — wait until the driver has been away
-    // (on this screen, or in the path the background service recorded).
-    if (target.goal == ArrivalGoal.end && !_leftEnd && endIsWhereItStarted(_hire)) {
-      if (meters > ArrivalDetector.defaultExitRadiusMeters || pathHasLeft(_points, target)) {
-        _leftEnd = true;
-      } else {
-        setState(() => _metersToTarget = null);
-        return;
+      // A round trip ends where it began, so being at the "end" right after
+      // pressing Start is not arriving — wait until the driver has been away
+      // (on this screen, or in the path the background service recorded).
+      if (target.goal == ArrivalGoal.end && !_leftEnd && endIsWhereItStarted(_hire)) {
+        if (meters > ArrivalDetector.defaultExitRadiusMeters || pathHasLeft(_points, target)) {
+          _leftEnd = true;
+        } else {
+          setState(() => _metersToTarget = null);
+          return;
+        }
       }
-    }
 
-    final changed = _arrival.update(meters);
+      final changed = _arrival.update(meters);
 
-    setState(() => _metersToTarget = meters);
-    if (changed && _arrived) {
-      // Once, the moment the driver gets there — the screen may not be in view.
-      HapticFeedback.heavyImpact().catchError((_) {});
+      setState(() => _metersToTarget = meters);
+      if (changed && _arrived) {
+        // Once, the moment the driver gets there — the screen may not be in view.
+        HapticFeedback.heavyImpact().catchError((_) {});
+      }
+
+      // Just left a stay in between (not the final end) — move the watch on
+      // to whatever's next and check this same reading against it too.
+      if (changed && !_arrival.arrived && target.goal == ArrivalGoal.stop) {
+        setState(() => _passedStops.add(target));
+        continue;
+      }
+
+      return;
     }
   }
 
@@ -634,18 +653,18 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: const Text(
+        title: Text(
           'Complete this hire?',
           style: TextStyle(color: AppColors.textPrimary),
         ),
-        content: const Text(
+        content: Text(
           'This stops tracking and marks the hire as completed. It cannot be started again afterwards.',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+            child: Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
@@ -676,6 +695,70 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
           status: status.status,
           statusLabel: status.statusLabel,
           isTracking: false,
+          trackingStoppedAt: status.trackingStoppedAt,
+          totalDistanceKm: status.totalDistanceKm,
+        );
+        _points = status.points;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _trackingError = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+      unawaited(_syncArrivalWatch());
+    }
+  }
+
+  /// "End Day" on a multi day tour: pauses tracking for the night without
+  /// finishing the hire — the driver taps Start again the next morning to
+  /// pick up where today left off.
+  Future<void> _confirmEndDay() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text(
+          'End tracking for today?',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
+        content: Text(
+          'Tracking pauses for the night. Tap Start again tomorrow to continue this tour — the hire itself stays open.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Keep Tracking', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('End Day'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _stopTracking();
+    }
+  }
+
+  Future<void> _stopTracking() async {
+    setState(() {
+      _busy = true;
+      _trackingError = null;
+    });
+
+    try {
+      final status = await ApiClient.instance.stopTracking(_hire.id);
+      await _endTrackingLoop();
+      if (!mounted) return;
+      setState(() {
+        _hire = _hire.copyWith(
+          status: status.status,
+          statusLabel: status.statusLabel,
+          isTracking: false,
+          trackingStartedAt: status.trackingStartedAt,
           trackingStoppedAt: status.trackingStoppedAt,
           totalDistanceKm: status.totalDistanceKm,
         );
@@ -731,7 +814,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
             hasPath: _points.isNotEmpty,
             arrived: _arrived,
             metersToTarget: _metersToTarget,
-            arrivalTarget: arrivalTargetFor(hire, stage: _stage),
+            arrivalTarget: arrivalTargetFor(hire, stage: _stage, path: _points, alsoPassed: _passedStops),
             mapRoute: route,
             onOpenRoute: (route) => _launchMapsUrl(route.url),
             accessNotice: backgroundAccessNotice(_access),
@@ -739,6 +822,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
             onStart: _startTracking,
             onCancel: _confirmCancel,
             onComplete: _confirmComplete,
+            onEndDay: _confirmEndDay,
             onViewPath: _openPathInMaps,
             onFixAccess: _offerAccess,
           ),
@@ -813,7 +897,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
                       Expanded(
                         child: Text(
                           'Rs. ${hire.balanceRemaining.toStringAsFixed(2)} left to claim',
-                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11.5),
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 11.5),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -831,7 +915,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
               children: [
                 Text(
                   hire.description!,
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                  style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
                 ),
               ],
             ),
@@ -921,6 +1005,7 @@ class _TrackingCard extends StatelessWidget {
   final VoidCallback onStart;
   final VoidCallback onCancel;
   final VoidCallback onComplete;
+  final VoidCallback onEndDay;
   final VoidCallback onViewPath;
   final VoidCallback onFixAccess;
 
@@ -941,6 +1026,7 @@ class _TrackingCard extends StatelessWidget {
     required this.onStart,
     required this.onCancel,
     required this.onComplete,
+    required this.onEndDay,
     required this.onViewPath,
     required this.onFixAccess,
   });
@@ -952,6 +1038,7 @@ class _TrackingCard extends StatelessWidget {
   bool get _startLocked => stage == HireStage.start && hire.isScheduledInFuture;
 
   bool get _arrivedAtPickup => arrived && arrivalTarget?.goal == ArrivalGoal.pickup;
+  bool get _arrivedAtStop => arrived && arrivalTarget?.goal == ArrivalGoal.stop;
   bool get _arrivedAtEnd => arrived && arrivalTarget?.goal == ArrivalGoal.end;
 
   String get _statusText {
@@ -961,7 +1048,8 @@ class _TrackingCard extends StatelessWidget {
       case HireStage.cancelled:
         return 'Cancelled';
       case HireStage.inProgress:
-        return _arrivedAtEnd ? 'You have arrived' : 'Tracking active';
+        if (_arrivedAtEnd || _arrivedAtStop) return 'You have arrived';
+        return 'Tracking active';
       case HireStage.start:
         if (_isPaused) return 'Tracking paused';
         if (_startLocked) return 'Scheduled — not startable yet';
@@ -971,11 +1059,34 @@ class _TrackingCard extends StatelessWidget {
     }
   }
 
-  /// Under Stop / Complete Hire: how far the end location is, or — once the
-  /// driver gets there — that Complete Hire is what to press.
-  Widget? get _endHint {
+  /// Under Stop / Complete Hire: how far the next place is, or — once the
+  /// driver gets there — what to do: a stay in between just confirms arrival
+  /// (the watch moves itself on to the next place); the end says to press
+  /// Complete Hire.
+  Widget? get _aheadHint {
     final target = arrivalTarget;
-    if (target == null || target.goal != ArrivalGoal.end) return null;
+    if (target == null) return null;
+
+    if (target.goal == ArrivalGoal.stop) {
+      if (_arrivedAtStop) {
+        return _StageHint(
+          icon: Icons.flag_outlined,
+          color: _arrivedColor,
+          strong: true,
+          text: "You've arrived at ${target.name}.",
+        );
+      }
+      if (metersToTarget != null) {
+        return _StageHint(
+          icon: Icons.near_me_outlined,
+          color: AppColors.textSecondary,
+          text: '${target.name} is ${_distance(metersToTarget!)} away.',
+        );
+      }
+      return null;
+    }
+
+    if (target.goal != ArrivalGoal.end) return null;
 
     if (_arrivedAtEnd) {
       return _StageHint(
@@ -1033,7 +1144,7 @@ class _TrackingCard extends StatelessWidget {
                 Container(
                   width: 10,
                   height: 10,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: AppColors.neon,
                     shape: BoxShape.circle,
                   ),
@@ -1042,7 +1153,7 @@ class _TrackingCard extends StatelessWidget {
               ],
               Text(
                 _statusText,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
@@ -1081,7 +1192,7 @@ class _TrackingCard extends StatelessWidget {
                     : "You've arrived — tap Start.",
               )
             else if (_isPaused)
-              const _StageHint(
+              _StageHint(
                 icon: Icons.pause_circle_outline,
                 color: AppColors.textSecondary,
                 text: 'Tracking is paused — tap Start to resume.',
@@ -1093,13 +1204,20 @@ class _TrackingCard extends StatelessWidget {
                 text: '${place ?? 'Pickup'} is ${_distance(metersToTarget!)} away — Start lights up when you arrive.',
               )
             else
-              const _StageHint(
+              _StageHint(
                 icon: Icons.play_circle_outline,
                 color: AppColors.textSecondary,
                 text: 'Tap Start when you reach the pickup location.',
               ),
           ],
           if (stage == HireStage.inProgress) ...[
+            // A multi day tour spans more than one day on the road — End Day
+            // pauses tracking for the night without finishing the hire, ready
+            // to resume with Start the next morning.
+            if (hire.tourType == 'multi_day') ...[
+              const SizedBox(height: 16),
+              SizedBox(width: double.infinity, child: _EndDayButton(busy: busy, onPressed: onEndDay)),
+            ],
             const SizedBox(height: 16),
             Row(
               children: [
@@ -1110,7 +1228,7 @@ class _TrackingCard extends StatelessWidget {
                 ),
               ],
             ),
-            if (_endHint != null) ...[const SizedBox(height: 10), _endHint!],
+            if (_aheadHint != null) ...[const SizedBox(height: 10), _aheadHint!],
           ],
           // Paused (started once, then stopped): Start resumes, and the hire
           // can still be completed without starting it again.
@@ -1120,7 +1238,7 @@ class _TrackingCard extends StatelessWidget {
               width: double.infinity,
               child: _CompleteButton(busy: busy, highlighted: _arrivedAtEnd, onPressed: onComplete),
             ),
-            if (_endHint != null) ...[const SizedBox(height: 10), _endHint!],
+            if (_aheadHint != null) ...[const SizedBox(height: 10), _aheadHint!],
             const SizedBox(height: 10),
             SizedBox(width: double.infinity, child: _CancelButton(busy: busy, onPressed: onCancel)),
           ],
@@ -1149,7 +1267,7 @@ class _TrackingCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(top: 1),
                     child: Icon(Icons.battery_alert_outlined, color: AppColors.warning, size: 18),
                   ),
@@ -1160,7 +1278,7 @@ class _TrackingCard extends StatelessWidget {
                       children: [
                         Text(
                           accessNotice!,
-                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, height: 1.3),
+                          style: TextStyle(color: AppColors.textPrimary, fontSize: 12, height: 1.3),
                         ),
                         Align(
                           alignment: Alignment.centerLeft,
@@ -1192,7 +1310,7 @@ class _TrackingCard extends StatelessWidget {
                 label: const Text('View Path in Google Maps'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.neonDeep,
-                  side: const BorderSide(color: AppColors.neon),
+                  side: BorderSide(color: AppColors.neon),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
@@ -1208,12 +1326,12 @@ class _TrackingCard extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.lock_clock_outlined, color: AppColors.textMuted, size: 16),
+                  Icon(Icons.lock_clock_outlined, color: AppColors.textMuted, size: 16),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       _scheduledMessage(hire),
-                      style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                     ),
                   ),
                 ],
@@ -1241,7 +1359,7 @@ class _TrackingCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'Rs. ${hire.balanceRemaining.toStringAsFixed(2)} left to claim',
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 11.5),
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 11.5),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1259,7 +1377,7 @@ class _TrackingCard extends StatelessWidget {
               ),
               child: Text(
                 error!,
-                style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                style: TextStyle(color: AppColors.danger, fontSize: 12),
               ),
             ),
           ],
@@ -1332,7 +1450,7 @@ class _MapsButton extends StatelessWidget {
       color: primary ? AppColors.neon : Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.neon),
+        side: BorderSide(color: AppColors.neon),
       ),
       child: InkWell(
         onTap: onTap,
@@ -1434,7 +1552,7 @@ class _CancelHireDialogState extends State<_CancelHireDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: AppColors.surface,
-      title: const Text(
+      title: Text(
         'Cancel this hire?',
         style: TextStyle(color: AppColors.textPrimary),
       ),
@@ -1442,7 +1560,7 @@ class _CancelHireDialogState extends State<_CancelHireDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'The hire will be marked as cancelled and tracking will stop. It cannot be started again afterwards.',
             style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
           ),
@@ -1463,7 +1581,7 @@ class _CancelHireDialogState extends State<_CancelHireDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Keep hire', style: TextStyle(color: AppColors.textSecondary)),
+          child: Text('Keep hire', style: TextStyle(color: AppColors.textSecondary)),
         ),
         ElevatedButton(
           onPressed: () => Navigator.of(context).pop(_reason.text),
@@ -1499,6 +1617,31 @@ class _CancelButton extends StatelessWidget {
   }
 }
 
+/// "End Day" on a multi day tour: pauses tracking for the night without
+/// finishing the hire. Styled as a neutral secondary action, distinct from
+/// Cancel (destructive) and Complete (final) below it.
+class _EndDayButton extends StatelessWidget {
+  final bool busy;
+  final VoidCallback onPressed;
+
+  const _EndDayButton({required this.busy, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: busy ? null : onPressed,
+      icon: const Icon(Icons.bedtime_outlined, size: 20),
+      label: const Text('End Day'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.textPrimary,
+        side: BorderSide(color: busy ? AppColors.border : AppColors.textSecondary),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
 /// Shown on a cancelled hire instead of any buttons: that it is over, when,
 /// and why.
 class _CancelledNotice extends StatelessWidget {
@@ -1522,7 +1665,7 @@ class _CancelledNotice extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 1),
             child: Icon(Icons.cancel, color: AppColors.danger, size: 18),
           ),
@@ -1533,10 +1676,10 @@ class _CancelledNotice extends StatelessWidget {
               children: [
                 Text(
                   when != null ? 'This hire was cancelled on $when.' : 'This hire was cancelled.',
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 12.5, fontWeight: FontWeight.w700),
+                  style: TextStyle(color: AppColors.textPrimary, fontSize: 12.5, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 3),
-                const Text(
+                Text(
                   'It will not continue, and tracking has stopped.',
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                 ),
@@ -1544,7 +1687,7 @@ class _CancelledNotice extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     'Reason: $reason',
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontStyle: FontStyle.italic),
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontStyle: FontStyle.italic),
                   ),
                 ],
               ],
@@ -1928,7 +2071,7 @@ class _StatBlock extends StatelessWidget {
             children: [
               Text(
                 value,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
@@ -1938,7 +2081,7 @@ class _StatBlock extends StatelessWidget {
               ),
               Text(
                 label,
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 10),
               ),
             ],
           ),
@@ -1954,7 +2097,7 @@ class _QuickActionsRow extends StatelessWidget {
 
   const _QuickActionsRow({required this.onOpen, required this.onExpense});
 
-  static const _actions = <_ShortcutAction>[
+  static final _actions = <_ShortcutAction>[
     _ShortcutAction('Fuel', Icons.local_gas_station_outlined, 'Fuel Cost', AppColors.neon, category: 'fuel'),
     _ShortcutAction('Repair', Icons.car_repair_outlined, 'Vehicle Repair', AppColors.neon),
     _ShortcutAction('Emergency', Icons.emergency_outlined, 'Emergency', AppColors.danger),
@@ -1966,7 +2109,8 @@ class _QuickActionsRow extends StatelessWidget {
         category: 'room', receiptRequired: false),
     _ShortcutAction('Parking', Icons.local_parking_outlined, 'Parking Tickets', AppColors.neon,
         category: 'parking', receiptRequired: false),
-    _ShortcutAction('Others', Icons.more_horiz_outlined, 'Others', AppColors.neon),
+    _ShortcutAction('Others', Icons.more_horiz_outlined, 'Others', AppColors.neon,
+        category: 'others', receiptRequired: false),
   ];
 
   @override
@@ -2050,7 +2194,7 @@ class _QuickActionCircle extends StatelessWidget {
             child: Text(
               label,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 10),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -2082,7 +2226,7 @@ class _SectionCard extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.neon,
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -2113,13 +2257,13 @@ class _InfoRow extends StatelessWidget {
             width: 110,
             child: Text(
               label,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,

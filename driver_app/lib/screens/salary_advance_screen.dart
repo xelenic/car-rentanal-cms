@@ -101,7 +101,7 @@ class _SalaryAdvanceScreenState extends State<SalaryAdvanceScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Request an Advance',
                   style: TextStyle(
                     color: AppColors.neon,
@@ -113,7 +113,7 @@ class _SalaryAdvanceScreenState extends State<SalaryAdvanceScreen> {
                 TextField(
                   controller: _amountController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  style: const TextStyle(color: AppColors.textPrimary),
+                  style: TextStyle(color: AppColors.textPrimary),
                   decoration: const InputDecoration(
                     labelText: 'Amount',
                     prefixText: 'Rs. ',
@@ -123,7 +123,7 @@ class _SalaryAdvanceScreenState extends State<SalaryAdvanceScreen> {
                 TextField(
                   controller: _reasonController,
                   maxLines: 3,
-                  style: const TextStyle(color: AppColors.textPrimary),
+                  style: TextStyle(color: AppColors.textPrimary),
                   decoration: const InputDecoration(
                     labelText: 'Reason (optional)',
                     hintText: 'Why do you need this advance?',
@@ -135,7 +135,7 @@ class _SalaryAdvanceScreenState extends State<SalaryAdvanceScreen> {
                   child: ElevatedButton(
                     onPressed: _saving ? null : _submit,
                     child: _saving
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
@@ -150,14 +150,14 @@ class _SalaryAdvanceScreenState extends State<SalaryAdvanceScreen> {
                   const SizedBox(height: 10),
                   Text(
                     _error!,
-                    style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                    style: TextStyle(color: AppColors.danger, fontSize: 12),
                   ),
                 ],
               ],
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'History',
             style: TextStyle(
               color: AppColors.textPrimary,
@@ -167,14 +167,14 @@ class _SalaryAdvanceScreenState extends State<SalaryAdvanceScreen> {
           ),
           const SizedBox(height: 10),
           if (_loadingHistory)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
               child: Center(
                 child: CircularProgressIndicator(color: AppColors.neon),
               ),
             )
           else if (_history.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
               child: Center(
                 child: Text(
@@ -226,7 +226,7 @@ class _AdvanceTile extends StatelessWidget {
             children: [
               Text(
                 'Rs. ${advance.amount.toStringAsFixed(2)}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
@@ -250,21 +250,21 @@ class _AdvanceTile extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               advance.reason!,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
           ],
           if (advance.status != 'pending' && advance.adminNote != null && advance.adminNote!.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
               '"${advance.adminNote}"',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontStyle: FontStyle.italic),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 11, fontStyle: FontStyle.italic),
             ),
           ],
           if (advance.createdAt != null) ...[
             const SizedBox(height: 6),
             Text(
               dateFormat.format(advance.createdAt!.toLocal()),
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 11),
             ),
           ],
         ],

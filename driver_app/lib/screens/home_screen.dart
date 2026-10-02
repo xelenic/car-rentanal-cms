@@ -134,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               // keeps it until the new future completes); only a first load —
               // with nothing to show yet — is a bare spinner.
               if (!snapshot.hasData && !snapshot.hasError) {
-                return const Center(
+                return Center(
                   child: CircularProgressIndicator(color: AppColors.neon),
                 );
               }
@@ -143,12 +143,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 return ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 160),
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: AppColors.textMuted),
+                    Icon(Icons.error_outline, size: 48, color: AppColors.textMuted),
                     const SizedBox(height: 12),
                     Text(
                       snapshot.error.toString(),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppColors.textSecondary),
+                      style: TextStyle(color: AppColors.textSecondary),
                     ),
                   ],
                 );
@@ -193,14 +193,14 @@ class _ProfileHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Welcome back',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
               ),
               const SizedBox(height: 2),
               Text(
                 driver.name,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -213,13 +213,13 @@ class _ProfileHeader extends StatelessWidget {
         ),
         IconButton(
           onPressed: onLogout,
-          icon: const Icon(Icons.logout, color: AppColors.textSecondary),
+          icon: Icon(Icons.logout, color: AppColors.textSecondary),
           tooltip: 'Logout',
           style: IconButton.styleFrom(
             backgroundColor: AppColors.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: AppColors.border),
+              side: BorderSide(color: AppColors.border),
             ),
           ),
         ),
@@ -322,10 +322,10 @@ class _QuickAccessGridState extends State<_QuickAccessGrid> with SingleTickerPro
                 borderRadius: BorderRadius.circular(9),
               ),
               alignment: Alignment.center,
-              child: const Icon(Icons.grid_view_rounded, color: AppColors.neon, size: 15),
+              child: Icon(Icons.grid_view_rounded, color: AppColors.neon, size: 15),
             ),
             const SizedBox(width: 10),
-            const Text(
+            Text(
               'Quick Access',
               style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 15),
             ),
@@ -440,7 +440,7 @@ class _QuickAccessCardState extends State<_QuickAccessCard> {
                   Text(
                     item.title,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
@@ -453,7 +453,7 @@ class _QuickAccessCardState extends State<_QuickAccessCard> {
                   Text(
                     item.subtitle,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 10.5,
                       height: 1.2,
@@ -505,10 +505,10 @@ class _PendingHiresSection extends StatelessWidget {
                 borderRadius: BorderRadius.circular(9),
               ),
               alignment: Alignment.center,
-              child: const Icon(Icons.pending_actions_rounded, color: AppColors.danger, size: 16),
+              child: Icon(Icons.pending_actions_rounded, color: AppColors.danger, size: 16),
             ),
             const SizedBox(width: 10),
-            const Expanded(
+            Expanded(
               child: Text(
                 'Pending Hires',
                 style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 15),
@@ -528,7 +528,7 @@ class _PendingHiresSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 2),
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(left: 40),
           child: Text(
             'Waiting on you to start',
@@ -545,7 +545,7 @@ class _PendingHiresSection extends StatelessWidget {
             padding: const EdgeInsets.only(top: 2),
             child: Text(
               '+$remaining more in My Tours',
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
       ],
@@ -600,7 +600,7 @@ class _PendingHireTile extends StatelessWidget {
                   children: [
                     Text(
                       hire.tourTypeLabel,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
@@ -611,7 +611,7 @@ class _PendingHireTile extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       hire.routeSummary,
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 11.5),
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 11.5),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -619,13 +619,13 @@ class _PendingHireTile extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         scheduled,
-                        style: const TextStyle(color: AppColors.danger, fontSize: 10.5, fontWeight: FontWeight.w700),
+                        style: TextStyle(color: AppColors.danger, fontSize: 10.5, fontWeight: FontWeight.w700),
                       ),
                     ],
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.danger, size: 20),
+              Icon(Icons.chevron_right, color: AppColors.danger, size: 20),
             ],
           ),
         ),

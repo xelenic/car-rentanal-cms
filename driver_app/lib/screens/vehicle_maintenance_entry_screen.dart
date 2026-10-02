@@ -131,12 +131,12 @@ class _VehicleMaintenanceEntryScreenState extends State<VehicleMaintenanceEntryS
               ),
               const SizedBox(height: 8),
               ListTile(
-                leading: const Icon(Icons.camera_alt_outlined, color: AppColors.neon),
+                leading: Icon(Icons.camera_alt_outlined, color: AppColors.neon),
                 title: const Text('Take Photo'),
                 onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library_outlined, color: AppColors.neon),
+                leading: Icon(Icons.photo_library_outlined, color: AppColors.neon),
                 title: const Text('Choose from Gallery'),
                 onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
               ),
@@ -211,7 +211,7 @@ class _VehicleMaintenanceEntryScreenState extends State<VehicleMaintenanceEntryS
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.neon))
+          ? Center(child: CircularProgressIndicator(color: AppColors.neon))
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -227,7 +227,7 @@ class _VehicleMaintenanceEntryScreenState extends State<VehicleMaintenanceEntryS
                     children: [
                       Text(
                         'Add ${widget.title}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppColors.neon,
                           fontWeight: FontWeight.w700,
                           fontSize: 13,
@@ -238,7 +238,7 @@ class _VehicleMaintenanceEntryScreenState extends State<VehicleMaintenanceEntryS
                         initialValue: _vehicleId,
                         isExpanded: true,
                         dropdownColor: AppColors.surfaceElevated,
-                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
                         decoration: const InputDecoration(labelText: 'Vehicle'),
                         items: _vehicles
                             .map((v) => DropdownMenuItem(value: v.id, child: Text(v.model)))
@@ -250,7 +250,7 @@ class _VehicleMaintenanceEntryScreenState extends State<VehicleMaintenanceEntryS
                         TextField(
                           controller: _mileageController,
                           keyboardType: TextInputType.number,
-                          style: const TextStyle(color: AppColors.textPrimary),
+                          style: TextStyle(color: AppColors.textPrimary),
                           decoration: const InputDecoration(labelText: 'Mileage', suffixText: 'km'),
                         ),
                       ],
@@ -258,14 +258,14 @@ class _VehicleMaintenanceEntryScreenState extends State<VehicleMaintenanceEntryS
                       TextField(
                         controller: _costController,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        style: const TextStyle(color: AppColors.textPrimary),
+                        style: TextStyle(color: AppColors.textPrimary),
                         decoration: const InputDecoration(labelText: 'Cost', prefixText: 'Rs. '),
                       ),
                       const SizedBox(height: 14),
                       TextField(
                         controller: _descriptionController,
                         maxLines: 3,
-                        style: const TextStyle(color: AppColors.textPrimary),
+                        style: TextStyle(color: AppColors.textPrimary),
                         decoration: const InputDecoration(
                           labelText: 'Description (optional)',
                         ),
@@ -278,7 +278,7 @@ class _VehicleMaintenanceEntryScreenState extends State<VehicleMaintenanceEntryS
                         child: ElevatedButton(
                           onPressed: _saving ? null : _save,
                           child: _saving
-                              ? const SizedBox(
+                              ? SizedBox(
                                   width: 18,
                                   height: 18,
                                   child: CircularProgressIndicator(
@@ -293,14 +293,14 @@ class _VehicleMaintenanceEntryScreenState extends State<VehicleMaintenanceEntryS
                         const SizedBox(height: 10),
                         Text(
                           _error!,
-                          style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                          style: TextStyle(color: AppColors.danger, fontSize: 12),
                         ),
                       ],
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'History',
                   style: TextStyle(
                     color: AppColors.textPrimary,
@@ -315,7 +315,7 @@ class _VehicleMaintenanceEntryScreenState extends State<VehicleMaintenanceEntryS
                     child: Center(
                       child: Text(
                         'No ${widget.title.toLowerCase()} recorded yet.',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                       ),
                     ),
                   )
@@ -375,7 +375,7 @@ class _BillPicker extends StatelessWidget {
                   ),
                 ],
               )
-            : const Center(
+            : Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -436,7 +436,7 @@ class _HistoryTile extends StatelessWidget {
               children: [
                 Text(
                   'Rs. ${record.cost.toStringAsFixed(2)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
@@ -448,21 +448,21 @@ class _HistoryTile extends StatelessWidget {
                       if (record.vehicleModel != null) record.vehicleModel!,
                       if (record.mileage != null) '${record.mileage} km',
                     ].join(' · '),
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 if (record.description != null && record.description!.isNotEmpty)
                   Text(
                     record.description!,
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 if (record.createdAt != null)
                   Text(
                     dateFormat.format(record.createdAt!.toLocal()),
-                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 11),
                   ),
               ],
             ),
@@ -478,7 +478,7 @@ class _HistoryTile extends StatelessWidget {
       height: 52,
       color: AppColors.surfaceElevated,
       alignment: Alignment.center,
-      child: const Icon(Icons.receipt_long, color: AppColors.textMuted, size: 20),
+      child: Icon(Icons.receipt_long, color: AppColors.textMuted, size: 20),
     );
   }
 }

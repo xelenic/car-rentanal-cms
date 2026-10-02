@@ -175,7 +175,7 @@ void main() {
       await _hide(tester, positions);
     }, variant: _iosOnly);
 
-    testWidgets('a multi-stop tour only lights up at the last place', (tester) async {
+    testWidgets('a multi-stop tour only lights up Complete Hire at the last place', (tester) async {
       const stop = HireMapPoint(role: MapRole.stop, name: 'Kandy', latitude: 7.2906, longitude: 80.6337);
       final positions = StreamController<Position>.broadcast();
       await _show(tester, _hire(places: const [_pickup, stop, _end]), positions);
@@ -187,6 +187,81 @@ void main() {
       positions.add(_nearEnd);
       await _settle(tester);
       expect(_highlight, findsOneWidget);
+
+      await _hide(tester, positions);
+    }, variant: _iosOnly);
+
+    testWidgets('reaching a stop on the way gets its own arrival banner, distinct from Complete Hire', (tester) async {
+      const stop = HireMapPoint(role: MapRole.stop, name: 'Kandy', latitude: 7.2906, longitude: 80.6337);
+      final positions = StreamController<Position>.broadcast();
+      await _show(tester, _hire(places: const [_pickup, stop, _end]), positions);
+
+      // on the way: how far to the stop, nothing yet about completing the hire
+      positions.add(_at(7.0, 80.3));
+      await _settle(tester);
+      expect(find.textContaining('Kandy is'), findsOneWidget);
+      expect(find.textContaining('lights up when you arrive'), findsNothing);
+      expect(_highlight, findsNothing);
+
+      // arrived at the stop
+      positions.add(_at(7.2906, 80.6337));
+      await _settle(tester);
+      expect(find.text("You've arrived at Kandy."), findsOneWidget);
+      expect(find.text('You have arrived'), findsOneWidget);
+      expect(_highlight, findsNothing); // Kandy isn't the end — nothing to complete yet
+
+      await _hide(tester, positions);
+    }, variant: _iosOnly);
+
+    testWidgets('leaving a stop moves the live watch on to the next one', (tester) async {
+      const stop1 = HireMapPoint(role: MapRole.stop, name: 'Kandy', latitude: 7.2906, longitude: 80.6337);
+      const stop2 = HireMapPoint(role: MapRole.stop, name: 'Nuwara Eliya', latitude: 6.9497, longitude: 80.7891);
+      final positions = StreamController<Position>.broadcast();
+      await _show(tester, _hire(places: const [_pickup, stop1, stop2, _end]), positions);
+
+      positions.add(_at(7.2906, 80.6337)); // arrive at Kandy
+      await _settle(tester);
+      expect(find.text("You've arrived at Kandy."), findsOneWidget);
+
+      positions.add(_at(6.90, 80.90)); // drive well clear of it
+      await _settle(tester);
+      expect(find.textContaining('Nuwara Eliya is'), findsOneWidget);
+      expect(find.text("You've arrived at Kandy."), findsNothing);
+
+      positions.add(_at(6.9497, 80.7891)); // arrive at Nuwara Eliya
+      await _settle(tester);
+      expect(find.text("You've arrived at Nuwara Eliya."), findsOneWidget);
+      expect(_highlight, findsNothing); // still not the end
+
+      positions.add(_nearEnd); // on to Ella
+      await _settle(tester);
+      expect(_highlight, findsOneWidget);
+      expect(_arrivedBanner, findsOneWidget);
+
+      await _hide(tester, positions);
+    }, variant: _iosOnly);
+
+    testWidgets('remembers a stop passed while the app was closed, from the path the background service recorded', (tester) async {
+      const stop = HireMapPoint(role: MapRole.stop, name: 'Kandy', latitude: 7.2906, longitude: 80.6337);
+      final positions = StreamController<Position>.broadcast();
+      await _show(
+        tester,
+        _hire(places: const [_pickup, stop, _end]),
+        positions,
+        // Reached Kandy and moved well clear of it, all before this screen
+        // was ever open this time — nothing live has seen any of it.
+        recordedPath: const [
+          TrackPoint(lat: 7.2906, lng: 80.6337),
+          TrackPoint(lat: 6.90, lng: 80.90),
+        ],
+      );
+
+      // Reopening the app partway between Kandy and Ella — the hint should
+      // already be about Ella, not the stop already behind.
+      positions.add(_at(6.90, 80.90));
+      await _settle(tester);
+      expect(find.textContaining('Ella is'), findsOneWidget);
+      expect(find.textContaining('Kandy'), findsNothing);
 
       await _hide(tester, positions);
     }, variant: _iosOnly);

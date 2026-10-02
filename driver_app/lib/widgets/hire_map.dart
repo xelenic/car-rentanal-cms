@@ -526,7 +526,7 @@ class _HireMapViewState extends State<HireMapView> {
                 color: Colors.white.withValues(alpha: 0.92),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Text(
+              child: Text(
                 "This hire's locations have no coordinates saved yet, so they can't be plotted.",
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 11.5, height: 1.3),
               ),
@@ -572,7 +572,7 @@ class _RouteChip extends StatelessWidget {
                 text,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 11.5, fontWeight: FontWeight.w600),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 11.5, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -666,7 +666,7 @@ class _LegendDot extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11.5)),
+        Text(label, style: TextStyle(color: AppColors.textSecondary, fontSize: 11.5)),
       ],
     );
   }
@@ -708,7 +708,7 @@ class HireMapCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Map',
                   style: TextStyle(color: AppColors.neon, fontWeight: FontWeight.w700, fontSize: 13),
@@ -727,7 +727,7 @@ class HireMapCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                child: const Padding(
+                child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,

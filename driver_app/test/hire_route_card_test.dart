@@ -11,6 +11,7 @@ Hire _hire({
   String status = 'pending',
   DateTime? startTime,
   DateTime? cancelledAt,
+  DateTime? trackingStoppedAt,
   String paymentType = 'cash',
   double balanceRemaining = 0,
   String paymentStatus = 'paid',
@@ -29,6 +30,7 @@ Hire _hire({
       status: status,
       startTime: startTime,
       cancelledAt: cancelledAt,
+      trackingStoppedAt: trackingStoppedAt,
     );
 
 Widget _app(Widget card) => MaterialApp(home: Scaffold(body: Padding(padding: const EdgeInsets.all(16), child: card)));
@@ -95,12 +97,28 @@ void main() {
       expect(text.style!.color, isNot(equals(const TextStyle().color)));
     });
 
-    testWidgets('a completed hire, or one with no schedule, has no extra line', (tester) async {
-      await tester.pumpWidget(_app(HireRouteCard(hire: _hire(status: 'completed', startTime: DateTime(2026, 9, 20)))));
-      expect(find.textContaining('Scheduled'), findsNothing);
+    testWidgets('a completed hire shows when it was completed', (tester) async {
+      await tester.pumpWidget(_app(HireRouteCard(
+        hire: _hire(
+          status: 'completed',
+          startTime: DateTime(2026, 9, 20),
+          trackingStoppedAt: DateTime(2026, 9, 22, 11, 15),
+        ),
+      )));
 
+      expect(find.text('Completed Sep 22, 11:15 AM'), findsOneWidget);
+    });
+
+    testWidgets('a completed hire with no tracking record falls back to its scheduled date', (tester) async {
+      await tester.pumpWidget(_app(HireRouteCard(hire: _hire(status: 'completed', startTime: DateTime(2026, 9, 20, 9)))));
+
+      expect(find.text('Completed Sep 20, 9:00 AM'), findsOneWidget);
+    });
+
+    testWidgets('a hire with no schedule and no status info has no extra line', (tester) async {
       await tester.pumpWidget(_app(HireRouteCard(hire: _hire())));
       expect(find.textContaining('Scheduled'), findsNothing);
+      expect(find.textContaining('Completed'), findsNothing);
     });
   });
 

@@ -21,7 +21,7 @@ class InitialsAvatar extends StatelessWidget {
       width: size,
       height: size,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
           begin: Alignment.topLeft,

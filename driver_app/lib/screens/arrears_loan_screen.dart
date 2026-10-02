@@ -43,7 +43,7 @@ class _ArrearsLoanScreenState extends State<ArrearsLoanScreen> {
           future: _loansFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator(color: AppColors.neon));
+              return Center(child: CircularProgressIndicator(color: AppColors.neon));
             }
 
             if (snapshot.hasError) {
@@ -53,12 +53,12 @@ class _ArrearsLoanScreenState extends State<ArrearsLoanScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 100),
                     child: Column(
                       children: [
-                        const Icon(Icons.error_outline, size: 44, color: AppColors.textMuted),
+                        Icon(Icons.error_outline, size: 44, color: AppColors.textMuted),
                         const SizedBox(height: 12),
                         Text(
                           snapshot.error.toString(),
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                         ),
                       ],
                     ),
@@ -71,7 +71,7 @@ class _ArrearsLoanScreenState extends State<ArrearsLoanScreen> {
 
             if (loans.isEmpty) {
               return ListView(
-                children: const [
+                children: [
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 32, vertical: 100),
                     child: Column(
@@ -134,7 +134,7 @@ class _ArrearsLoanCard extends StatelessWidget {
                   children: [
                     Text(
                       'Rs. ${loan.amount.toStringAsFixed(2)}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w800,
                         fontSize: 18,
@@ -144,7 +144,7 @@ class _ArrearsLoanCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         sourceLabel,
-                        style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 11),
                       ),
                     ],
                   ],
@@ -158,16 +158,16 @@ class _ArrearsLoanCard extends StatelessWidget {
                 ),
                 child: Text(
                   loan.deductionTypeLabel,
-                  style: const TextStyle(color: AppColors.neon, fontSize: 10, fontWeight: FontWeight.w700),
+                  style: TextStyle(color: AppColors.neon, fontSize: 10, fontWeight: FontWeight.w700),
                 ),
               ),
             ],
           ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(color: AppColors.border, height: 1),
           ),
-          const Text(
+          Text(
             'Deduction Schedule',
             style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w700),
           ),
@@ -180,12 +180,12 @@ class _ArrearsLoanCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       DateFormat.yMMMM().format(DateTime(d.year, d.month)),
-                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                      style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
                     ),
                   ),
                   Text(
                     'Rs. ${d.amount.toStringAsFixed(2)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppColors.textPrimary,
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
