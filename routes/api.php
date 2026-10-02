@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Api\Admin\CustomerController as AdminCustomerController;
+use App\Http\Controllers\Api\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Api\Admin\DriverController as AdminDriverController;
 use App\Http\Controllers\Api\Admin\HireController as AdminHireController;
 use App\Http\Controllers\Api\Admin\MyExpenseCategoryController as AdminMyExpenseCategoryController;
@@ -65,6 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/admin/auth/logout', [AdminAuthController::class, 'logout']);
     Route::get('/admin/me', [AdminAuthController::class, 'me']);
+    Route::get('/admin/dashboard', [AdminDashboardController::class, 'index']);
     Route::get('/admin/hires', [AdminHireController::class, 'index']);
     Route::get('/admin/hires/reference-data', [AdminHireController::class, 'referenceData']);
     Route::get('/admin/hires/{hire}', [AdminHireController::class, 'show']);

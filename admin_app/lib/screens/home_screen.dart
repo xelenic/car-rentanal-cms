@@ -2,26 +2,32 @@ import 'package:flutter/material.dart';
 
 import '../models/admin_user.dart';
 import '../services/api_client.dart';
+import '../theme/app_theme.dart';
 import 'customers_tab.dart';
 import 'drivers_tab.dart';
+import 'hires_screen.dart';
 import 'login_screen.dart';
 import 'my_expenses_screen.dart';
+import 'overview_screen.dart';
 import 'vehicles_dashboard_screen.dart';
 
-class _HomeTab {
-  const _HomeTab({required this.title, required this.icon, required this.body});
+class _Shortcut {
+  const _Shortcut({required this.title, required this.icon, required this.color, required this.builder});
 
   final String title;
   final IconData icon;
-  final Widget body;
+  final Color color;
+  final WidgetBuilder builder;
 }
 
-/// The app's home: Vehicles / Drivers / Customers / Expenses as tabs, each
-/// tab managing its own resource (add/edit/delete/view). Fetches the signed-in
-/// user once and shares it with every tab, which decides both which tabs show
-/// at all (each gated on its own "view" permission) and what each tab offers
-/// (add, edit, delete). AppBar title and TabBar live here; each tab keeps its
-/// own FloatingActionButton via a nested Scaffold.
+/// The app's home: a colorful grid of shortcuts, one per section — Overview,
+/// Hires, Vehicles, Drivers, Customers, Expenses — each its own standalone
+/// page one tap away, rather than tabs sharing one AppBar. Fetches the
+/// signed-in user once and shares it with every section, which decides both
+/// whether its shortcut shows at all (each gated on its own "view"
+/// permission, except Hires — signing into the admin app already requires
+/// hires.view, see Api\Admin\AuthController::login()) and what it offers
+/// once opened (add, edit, delete).
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -29,11 +35,9 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
-  TabController? _tabs;
-  int _tabIndex = 0;
-  List<_HomeTab> _visibleTabs = const [];
+  AdminUser? _user;
 
   @override
   void initState() {
@@ -41,45 +45,64 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _load();
   }
 
-  @override
-  void dispose() {
-    _tabs?.dispose();
-    super.dispose();
-  }
-
   Future<void> _load() async {
     try {
       final user = await ApiClient.instance.fetchMe();
-      if (!mounted) return;
-      final tabs = _tabsFor(user);
-      setState(() {
-        _visibleTabs = tabs;
-        _loading = false;
-      });
-      _tabs = TabController(length: tabs.length, vsync: this)
-        ..addListener(() {
-          if (_tabs!.indexIsChanging) return;
-          setState(() => _tabIndex = _tabs!.index);
-        });
+      if (mounted) setState(() => _user = user);
     } catch (_) {
+      // Shortcuts default to hidden until the user loads — a transient
+      // failure here just means retrying, not a locked-out app.
+    } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  List<_HomeTab> _tabsFor(AdminUser user) {
+  List<_Shortcut> _shortcutsFor(AdminUser user) {
     return [
+      if (user.canViewDrivers)
+        _Shortcut(
+          title: 'Overview',
+          icon: Icons.dashboard_rounded,
+          color: AppColors.info,
+          builder: (_) => const OverviewScreen(),
+        ),
+      // Always offered — logging into the admin app already requires
+      // hires.view (AuthController::login()), so every signed-in user here
+      // can see it.
+      _Shortcut(
+        title: 'Hires',
+        icon: Icons.event_note_rounded,
+        color: AppColors.primary,
+        builder: (_) => HiresScreen(user: user),
+      ),
       if (user.canViewVehicles)
-        _HomeTab(
+        _Shortcut(
           title: 'Vehicles',
           icon: Icons.directions_car_filled_rounded,
-          body: VehiclesDashboardScreen(user: user),
+          color: const Color(0xFFEA580C),
+          builder: (_) => VehiclesDashboardScreen(user: user),
         ),
       if (user.canViewDrivers)
-        _HomeTab(title: 'Drivers', icon: Icons.badge_outlined, body: DriversTab(user: user)),
+        _Shortcut(
+          title: 'Drivers',
+          icon: Icons.badge_rounded,
+          color: const Color(0xFF7C3AED),
+          builder: (_) => DriversTab(user: user),
+        ),
       if (user.canViewCustomers)
-        _HomeTab(title: 'Customers', icon: Icons.people_outline_rounded, body: CustomersTab(user: user)),
+        _Shortcut(
+          title: 'Customers',
+          icon: Icons.people_alt_rounded,
+          color: const Color(0xFF0D9488),
+          builder: (_) => CustomersTab(user: user),
+        ),
       if (user.canViewMyExpenses)
-        _HomeTab(title: 'Expenses', icon: Icons.account_balance_wallet_outlined, body: MyExpensesScreen(user: user)),
+        _Shortcut(
+          title: 'Expenses',
+          icon: Icons.account_balance_wallet_rounded,
+          color: const Color(0xFFE11D48),
+          builder: (_) => MyExpensesScreen(user: user),
+        ),
     ];
   }
 
@@ -92,13 +115,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  void _open(_Shortcut shortcut) {
+    Navigator.of(context).push(MaterialPageRoute(builder: shortcut.builder));
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    final tabs = _visibleTabs;
     final logoutButton = IconButton(
       key: const Key('logout'),
       tooltip: 'Sign out',
@@ -106,15 +128,28 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       onPressed: _logout,
     );
 
-    if (tabs.isEmpty || _tabs == null) {
+    if (_loading) {
       return Scaffold(
         appBar: AppBar(title: const Text('Car Rental CMS'), actions: [logoutButton]),
-        body: const Center(
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final user = _user;
+    final shortcuts = user != null ? _shortcutsFor(user) : const <_Shortcut>[];
+
+    if (user == null || shortcuts.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Car Rental CMS'), actions: [logoutButton]),
+        body: Center(
           child: Padding(
-            padding: EdgeInsets.all(32),
+            padding: const EdgeInsets.all(32),
             child: Text(
-              'You do not have access to any section yet. Ask an admin to grant you a permission.',
+              user == null
+                  ? 'Could not sign you in. Check your connection and restart the app.'
+                  : 'You do not have access to any section yet. Ask an admin to grant you a permission.',
               textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textSecondary),
             ),
           ),
         ),
@@ -122,20 +157,72 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(tabs[_tabIndex].title),
-        actions: [logoutButton],
-        bottom: TabBar(
-          controller: _tabs,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          tabs: [
-            for (final tab in tabs)
-              Tab(key: Key('home-tab-${tab.title.toLowerCase()}'), icon: Icon(tab.icon, size: 20), text: tab.title),
-          ],
+      appBar: AppBar(title: const Text('Car Rental CMS'), actions: [logoutButton]),
+      body: GridView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: shortcuts.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 14,
+          crossAxisSpacing: 14,
+          childAspectRatio: 1.05,
+        ),
+        itemBuilder: (context, index) {
+          final shortcut = shortcuts[index];
+          return _ShortcutCard(
+            key: Key('shortcut-${shortcut.title.toLowerCase()}'),
+            shortcut: shortcut,
+            onTap: () => _open(shortcut),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ShortcutCard extends StatelessWidget {
+  const _ShortcutCard({super.key, required this.shortcut, required this.onTap});
+
+  final _Shortcut shortcut;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: shortcut.color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                alignment: Alignment.center,
+                child: Icon(shortcut.icon, color: shortcut.color, size: 26),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                shortcut.title,
+                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 15.5),
+              ),
+            ],
+          ),
         ),
       ),
-      body: TabBarView(controller: _tabs, children: [for (final tab in tabs) tab.body]),
     );
   }
 }

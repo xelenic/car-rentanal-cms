@@ -10,9 +10,9 @@ import '../widgets/state_views.dart';
 import 'driver_detail_screen.dart';
 import 'driver_form_screen.dart';
 
-/// The Drivers tab: the roster, searchable, with add/view (edit/delete live
-/// on the driver's own page). Embedded under HomeScreen's shared AppBar and
-/// TabBar — this widget owns only its body and its own FAB.
+/// The Drivers page: the roster, searchable, with add/view (edit/delete live
+/// on the driver's own page). Pushed from HomeScreen's shortcut grid, with
+/// its own AppBar and FAB.
 class DriversTab extends StatefulWidget {
   const DriversTab({super.key, this.user});
 
@@ -123,6 +123,7 @@ class _DriversTabState extends State<DriversTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(title: const Text('Drivers')),
       floatingActionButton: _canAdd
           ? FloatingActionButton.extended(
               key: const Key('add-driver'),

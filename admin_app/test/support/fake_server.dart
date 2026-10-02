@@ -14,6 +14,8 @@ class FakeServer {
   FakeServer({
     List<Map<String, dynamic>>? vehicles,
     Map<int, List<Map<String, dynamic>>>? hires,
+    List<Map<String, dynamic>>? allHires,
+    this.dashboard,
     this.canViewVehicles = true,
     this.canCreateVehicles = true,
     this.canUpdateVehicles = true,
@@ -46,6 +48,7 @@ class FakeServer {
     Map<String, Map<String, dynamic>>? statsByPeriod,
   })  : vehicles = vehicles ?? [],
         hires = hires ?? {},
+        allHires = allHires ?? [],
         expenses = expenses ?? [],
         expenseCategories = expenseCategories ?? defaultExpenseCategories(),
         incomes = incomes ?? [],
@@ -59,6 +62,14 @@ class FakeServer {
   /// Hires per vehicle id, each already in the API's JSON shape and already
   /// tagged with a "_tab" the fake serves them under.
   final Map<int, List<Map<String, dynamic>>> hires;
+
+  /// The flat list GET /admin/hires answers with — HiresScreen's general,
+  /// not-scoped-to-one-vehicle list (independent of [hires] above).
+  final List<Map<String, dynamic>> allHires;
+
+  /// The raw JSON GET /admin/dashboard answers with; [defaultDashboardJson]
+  /// when not set.
+  Map<String, dynamic>? dashboard;
 
   bool canViewVehicles;
   bool canCreateVehicles;
@@ -733,6 +744,25 @@ class FakeServer {
       });
     }
 
+    if (path == '/admin/hires' && request.method == 'GET') {
+      final search = (request.url.queryParameters['search'] ?? '').toLowerCase();
+      final upcoming = request.url.queryParameters['upcoming'] == '1';
+      final page = int.parse(request.url.queryParameters['page'] ?? '1');
+      final matching = allHires
+          .where((h) => search.isEmpty || '${h['customer']?['name']} ${h['description']}'.toLowerCase().contains(search))
+          .where((h) => !upcoming || h['is_upcoming'] == true)
+          .toList();
+      final start = (page - 1) * pageSize;
+      return _json({
+        'data': matching.skip(start).take(pageSize).toList(),
+        'meta': {'current_page': page, 'last_page': (matching.length / pageSize).ceil().clamp(1, 999)},
+      });
+    }
+
+    if (path == '/admin/dashboard' && request.method == 'GET') {
+      return _json(dashboard ?? defaultDashboardJson());
+    }
+
     if (path == '/admin/hires' && request.method == 'POST') {
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       createdHires.add(body);
@@ -987,6 +1017,62 @@ List<Map<String, dynamic>> defaultExpenseCategories() {
   var id = 0;
   return [for (final e in names.entries) {'id': ++id, 'key': e.key, 'name': e.value}];
 }
+
+/// GET /admin/dashboard's shape with every figure at zero — OverviewScreen
+/// renders fine against this with no further setup; a test that cares about
+/// specific numbers passes FakeServer(dashboard: dashboardJson(...)) instead.
+Map<String, dynamic> defaultDashboardJson({int year = 2026, int month = 9, List<Map<String, dynamic>>? vehicleCards}) {
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
+  return {
+    'year': year,
+    'month': month,
+    'period_label': '${monthNames[month - 1]} $year',
+    'summary': {
+      'hire_full_value_total': 0,
+      'our_hire_value_total': 0,
+      'commission_total': 0,
+      'expenses_total': 0,
+      'salary_total': 0,
+      'profit_total': 0,
+    },
+    'deltas': {
+      'hire_full_value_total': null,
+      'our_hire_value_total': null,
+      'commission_total': null,
+      'expenses_total': null,
+      'salary_total': null,
+      'profit_total': null,
+    },
+    'vehicle_cards': vehicleCards ?? [],
+  };
+}
+
+/// One Vehicle Cards entry in the API's shape.
+Map<String, dynamic> dashboardVehicleCardJson({
+  required int id,
+  String model = 'ZZZ Test Van',
+  String condition = 'Good',
+  num full = 0,
+  num our = 0,
+  num expenses = 0,
+  num salary = 0,
+  num? profit,
+}) =>
+    {
+      'id': id,
+      'model': model,
+      'condition': condition,
+      'hire_full_value_total': full,
+      'our_hire_value_total': our,
+      'commission_total': full - our,
+      'expenses_total': expenses,
+      'salary_total': salary,
+      'profit_total': profit ?? (our - expenses - salary),
+    };
 
 /// An expense in the API's shape.
 Map<String, dynamic> expenseJson({

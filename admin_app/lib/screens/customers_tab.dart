@@ -10,10 +10,9 @@ import '../widgets/state_views.dart';
 import 'customer_detail_screen.dart';
 import 'customer_form_screen.dart';
 
-/// The Customers tab: the customer list, searchable, with add/view
-/// (edit/delete live on the customer's own page). Embedded under
-/// HomeScreen's shared AppBar and TabBar — this widget owns only its body
-/// and its own FAB.
+/// The Customers page: the customer list, searchable, with add/view
+/// (edit/delete live on the customer's own page). Pushed from HomeScreen's
+/// shortcut grid, with its own AppBar and FAB.
 class CustomersTab extends StatefulWidget {
   const CustomersTab({super.key, this.user});
 
@@ -124,6 +123,7 @@ class _CustomersTabState extends State<CustomersTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(title: const Text('Customers')),
       floatingActionButton: _canAdd
           ? FloatingActionButton.extended(
               key: const Key('add-customer'),

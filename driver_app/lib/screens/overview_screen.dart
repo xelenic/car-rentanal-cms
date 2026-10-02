@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../models/available_periods.dart';
 import '../models/driver_deposit_transfer.dart';
 import '../models/driver_salary.dart';
 import '../models/hire_page.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
+import '../widgets/period_dropdown.dart';
 import 'deposit_transfer_screen.dart';
 
 class _OverviewData {
@@ -25,23 +27,26 @@ class OverviewScreen extends StatefulWidget {
 }
 
 class _OverviewScreenState extends State<OverviewScreen> {
+  late final DateTime _now = DateTime.now();
+  late int _year = _now.year;
+  late int _month = _now.month;
+  AvailablePeriods? _periods;
+
   late Future<_OverviewData> _future;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    _loadPeriods();
   }
 
   Future<_OverviewData> _load() async {
-    final now = DateTime.now();
-
     final results = await Future.wait([
       // Only its counted total is used: how many hires there are that count.
-      // Scoped to this month, same as the salary figures below — omitting
-      // year/month here would have the server count the driver's entire
-      // hire history instead of just this month's.
-      ApiClient.instance.fetchHires(year: now.year, month: now.month, perPage: 1),
+      // Scoped to the selected month — omitting year/month here would have
+      // the server count the driver's entire hire history instead.
+      ApiClient.instance.fetchHires(year: _year, month: _month, perPage: 1),
       _loadSalarySafely(),
     ]);
 
@@ -51,13 +56,25 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  // The current month's salary is a "nice to have" here — if it fails to
-  // load, the rest of the page (the hire count) should still render.
+  // This month's salary is a "nice to have" here — if it fails to load, the
+  // rest of the page (the hire count) should still render.
   Future<DriverSalary?> _loadSalarySafely() async {
     try {
-      return await ApiClient.instance.fetchSalary();
+      return await ApiClient.instance.fetchSalary(year: _year, month: _month);
     } catch (_) {
       return null;
+    }
+  }
+
+  // Every period that has any hire at all, regardless of status — just
+  // enough to populate the Year/Month pickers with periods worth looking at
+  // (plus the current one, always offered even with nothing in it yet).
+  Future<void> _loadPeriods() async {
+    try {
+      final periods = await ApiClient.instance.fetchAvailablePeriods();
+      if (mounted) setState(() => _periods = periods);
+    } catch (_) {
+      // Without them the pickers offer just the current period — still usable.
     }
   }
 
@@ -67,40 +84,101 @@ class _OverviewScreenState extends State<OverviewScreen> {
     await future;
   }
 
+  void _setYear(int? year) {
+    if (year == null || year == _year) return;
+    setState(() {
+      _year = year;
+      // A year change may not have this year's current month in it — snap to
+      // its latest known month (or January) rather than risk an empty period.
+      final months = _monthOptions(year);
+      if (!months.contains(_month)) _month = months.isNotEmpty ? months.first : 1;
+    });
+    _refresh();
+  }
+
+  void _setMonth(int? month) {
+    if (month == null || month == _month) return;
+    setState(() => _month = month);
+    _refresh();
+  }
+
+  List<int> get _yearOptions => {...?_periods?.years, _now.year}.toList()..sort((a, b) => b.compareTo(a));
+
+  List<int> _monthOptions(int year) =>
+      ({...?_periods?.monthsFor(year), if (year == _now.year) _now.month}.toList()..sort((a, b) => b.compareTo(a)));
+
   @override
   Widget build(BuildContext context) {
+    final isCurrentPeriod = _year == _now.year && _month == _now.month;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Overview')),
-      body: RefreshIndicator(
-        color: AppColors.neon,
-        backgroundColor: AppColors.surface,
-        onRefresh: _refresh,
-        child: FutureBuilder<_OverviewData>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (!snapshot.hasData && !snapshot.hasError) {
-              return Center(child: CircularProgressIndicator(color: AppColors.neon));
-            }
-
-            if (snapshot.hasError) {
-              return ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 160),
-                children: [
-                  Icon(Icons.error_outline, size: 48, color: AppColors.textMuted),
-                  const SizedBox(height: 12),
-                  Text(
-                    snapshot.error.toString(),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.textSecondary),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: PeriodDropdown(
+                    hint: 'Year',
+                    value: _year,
+                    items: _yearOptions,
+                    labelBuilder: (year) => '$year',
+                    onChanged: _setYear,
                   ),
-                ],
-              );
-            }
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: PeriodDropdown(
+                    hint: 'Month',
+                    value: _month,
+                    items: _monthOptions(_year),
+                    labelBuilder: (month) => DateFormat.MMMM().format(DateTime(2000, month)),
+                    onChanged: _setMonth,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              color: AppColors.neon,
+              backgroundColor: AppColors.surface,
+              onRefresh: _refresh,
+              child: FutureBuilder<_OverviewData>(
+                future: _future,
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData && !snapshot.hasError) {
+                    return Center(child: CircularProgressIndicator(color: AppColors.neon));
+                  }
 
-            final data = snapshot.data!;
-            return _OverviewBody(hireCount: data.hireCount, salary: data.salary);
-          },
-        ),
+                  if (snapshot.hasError) {
+                    return ListView(
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 160),
+                      children: [
+                        Icon(Icons.error_outline, size: 48, color: AppColors.textMuted),
+                        const SizedBox(height: 12),
+                        Text(
+                          snapshot.error.toString(),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppColors.textSecondary),
+                        ),
+                      ],
+                    );
+                  }
+
+                  final data = snapshot.data!;
+                  return _OverviewBody(
+                    hireCount: data.hireCount,
+                    salary: data.salary,
+                    isCurrentPeriod: isCurrentPeriod,
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -113,8 +191,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
 class _OverviewBody extends StatefulWidget {
   final int hireCount;
   final DriverSalary? salary;
+  final bool isCurrentPeriod;
 
-  const _OverviewBody({required this.hireCount, required this.salary});
+  const _OverviewBody({required this.hireCount, required this.salary, required this.isCurrentPeriod});
 
   @override
   State<_OverviewBody> createState() => _OverviewBodyState();
@@ -135,7 +214,9 @@ class _OverviewBodyState extends State<_OverviewBody> with SingleTickerProviderS
   @override
   Widget build(BuildContext context) {
     final salary = widget.salary;
-    final monthLabel = salary != null ? DateFormat.MMMM().format(DateTime(2000, salary.month)) : null;
+    // Includes the year — once Overview can look at a different month, "May"
+    // alone no longer says which year's May this is.
+    final monthLabel = salary != null ? DateFormat.yMMMM().format(DateTime(salary.year, salary.month)) : null;
 
     // In the order the driver asked for: hires first, then the money figures
     // from the full hire value down to what they personally take home.
@@ -197,7 +278,12 @@ class _OverviewBodyState extends State<_OverviewBody> with SingleTickerProviderS
     return ListView(
       padding: EdgeInsets.zero,
       children: [
-        _OverviewHero(hireCount: widget.hireCount, salary: salary, monthLabel: monthLabel),
+        _OverviewHero(
+          hireCount: widget.hireCount,
+          salary: salary,
+          monthLabel: monthLabel,
+          isCurrentPeriod: widget.isCurrentPeriod,
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
           child: Column(
@@ -284,8 +370,14 @@ class _OverviewHero extends StatelessWidget {
   final int hireCount;
   final DriverSalary? salary;
   final String? monthLabel;
+  final bool isCurrentPeriod;
 
-  const _OverviewHero({required this.hireCount, required this.salary, required this.monthLabel});
+  const _OverviewHero({
+    required this.hireCount,
+    required this.salary,
+    required this.monthLabel,
+    required this.isCurrentPeriod,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -316,7 +408,7 @@ class _OverviewHero extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Text(
-                'This Month',
+                isCurrentPeriod ? 'This Month' : 'Monthly Overview',
                 style: TextStyle(color: AppColors.onNeon, fontWeight: FontWeight.w700, fontSize: 15),
               ),
               const Spacer(),
@@ -374,7 +466,9 @@ class _OverviewHero extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            hireCount == 0 ? 'No hires yet this month' : 'from ${countOf(hireCount, 'hire')} this month',
+            hireCount == 0
+                ? (isCurrentPeriod ? 'No hires yet this month' : 'No hires that month')
+                : 'from ${countOf(hireCount, 'hire')}${isCurrentPeriod ? ' this month' : ''}',
             style: TextStyle(color: AppColors.onNeon.withValues(alpha: 0.8), fontSize: 12),
           ),
         ],

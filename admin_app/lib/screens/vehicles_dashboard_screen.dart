@@ -11,10 +11,10 @@ import '../widgets/vehicle_tile.dart';
 import 'add_vehicle_screen.dart';
 import 'vehicle_detail_screen.dart';
 
-/// The Vehicles tab: the fleet as a grid of icon-and-name tiles, narrowed by
+/// The Vehicles page: the fleet as a grid of icon-and-name tiles, narrowed by
 /// search or by condition. Everything about a vehicle — and its hires — is on
-/// its own page, one tap away. Embedded under HomeScreen's shared AppBar and
-/// TabBar — this widget owns only its body and its own FAB.
+/// its own page, one tap away. Pushed from HomeScreen's shortcut grid, with
+/// its own AppBar and FAB.
 class VehiclesDashboardScreen extends StatefulWidget {
   const VehiclesDashboardScreen({super.key, this.user});
 
@@ -148,6 +148,7 @@ class _VehiclesDashboardScreenState extends State<VehiclesDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(title: const Text('Vehicles')),
       floatingActionButton: _canAdd
           ? FloatingActionButton.extended(
               key: const Key('add-vehicle'),

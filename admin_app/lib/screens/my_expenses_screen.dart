@@ -18,7 +18,8 @@ import 'income_form_screen.dart';
 /// (the month's profit from hires plus other income, less the expenses) and
 /// the totals up top, then the month's expenses or other income, one tab
 /// each — with add, edit, delete and category management as the user's
-/// permissions allow.
+/// permissions allow. Pushed from HomeScreen's shortcut grid, with its own
+/// AppBar and FAB.
 class MyExpensesScreen extends StatefulWidget {
   const MyExpensesScreen({super.key, required this.user});
 
@@ -380,6 +381,7 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(title: const Text('Expenses')),
       floatingActionButton: _user.canCreateMyExpenses
           ? FloatingActionButton.extended(
               key: Key(_onIncome ? 'add-income' : 'add-expense'),

@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/admin_user.dart';
 import '../models/customer.dart';
+import '../models/dashboard_summary.dart';
 import '../models/driver.dart';
 import '../models/hire.dart';
 import '../models/hire_period.dart';
@@ -131,6 +132,25 @@ class ApiClient {
 
     if (response.statusCode == 200) {
       return AdminUser.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// The Overview page's six summary figures plus a per-vehicle breakdown,
+  /// for one month — defaults to the current one, same as the web panel's
+  /// Dashboard.
+  Future<DashboardSummary> fetchDashboard({int? year, int? month}) async {
+    final uri = Uri.parse('$baseUrl/admin/dashboard').replace(
+      queryParameters: {
+        if (year != null) 'year': '$year',
+        if (month != null) 'month': '$month',
+      },
+    );
+    final response = await _http.get(uri, headers: await _headers(auth: true));
+
+    if (response.statusCode == 200) {
+      return DashboardSummary.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     }
 
     throw ApiException(_extractError(response));
