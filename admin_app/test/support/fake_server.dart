@@ -276,7 +276,7 @@ class FakeServer {
     final income = otherIncomeTotal + incomeInMonth.fold<double>(0, (sum, i) => sum + (i['amount'] as num));
     final revenueInMonth = revenues.where((r) => _inMonth(r, 'revenue_date', year, month)).toList();
     final revenue =
-        otherCompanyRevenueTotal + revenueInMonth.fold<double>(0, (sum, r) => sum + (r['credited_amount'] as num));
+        otherCompanyRevenueTotal + revenueInMonth.fold<double>(0, (sum, r) => sum + (r['balance'] as num));
 
     final byCategory = <String, double>{};
     for (final e in inMonth) {
@@ -408,7 +408,7 @@ class FakeServer {
       'data': matching.skip(start).take(pageSize).toList(),
       'meta': {'current_page': p.page, 'last_page': (matching.length / pageSize).ceil().clamp(1, 999)},
       'summary': _summary(p.year, p.month),
-      'filtered_total': matching.fold<double>(0, (sum, r) => sum + (r['credited_amount'] as num)),
+      'filtered_total': matching.fold<double>(0, (sum, r) => sum + (r['balance'] as num)),
       'years': _years(p.year),
     });
   }

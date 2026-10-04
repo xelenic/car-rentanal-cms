@@ -22,13 +22,13 @@ AdminUser _user({bool create = true, bool update = true, bool delete = true}) =>
       canDeleteMyExpenses: delete,
     );
 
-/// Two revenue entries this month (together 9,000 credited), one of each last month.
+/// Two revenue entries this month (together 9,000 balance), one of each last month.
 FakeServer _server() => FakeServer(
       profitBeforeExpenses: 6400,
       revenues: [
-        revenueJson(id: 1, hire: 'ZZZ Colombo to Kandy', bookingNumber: 'ZZZ-BK-001', vehicle: 'ZZZ Aqua', creditedAmount: 7000, date: dayOf(_thisMonth, 2)),
-        revenueJson(id: 2, hire: 'ZZZ Galle Fort Tour', bookingNumber: 'ZZZ-BK-002', vehicle: 'ZZZ Hiace', creditedAmount: 2000, date: dayOf(_thisMonth, 5)),
-        revenueJson(id: 3, hire: 'ZZZ Last month trip', bookingNumber: 'ZZZ-BK-003', vehicle: 'ZZZ Prius', creditedAmount: 1000, date: dayOf(DateTime(_now.year, _now.month - 1), 12)),
+        revenueJson(id: 1, hire: 'ZZZ Colombo to Kandy', bookingNumber: 'ZZZ-BK-001', vehicle: 'ZZZ Aqua', balance: 7000, date: dayOf(_thisMonth, 2)),
+        revenueJson(id: 2, hire: 'ZZZ Galle Fort Tour', bookingNumber: 'ZZZ-BK-002', vehicle: 'ZZZ Hiace', balance: 2000, date: dayOf(_thisMonth, 5)),
+        revenueJson(id: 3, hire: 'ZZZ Last month trip', bookingNumber: 'ZZZ-BK-003', vehicle: 'ZZZ Prius', balance: 1000, date: dayOf(DateTime(_now.year, _now.month - 1), 12)),
       ],
     );
 
@@ -69,7 +69,7 @@ void main() {
       );
     });
 
-    testWidgets('shows the booking number, vehicle and credited amount for each entry', (tester) async {
+    testWidgets('shows the booking number, vehicle and balance for each entry', (tester) async {
       await _openRevenue(tester, _server());
 
       expect(find.text('ZZZ-BK-001'), findsOneWidget);
@@ -118,7 +118,7 @@ void main() {
   });
 
   group('searching revenue', () {
-    testWidgets('narrows the list and says what the credited matches come to', (tester) async {
+    testWidgets('narrows the list and says what the balance matches come to', (tester) async {
       final server = _server();
       await _openRevenue(tester, server);
 
@@ -129,7 +129,7 @@ void main() {
       expect(_revenueQueries(server).last['search'], 'Galle');
       expect(find.text('ZZZ Galle Fort Tour'), findsOneWidget);
       expect(find.text('ZZZ Colombo to Kandy'), findsNothing);
-      expect(find.text('Credited total of the 1 entry shown: Rs. 2,000.00'), findsOneWidget);
+      expect(find.text('Balance total of the 1 entry shown: Rs. 2,000.00'), findsOneWidget);
     });
   });
 
@@ -182,8 +182,8 @@ void main() {
 
       expect(find.text('ZZZ Ella Trip added.'), findsOneWidget);
       expect(find.text('ZZZ Ella Trip'), findsOneWidget);
-      // 9,000 + 3,000.
-      expect(_inCard('card-other-revenue', 'Rs. 12,000.00'), findsOneWidget);
+      // 9,000 + 2,000 balance (the credited amount of 3,000 doesn't count).
+      expect(_inCard('card-other-revenue', 'Rs. 11,000.00'), findsOneWidget);
       expect(_inCard('card-other-revenue', '3 entries'), findsOneWidget);
     });
 
@@ -251,7 +251,7 @@ void main() {
 
       await tester.tap(find.text('ZZZ Colombo to Kandy'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byKey(const Key('revenue-credited-amount')), '7500');
+      await tester.enterText(find.byKey(const Key('revenue-balance')), '7500');
       await tester.tap(find.byKey(const Key('save-revenue')));
       await tester.pumpAndSettle();
 

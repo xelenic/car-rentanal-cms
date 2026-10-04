@@ -416,7 +416,7 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
       builder: (context) => AlertDialog(
         title: Text('Delete "${revenue.hire}"?'),
         content: Text(
-          '${formatRsExact(revenue.creditedAmount)} comes out of ${DateFormat('MMMM y').format(revenue.date)}\'s '
+          '${formatRsExact(revenue.balance)} comes out of ${DateFormat('MMMM y').format(revenue.date)}\'s '
           'other company revenue and out of My Profit. This can\'t be undone.',
         ),
         actions: [
@@ -687,7 +687,7 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
                     _onIncome
                         ? 'Total of the ${countOf(_incomes.length, 'entry', 'entries')} shown: ${formatRsExact(_filteredTotal)}'
                         : (_onRevenue
-                            ? 'Credited total of the ${countOf(_revenues.length, 'entry', 'entries')} shown: ${formatRsExact(_filteredTotal)}'
+                            ? 'Balance total of the ${countOf(_revenues.length, 'entry', 'entries')} shown: ${formatRsExact(_filteredTotal)}'
                             : 'Total of the ${countOf(_expenses.length, 'expense')} shown: ${formatRsExact(_filteredTotal)}'),
                     key: const Key('filtered-total'),
                     textAlign: TextAlign.end,
@@ -1024,9 +1024,10 @@ class _EntryTile extends StatelessWidget {
 }
 
 /// One revenue entry from another rental company: hire, booking number and
-/// vehicle, the credited amount as the headline figure, a secondary line
-/// with the full/balance/vehicle amounts, and a small clip icon when a bank
-/// slip is attached — with the same Edit / Delete menu as [_EntryTile].
+/// vehicle, the balance as the headline figure (what counts toward My
+/// Profit), a secondary line with the full/credited/vehicle amounts, and a
+/// small clip icon when a bank slip is attached — with the same Edit /
+/// Delete menu as [_EntryTile].
 class _RevenueTile extends StatelessWidget {
   const _RevenueTile({
     required this.revenue,
@@ -1075,7 +1076,7 @@ class _RevenueTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Full ${formatRsExact(revenue.fullAmount)} · Balance ${formatRsExact(revenue.balance)} · '
+                      'Full ${formatRsExact(revenue.fullAmount)} · Credited ${formatRsExact(revenue.creditedAmount)} · '
                       'Vehicle ${formatRsExact(revenue.vehicleAmount)}',
                       style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
                     ),
@@ -1086,8 +1087,12 @@ class _RevenueTile extends StatelessWidget {
               Padding(
                 padding: EdgeInsets.only(top: showMenu ? 10 : 0, right: showMenu ? 0 : 8),
                 child: Text(
-                  formatRsExact(revenue.creditedAmount),
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: AppColors.success),
+                  formatRsExact(revenue.balance),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14.5,
+                    color: revenue.balance < 0 ? AppColors.danger : AppColors.success,
+                  ),
                 ),
               ),
               if (showMenu)
