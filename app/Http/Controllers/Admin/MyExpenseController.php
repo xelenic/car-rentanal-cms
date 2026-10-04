@@ -66,7 +66,7 @@ class MyExpenseController extends Controller implements HasMiddleware
         } elseif ($tab === 'revenue') {
             $revenueQuery = OtherCompanyRevenue::query()->inMonth($year, $month)->matching($search);
             $revenues = (clone $revenueQuery)->orderByDesc('revenue_date')->orderByDesc('id')->paginate(15)->withQueryString();
-            $filteredRevenueTotal = round((float) $revenueQuery->sum('credited_amount'), 2);
+            $filteredRevenueTotal = round((float) $revenueQuery->sum('balance'), 2);
         } else {
             $listQuery = MyExpense::query()->inMonth($year, $month)->matching($category, $search);
             $expenses = (clone $listQuery)->with('categoryRecord')->orderByDesc('expense_date')->orderByDesc('id')->paginate(15)->withQueryString();

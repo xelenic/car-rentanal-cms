@@ -138,11 +138,11 @@ describe('the revenue list', function () {
         expect($response->viewData('revenues')->pluck('hire')->all())->toBe(['ZZZ late', 'ZZZ early']);
     });
 
-    it('searches the hire, booking number and vehicle, and says what the credited total comes to', function () {
+    it('searches the hire, booking number and vehicle, and says what the balance total comes to', function () {
         revenueOwner();
-        otherCompanyRevenue(['hire' => 'ZZZ Colombo to Kandy', 'booking_number' => 'ZZZ-BK-001', 'vehicle' => 'ZZZ Aqua', 'credited_amount' => 1000]);
-        otherCompanyRevenue(['hire' => 'ZZZ Galle Tour', 'booking_number' => 'ZZZ-BK-002', 'vehicle' => 'ZZZ Hiace', 'credited_amount' => 2000]);
-        otherCompanyRevenue(['hire' => 'ZZZ Ella Trip', 'booking_number' => 'BOOK-003', 'vehicle' => 'ZZZ Prius', 'credited_amount' => 500]);
+        otherCompanyRevenue(['hire' => 'ZZZ Colombo to Kandy', 'booking_number' => 'ZZZ-BK-001', 'vehicle' => 'ZZZ Aqua', 'balance' => 1000]);
+        otherCompanyRevenue(['hire' => 'ZZZ Galle Tour', 'booking_number' => 'ZZZ-BK-002', 'vehicle' => 'ZZZ Hiace', 'balance' => 2000]);
+        otherCompanyRevenue(['hire' => 'ZZZ Ella Trip', 'booking_number' => 'BOOK-003', 'vehicle' => 'ZZZ Prius', 'balance' => 500]);
 
         $byBookingNumber = $this->get('/admin/my-expenses?tab=revenue&search=BK-00')->assertOk();
 
@@ -171,10 +171,10 @@ describe('the revenue list', function () {
 });
 
 describe('my profit', function () {
-    it('adds the credited amount to the profit from hires, ignoring the full amount', function () {
+    it('adds the balance to the profit from hires, ignoring the full and credited amounts', function () {
         revenueOwner();
         revenueHire(8000); // profit 6,400
-        otherCompanyRevenue(['full_amount' => 10000, 'credited_amount' => 6000]);
+        otherCompanyRevenue(['full_amount' => 10000, 'credited_amount' => 9999, 'balance' => 6000]);
 
         $response = $this->get('/admin/my-expenses')->assertOk();
 
@@ -186,7 +186,7 @@ describe('my profit', function () {
     it('adds on top of other income, not instead of it', function () {
         revenueOwner();
         revenueHire(8000);
-        otherCompanyRevenue(['credited_amount' => 2000]);
+        otherCompanyRevenue(['balance' => 2000]);
 
         expect($this->get('/admin/my-expenses')->viewData('myProfit'))->toBe(8400.0); // 6,400 + 2,000
 
@@ -199,8 +199,8 @@ describe('my profit', function () {
         revenueOwner();
         revenueHire(8000);
         revenueHire(4000, '2026-08-10 09:00:00'); // August profit 3,200
-        otherCompanyRevenue(['credited_amount' => 1000, 'revenue_date' => '2026-09-05']);
-        otherCompanyRevenue(['credited_amount' => 700, 'revenue_date' => '2026-08-05']);
+        otherCompanyRevenue(['balance' => 1000, 'revenue_date' => '2026-09-05']);
+        otherCompanyRevenue(['balance' => 700, 'revenue_date' => '2026-08-05']);
 
         expect($this->get('/admin/my-expenses?year=2026&month=9')->viewData('myProfit'))->toBe(7400.0)
             ->and($this->get('/admin/my-expenses?year=2026&month=8')->viewData('myProfit'))->toBe(3900.0);
@@ -209,7 +209,7 @@ describe('my profit', function () {
     it('is not added to the dashboard\'s Total Profit, which stays the profit from hires', function () {
         revenueOwner(['my-expenses.view']);
         revenueHire(8000);
-        otherCompanyRevenue(['credited_amount' => 5000]);
+        otherCompanyRevenue(['balance' => 5000]);
 
         expect($this->get('/admin')->viewData('summary')['profit_total'])->toBe(6400.0);
     });
@@ -217,7 +217,7 @@ describe('my profit', function () {
     it('is explained line by line in the breakdown', function () {
         revenueOwner();
         revenueHire(8000);
-        otherCompanyRevenue(['credited_amount' => 2000, 'revenue_date' => '2026-09-08']);
+        otherCompanyRevenue(['balance' => 2000, 'revenue_date' => '2026-09-08']);
 
         $this->get('/admin/my-expenses')->assertOk()
             ->assertSee('Add: Other Company Revenue (1 entry)')
@@ -227,12 +227,20 @@ describe('my profit', function () {
 
     it('is worked out by the shared month report', function () {
         revenueHire(8000);
-        otherCompanyRevenue(['credited_amount' => 2000]);
+        otherCompanyRevenue(['balance' => 2000]);
 
         $report = MyExpenseReport::forMonth(2026, 9);
 
         expect($report['other_company_revenue_total'])->toBe(2000.0)->and($report['other_company_revenue_count'])->toBe(1)
             ->and($report['my_profit'])->toBe(8400.0);
+    });
+
+    it('allows a negative balance to reduce My Profit, for an overpayment', function () {
+        revenueOwner();
+        revenueHire(8000); // profit 6,400
+        otherCompanyRevenue(['balance' => -500]);
+
+        expect($this->get('/admin/my-expenses')->viewData('myProfit'))->toBe(5900.0); // 6,400 - 500
     });
 
     it('offers the years that only have other company revenue', function () {
@@ -304,7 +312,7 @@ describe('adding revenue', function () {
         revenueOwner();
         revenueHire(8000);
 
-        $this->post('/admin/other-company-revenues', revenueBody(['credited_amount' => '1000', 'revenue_date' => '2026-09-12']));
+        $this->post('/admin/other-company-revenues', revenueBody(['balance' => '1000', 'revenue_date' => '2026-09-12']));
 
         expect($this->get('/admin/my-expenses')->viewData('myProfit'))->toBe(7400.0);
     });
@@ -353,7 +361,7 @@ describe('editing and deleting revenue', function () {
     });
 
     it('takes deleted revenue out of My Profit', function () {
-        $revenue = otherCompanyRevenue(['credited_amount' => 1000]);
+        $revenue = otherCompanyRevenue(['balance' => 1000]);
         revenueHire(8000);
         revenueOwner();
         expect($this->get('/admin/my-expenses')->viewData('myProfit'))->toBe(7400.0);

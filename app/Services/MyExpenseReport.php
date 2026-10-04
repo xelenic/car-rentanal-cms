@@ -47,10 +47,10 @@ class MyExpenseReport
         $monthIncome = OtherIncome::query()->inMonth($year, $month);
         $otherIncomeTotal = round((float) (clone $monthIncome)->sum('amount'), 2);
 
-        // Only the credited amount — what has actually been received from the
-        // other company — counts as realized income here.
+        // The balance — entered by hand, independent of the full/credited
+        // amounts — is what counts as realized income here.
         $monthRevenue = OtherCompanyRevenue::query()->inMonth($year, $month);
-        $otherCompanyRevenueTotal = round((float) (clone $monthRevenue)->sum('credited_amount'), 2);
+        $otherCompanyRevenueTotal = round((float) (clone $monthRevenue)->sum('balance'), 2);
 
         $profit = ProfitCalculator::breakdownFor($year, $month);
 

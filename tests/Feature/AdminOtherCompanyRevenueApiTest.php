@@ -130,10 +130,10 @@ describe('a month of revenue', function () {
             ->toBe(['ZZZ Jaffna Run', 'ZZZ Nuwara Eliya Trip']);
     });
 
-    it('filters the total by the credited amount, not the full amount', function () {
+    it('filters the total by the balance, not the full or credited amount', function () {
         revenueApiOwner();
-        apiRevenue(['full_amount' => 10000, 'credited_amount' => 4000]);
-        apiRevenue(['full_amount' => 5000, 'credited_amount' => 2000]);
+        apiRevenue(['full_amount' => 10000, 'credited_amount' => 9999, 'balance' => 4000]);
+        apiRevenue(['full_amount' => 5000, 'credited_amount' => 9999, 'balance' => 2000]);
 
         $this->getJson('/api/admin/other-company-revenues')->assertJsonPath('filtered_total', 6000);
     });
@@ -141,7 +141,7 @@ describe('a month of revenue', function () {
     it('carries the same summary as the expenses list, so the cards stay right whichever tab is open', function () {
         revenueApiOwner();
         apiRevenueHire(8000);
-        apiRevenue(['credited_amount' => 1500]);
+        apiRevenue(['balance' => 1500]);
         MyExpense::create(['title' => 'ZZZ Rent', 'category' => 'rent', 'amount' => 1000, 'expense_date' => '2026-09-10']);
 
         $fromRevenue = $this->getJson('/api/admin/other-company-revenues')->json('summary');
@@ -204,9 +204,18 @@ describe('adding revenue', function () {
         revenueApiOwner();
         apiRevenueHire(8000);
 
-        $this->postJson('/api/admin/other-company-revenues', apiRevenueBody(['credited_amount' => '1000', 'revenue_date' => '2026-09-12']))->assertCreated();
+        $this->postJson('/api/admin/other-company-revenues', apiRevenueBody(['balance' => '1000', 'revenue_date' => '2026-09-12']))->assertCreated();
 
         $this->getJson('/api/admin/my-expenses')->assertJsonPath('summary.my_profit', 7400);
+    });
+
+    it('a negative balance reduces My Profit', function () {
+        revenueApiOwner();
+        apiRevenueHire(8000); // profit 6,400
+
+        $this->postJson('/api/admin/other-company-revenues', apiRevenueBody(['balance' => '-500.25', 'revenue_date' => '2026-09-12']))->assertCreated();
+
+        $this->getJson('/api/admin/my-expenses')->assertJsonPath('summary.my_profit', 5899.75);
     });
 });
 

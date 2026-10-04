@@ -61,8 +61,6 @@
             class="form-control @if ($formErrors->has('credited_amount')) is-invalid @endif" placeholder="0.00" required>
         @if ($formErrors->has('credited_amount'))
             <div class="invalid-feedback">{{ $formErrors->first('credited_amount') }}</div>
-        @else
-            <div class="form-text">Counts toward My Profit.</div>
         @endif
     </div>
 
@@ -72,6 +70,8 @@
             class="form-control @if ($formErrors->has('balance')) is-invalid @endif" placeholder="0.00" required>
         @if ($formErrors->has('balance'))
             <div class="invalid-feedback">{{ $formErrors->first('balance') }}</div>
+        @else
+            <div class="form-text">Counts toward My Profit.</div>
         @endif
     </div>
 

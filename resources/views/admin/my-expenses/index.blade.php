@@ -292,8 +292,8 @@
                             <td class="text-muted" style="font-size: .8rem;">{{ $revenue->booking_number }}</td>
                             <td style="font-size: .8rem;">{{ $revenue->vehicle }}</td>
                             <td class="text-end text-nowrap">Rs. {{ number_format($revenue->full_amount, 2) }}</td>
-                            <td class="text-end fw-semibold text-success text-nowrap">Rs. {{ number_format($revenue->credited_amount, 2) }}</td>
-                            <td class="text-end text-nowrap {{ $revenue->balance > 0 ? 'text-danger' : '' }}">Rs. {{ number_format($revenue->balance, 2) }}</td>
+                            <td class="text-end text-nowrap">Rs. {{ number_format($revenue->credited_amount, 2) }}</td>
+                            <td class="text-end fw-semibold text-nowrap {{ $revenue->balance < 0 ? 'text-danger' : 'text-success' }}">Rs. {{ number_format($revenue->balance, 2) }}</td>
                             <td class="text-end text-nowrap">Rs. {{ number_format($revenue->vehicle_amount, 2) }}</td>
                             <td class="text-end">
                                 <div class="d-inline-flex gap-1">
@@ -331,9 +331,9 @@
                 @if ($isFiltered && $revenues->total() > 0)
                     <tfoot>
                         <tr>
-                            <td colspan="5" class="text-muted text-end">Total credited of the {{ number_format($revenues->total()) }} shown</td>
+                            <td colspan="6" class="text-muted text-end">Total balance of the {{ number_format($revenues->total()) }} shown</td>
                             <td class="text-end fw-bold text-success text-nowrap" id="filtered-revenue-total">Rs. {{ number_format($filteredRevenueTotal, 2) }}</td>
-                            <td colspan="3"></td>
+                            <td colspan="2"></td>
                         </tr>
                     </tfoot>
                 @endif

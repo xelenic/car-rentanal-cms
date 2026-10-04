@@ -30,7 +30,7 @@ class OtherCompanyRevenueController extends Controller
     /**
      * One month's revenue from other companies, newest first. The "summary"
      * always covers the whole month; a search only narrows the list (and
-     * gives "filtered_total" — the credited total of what's shown).
+     * gives "filtered_total" — the balance total of what's shown).
      */
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -54,7 +54,7 @@ class OtherCompanyRevenueController extends Controller
 
         return OtherCompanyRevenueResource::collection($revenues)->additional([
             'summary' => MyExpenseReport::summaryFor($year, $month),
-            'filtered_total' => round((float) $listQuery->sum('credited_amount'), 2),
+            'filtered_total' => round((float) $listQuery->sum('balance'), 2),
             'years' => MyExpenseReport::availableYears($year),
         ]);
     }
