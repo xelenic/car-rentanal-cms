@@ -921,9 +921,17 @@ class FakeServer {
           .where((h) => dateTo == null || ((h['start_time'] as String?)?.compareTo('$dateTo 23:59:59') ?? 1) <= 0)
           .toList();
       final start = (page - 1) * pageSize;
+      final fullValueTotal = matching.fold<num>(0, (sum, h) => sum + (h['hire_full_value'] as num));
+      final ourValueTotal = matching.fold<num>(0, (sum, h) => sum + (h['our_hire_value'] as num));
       return _json({
         'data': matching.skip(start).take(pageSize).toList(),
         'meta': {'current_page': page, 'last_page': (matching.length / pageSize).ceil().clamp(1, 999)},
+        'summary': {
+          'count': matching.length,
+          'hire_full_value_total': fullValueTotal,
+          'our_hire_value_total': ourValueTotal,
+          'commission_total': fullValueTotal - ourValueTotal,
+        },
       });
     }
 
@@ -1003,6 +1011,10 @@ class FakeServer {
         final found = list.where((h) => h['id'] == id).firstOrNull;
         if (found != null) return _json({'data': {...found}..remove('_tab')..remove('_month')});
       }
+      // Not under any vehicle's own list — HiresScreen's (and the customer
+      // page's) general list lives in allHires instead.
+      final foundInAll = allHires.where((h) => h['id'] == id).firstOrNull;
+      if (foundInAll != null) return _json({'data': {...foundInAll}..remove('_tab')..remove('_month')});
       return _json({'message': 'Not found.'}, 404);
     }
 

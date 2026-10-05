@@ -163,3 +163,44 @@ it('is forbidden without the hires.view permission', function () {
 
     $this->getJson('/api/admin/hires')->assertForbidden();
 });
+
+describe('the summary totals', function () {
+    it('totals everything the filters match, not just the page shown', function () {
+        apiHiresAdmin();
+        $amal = apiFilterCustomer('ZZZ Amal');
+        apiFilterHire(['customer_id' => $amal->id, 'hire_full_value' => 5000, 'our_hire_value' => 3500]);
+        apiFilterHire(['customer_id' => $amal->id, 'hire_full_value' => 3000, 'our_hire_value' => 2000]);
+        apiFilterHire(['hire_full_value' => 9999, 'our_hire_value' => 9999]); // someone else's — excluded
+
+        $response = $this->getJson('/api/admin/hires?customer_id='.$amal->id)->assertOk();
+
+        $response->assertJsonPath('summary.count', 2)
+            ->assertJsonPath('summary.hire_full_value_total', 8000)
+            ->assertJsonPath('summary.our_hire_value_total', 5500)
+            ->assertJsonPath('summary.commission_total', 2500);
+    });
+
+    it('is zero for a filter that matches nothing', function () {
+        apiHiresAdmin();
+
+        $this->getJson('/api/admin/hires?customer_id=999999')->assertOk()
+            ->assertJsonPath('summary.count', 0)
+            ->assertJsonPath('summary.hire_full_value_total', 0)
+            ->assertJsonPath('summary.our_hire_value_total', 0)
+            ->assertJsonPath('summary.commission_total', 0);
+    });
+
+    it('counts every matching hire even across more than one page', function () {
+        apiHiresAdmin();
+        $amal = apiFilterCustomer('ZZZ Amal');
+        foreach (range(1, 25) as $n) {
+            apiFilterHire(['customer_id' => $amal->id, 'hire_full_value' => 100, 'our_hire_value' => 80]);
+        }
+
+        $response = $this->getJson('/api/admin/hires?customer_id='.$amal->id)->assertOk();
+
+        expect($response->json('data'))->toHaveCount(20); // page size
+        $response->assertJsonPath('summary.count', 25)
+            ->assertJsonPath('summary.hire_full_value_total', 2500);
+    });
+});

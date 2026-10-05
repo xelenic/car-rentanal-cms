@@ -2,8 +2,15 @@ import 'package:admin_app/screens/drivers_tab.dart';
 import 'package:admin_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 
 import 'support/fake_server.dart';
+
+final _now = DateTime.now();
+final _thisMonth = DateTime(_now.year, _now.month);
+final _lastMonth = DateTime(_now.year, _now.month - 1);
+final _thisMonthLabel = DateFormat('MMMM y').format(_thisMonth);
+final _lastMonthLabel = DateFormat('MMMM y').format(_lastMonth);
 
 Future<void> _show(WidgetTester tester, FakeServer server) async {
   tester.view.physicalSize = const Size(412, 900);
@@ -170,6 +177,72 @@ void main() {
 
       expect(server.deletedDrivers, [1]);
       expect(find.text('ZZZ Test Zebra'), findsNothing); // popped, and gone from the roster
+    });
+  });
+
+  group('the Hires tab', () {
+    Future<void> openHiresTab(WidgetTester tester, FakeServer server) async {
+      await _show(tester, server);
+      await tester.tap(find.byKey(const Key('driver-card-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('tab-hires')));
+      await tester.pumpAndSettle();
+    }
+
+    /// Driver 1 has two hires this month and one last month; driver 2's hire
+    /// this month belongs to someone else and must never show up.
+    FakeServer withHires() => _roster()
+      ..allHires.addAll([
+        hireJson(id: 101, driverId: 1, driver: 'ZZZ Test Zebra', full: 5000, our: 4000, startTime: dayOf(_thisMonth, 3)),
+        hireJson(id: 102, driverId: 1, driver: 'ZZZ Test Zebra', full: 3000, our: 2000, startTime: dayOf(_thisMonth, 15)),
+        hireJson(id: 103, driverId: 1, driver: 'ZZZ Test Zebra', full: 7000, our: 5000, startTime: dayOf(_lastMonth, 20)),
+        hireJson(id: 104, driverId: 2, driver: 'ZZZ Test Apple', full: 9999, our: 9999, startTime: dayOf(_thisMonth, 10)),
+      ]);
+
+    testWidgets('shows this month\'s hires for the driver, with the total', (tester) async {
+      final server = withHires();
+      await openHiresTab(tester, server);
+
+      expect(find.text(_thisMonthLabel), findsOneWidget);
+      expect(find.text('Rs. 5,000'), findsOneWidget); // hire 101
+      expect(find.text('Rs. 3,000'), findsOneWidget); // hire 102
+      expect(find.text('Rs. 7,000'), findsNothing); // hire 103, last month
+      expect(find.text('Rs. 9,999'), findsNothing); // hire 104, someone else's
+
+      final queries = server.requestsTo('/api/admin/hires').map((r) => r.url.queryParameters);
+      expect(queries.last['driver_id'], '1');
+      // 5,000 + 3,000 full, 4,000 + 2,000 our.
+      expect(find.text('2 hires · Rs. 8,000 total · Rs. 6,000 our value · Rs. 2,000 commission'), findsOneWidget);
+    });
+
+    testWidgets('stepping to the previous month shows that month instead', (tester) async {
+      final server = withHires();
+      await openHiresTab(tester, server);
+
+      await tester.tap(find.byKey(const Key('hire-history-month-prev')));
+      await tester.pumpAndSettle();
+
+      expect(find.text(_lastMonthLabel), findsOneWidget);
+      expect(find.text('Rs. 7,000'), findsOneWidget); // hire 103
+      expect(find.text('Rs. 5,000'), findsNothing); // hire 101, this month
+      expect(find.text('1 hire · Rs. 7,000 total · Rs. 5,000 our value · Rs. 2,000 commission'), findsOneWidget);
+    });
+
+    testWidgets('an empty month says so', (tester) async {
+      await openHiresTab(tester, _roster());
+
+      expect(find.text('No hires this month'), findsOneWidget);
+      expect(find.text('Nothing recorded for $_thisMonthLabel.'), findsOneWidget);
+      expect(find.text('0 hires · Rs. 0 total · Rs. 0 our value · Rs. 0 commission'), findsOneWidget);
+    });
+
+    testWidgets('tapping a hire opens its details', (tester) async {
+      await openHiresTab(tester, withHires());
+
+      await tester.tap(find.text('Rs. 5,000')); // hire 101
+      await tester.pumpAndSettle();
+
+      expect(find.text('Hire #101'), findsOneWidget);
     });
   });
 }

@@ -297,13 +297,26 @@ class _VehicleHeader extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 12),
-          Row(
-            children: [
-              _stat('Hires', '${stats.hireCount}'),
-              _stat('Hire value', formatRsShort(stats.hireFullValueTotal)),
-              _stat('Our value', formatRsShort(stats.ourHireValueTotal)),
-              _stat('Commission', formatRsShort(stats.commissionTotal)),
-            ],
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _stat('Hires', '${stats.hireCount}')),
+                const SizedBox(width: 8),
+                Expanded(child: _stat('Hire value', formatRsShort(stats.hireFullValueTotal))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _stat('Our value', formatRsShort(stats.ourHireValueTotal))),
+                const SizedBox(width: 8),
+                Expanded(child: _stat('Commission', formatRsShort(stats.commissionTotal))),
+              ],
+            ),
           ),
           if (showThisMonth) ...[
             const SizedBox(height: 8),
@@ -317,20 +330,21 @@ class _VehicleHeader extends StatelessWidget {
     );
   }
 
+  /// Plain label + value — two to a row gives each one enough room for a
+  /// full "Rs. 358,000" without the value having to shrink to fit.
   Widget _stat(String label, String value) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
-          const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(value, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+        const SizedBox(height: 2),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(value, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
+        ),
+      ],
     );
   }
 }

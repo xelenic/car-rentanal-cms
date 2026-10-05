@@ -180,14 +180,49 @@ class Hire {
   }
 }
 
+/// The totals of every hire a filter matches (not just the page shown) —
+/// mirrors the "summary" block Api\Admin\HireController::index() adds
+/// alongside the paginated list.
+class HireListSummary {
+  const HireListSummary({
+    this.count = 0,
+    this.hireFullValueTotal = 0,
+    this.ourHireValueTotal = 0,
+    this.commissionTotal = 0,
+  });
+
+  final int count;
+  final double hireFullValueTotal;
+  final double ourHireValueTotal;
+  final double commissionTotal;
+
+  factory HireListSummary.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const HireListSummary();
+    return HireListSummary(
+      count: (json['count'] as num?)?.toInt() ?? 0,
+      hireFullValueTotal: Hire._parseDouble(json['hire_full_value_total']),
+      ourHireValueTotal: Hire._parseDouble(json['our_hire_value_total']),
+      commissionTotal: Hire._parseDouble(json['commission_total']),
+    );
+  }
+}
+
 /// A page of hires from the paginated /api/admin/hires index endpoint
 /// (Laravel's default Resource collection pagination envelope).
 class HirePage {
-  const HirePage({required this.hires, required this.currentPage, required this.lastPage});
+  const HirePage({
+    required this.hires,
+    required this.currentPage,
+    required this.lastPage,
+    this.summary = const HireListSummary(),
+  });
 
   final List<Hire> hires;
   final int currentPage;
   final int lastPage;
+
+  /// Totals of every hire the request's filters matched, not just this page.
+  final HireListSummary summary;
 
   bool get hasMore => currentPage < lastPage;
 
@@ -201,6 +236,7 @@ class HirePage {
       hires: data,
       currentPage: (meta?['current_page'] as int?) ?? 1,
       lastPage: (meta?['last_page'] as int?) ?? 1,
+      summary: HireListSummary.fromJson(json['summary'] as Map<String, dynamic>?),
     );
   }
 }

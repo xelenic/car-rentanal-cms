@@ -4,9 +4,12 @@ import '../models/admin_user.dart';
 import '../models/customer.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
+import '../widgets/hire_history_tab.dart';
 import 'customer_form_screen.dart';
 
-/// One customer's details, with Edit/Delete as the signed-in user's permissions allow.
+/// One customer's details, with Edit/Delete as the signed-in user's
+/// permissions allow — and, on its own tab, their hires for one month at a
+/// time (current month first).
 class CustomerDetailScreen extends StatefulWidget {
   const CustomerDetailScreen({super.key, required this.customer, this.user});
 
@@ -17,11 +20,18 @@ class CustomerDetailScreen extends StatefulWidget {
   State<CustomerDetailScreen> createState() => _CustomerDetailScreenState();
 }
 
-class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
+class _CustomerDetailScreenState extends State<CustomerDetailScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabs = TabController(length: 2, vsync: this);
   late Customer _customer = widget.customer;
 
   bool get _canEdit => widget.user?.canUpdateCustomers ?? false;
   bool get _canDelete => widget.user?.canDeleteCustomers ?? false;
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
 
   Future<void> _edit() async {
     final updated = await Navigator.of(context).push<Customer>(
@@ -89,18 +99,49 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
             ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Column(
         children: [
-          _Field(icon: Icons.call_outlined, label: 'Phone', value: _customer.phone),
-          if (_customer.email != null) _Field(icon: Icons.mail_outline_rounded, label: 'Email', value: _customer.email!),
-          if (_customer.nicPassport != null)
-            _Field(icon: Icons.badge_outlined, label: 'NIC / Passport', value: _customer.nicPassport!),
-          if (_customer.address != null)
-            _Field(icon: Icons.location_on_outlined, label: 'Address', value: _customer.address!),
-          if (_customer.notes != null) _Field(icon: Icons.sticky_note_2_outlined, label: 'Notes', value: _customer.notes!),
+          Container(
+            color: AppColors.surface,
+            child: TabBar(
+              controller: _tabs,
+              labelColor: AppColors.primary,
+              unselectedLabelColor: AppColors.textSecondary,
+              indicatorColor: AppColors.primary,
+              dividerColor: AppColors.border,
+              labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+              tabs: const [
+                Tab(key: Key('tab-details'), text: 'Details'),
+                Tab(key: Key('tab-hires'), text: 'Hires'),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabs,
+              children: [
+                _buildDetails(),
+                HireHistoryTab(customerId: _customer.id, user: widget.user),
+              ],
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDetails() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _Field(icon: Icons.call_outlined, label: 'Phone', value: _customer.phone),
+        if (_customer.email != null) _Field(icon: Icons.mail_outline_rounded, label: 'Email', value: _customer.email!),
+        if (_customer.nicPassport != null)
+          _Field(icon: Icons.badge_outlined, label: 'NIC / Passport', value: _customer.nicPassport!),
+        if (_customer.address != null)
+          _Field(icon: Icons.location_on_outlined, label: 'Address', value: _customer.address!),
+        if (_customer.notes != null) _Field(icon: Icons.sticky_note_2_outlined, label: 'Notes', value: _customer.notes!),
+      ],
     );
   }
 }

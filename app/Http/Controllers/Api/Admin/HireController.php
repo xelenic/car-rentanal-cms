@@ -35,11 +35,7 @@ class HireController extends Controller
 
         $showUpcoming = $request->boolean('upcoming');
 
-        $hires = Hire::query()
-            ->with([
-                'package', 'customer', 'driver', 'vehicle',
-                'fromLocation.location', 'toLocation.location', 'stayLocations.location',
-            ])
+        $filtered = Hire::query()
             ->when($request->string('search')->toString(), function ($query, $search) {
                 $query->where(function ($query) use ($search) {
                     $query->where('description', 'like', "%{$search}%")
@@ -58,11 +54,34 @@ class HireController extends Controller
             ->when($request->filled('vehicle_id'), fn ($query) => $query->where('vehicle_id', $request->integer('vehicle_id')))
             ->when($request->filled('customer_id'), fn ($query) => $query->where('customer_id', $request->integer('customer_id')))
             ->when($this->parseDate($request, 'date_from'), fn ($query, $date) => $query->whereDate('start_time', '>=', $date))
-            ->when($this->parseDate($request, 'date_to'), fn ($query, $date) => $query->whereDate('start_time', '<=', $date))
+            ->when($this->parseDate($request, 'date_to'), fn ($query, $date) => $query->whereDate('start_time', '<=', $date));
+
+        // The totals of everything the filters match, not just the page
+        // shown — a customer's "this month" tab wants the real total, not
+        // just what fits on page one. Cloned before ->with() so the raw
+        // aggregate select doesn't trip over hydrating eager-loaded relations.
+        $summaryRow = (clone $filtered)
+            ->selectRaw('COUNT(*) as count, COALESCE(SUM(hire_full_value), 0) as full_value, COALESCE(SUM(our_hire_value), 0) as our_value')
+            ->first();
+        $fullValueTotal = round((float) $summaryRow->full_value, 2);
+        $ourValueTotal = round((float) $summaryRow->our_value, 2);
+
+        $hires = $filtered
+            ->with([
+                'package', 'customer', 'driver', 'vehicle',
+                'fromLocation.location', 'toLocation.location', 'stayLocations.location',
+            ])
             ->when($showUpcoming, fn ($query) => $query->orderBy('start_time'), fn ($query) => $query->latest())
             ->paginate(20);
 
-        return HireResource::collection($hires);
+        return HireResource::collection($hires)->additional([
+            'summary' => [
+                'count' => (int) $summaryRow->count,
+                'hire_full_value_total' => $fullValueTotal,
+                'our_hire_value_total' => $ourValueTotal,
+                'commission_total' => round($fullValueTotal - $ourValueTotal, 2),
+            ],
+        ]);
     }
 
     public function show(Request $request, Hire $hire): HireResource

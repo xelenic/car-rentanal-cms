@@ -4,9 +4,12 @@ import '../models/admin_user.dart';
 import '../models/driver.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
+import '../widgets/hire_history_tab.dart';
 import 'driver_form_screen.dart';
 
-/// One driver's details, with Edit/Delete as the signed-in user's permissions allow.
+/// One driver's details, with Edit/Delete as the signed-in user's
+/// permissions allow — and, on its own tab, their hires for one month at a
+/// time (current month first).
 class DriverDetailScreen extends StatefulWidget {
   const DriverDetailScreen({super.key, required this.driver, this.user});
 
@@ -17,11 +20,18 @@ class DriverDetailScreen extends StatefulWidget {
   State<DriverDetailScreen> createState() => _DriverDetailScreenState();
 }
 
-class _DriverDetailScreenState extends State<DriverDetailScreen> {
+class _DriverDetailScreenState extends State<DriverDetailScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabs = TabController(length: 2, vsync: this);
   late Driver _driver = widget.driver;
 
   bool get _canEdit => widget.user?.canUpdateDrivers ?? false;
   bool get _canDelete => widget.user?.canDeleteDrivers ?? false;
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
 
   Future<void> _edit() async {
     final updated = await Navigator.of(context).push<Driver>(
@@ -89,16 +99,47 @@ class _DriverDetailScreenState extends State<DriverDetailScreen> {
             ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Column(
         children: [
-          _Field(icon: Icons.badge_outlined, label: 'License', value: _driver.license),
-          _Field(icon: Icons.call_outlined, label: 'Contact number', value: _driver.contactNumber),
-          if (_driver.additionalPhoneNumber != null)
-            _Field(icon: Icons.phone_forwarded_outlined, label: 'Additional phone', value: _driver.additionalPhoneNumber!),
-          _Field(icon: Icons.mail_outline_rounded, label: 'Email', value: _driver.email),
+          Container(
+            color: AppColors.surface,
+            child: TabBar(
+              controller: _tabs,
+              labelColor: AppColors.primary,
+              unselectedLabelColor: AppColors.textSecondary,
+              indicatorColor: AppColors.primary,
+              dividerColor: AppColors.border,
+              labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+              tabs: const [
+                Tab(key: Key('tab-details'), text: 'Details'),
+                Tab(key: Key('tab-hires'), text: 'Hires'),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabs,
+              children: [
+                _buildDetails(),
+                HireHistoryTab(driverId: _driver.id, user: widget.user),
+              ],
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDetails() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _Field(icon: Icons.badge_outlined, label: 'License', value: _driver.license),
+        _Field(icon: Icons.call_outlined, label: 'Contact number', value: _driver.contactNumber),
+        if (_driver.additionalPhoneNumber != null)
+          _Field(icon: Icons.phone_forwarded_outlined, label: 'Additional phone', value: _driver.additionalPhoneNumber!),
+        _Field(icon: Icons.mail_outline_rounded, label: 'Email', value: _driver.email),
+      ],
     );
   }
 }
