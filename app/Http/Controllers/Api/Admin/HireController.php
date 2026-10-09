@@ -36,8 +36,14 @@ class HireController extends Controller
         $showUpcoming = $request->boolean('upcoming');
         $dateFrom = $this->parseDate($request, 'date_from');
         $dateTo = $this->parseDate($request, 'date_to');
+        $tab = $request->filled('tab') && in_array($request->string('tab')->toString(), Hire::TABS, true)
+            ? $request->string('tab')->toString()
+            : 'all';
 
-        $filtered = Hire::query()
+        // Every filter except the tab itself — cloned once per tab below so
+        // each tab's own count (and the page shown) reflects the same
+        // driver/vehicle/customer/search/date filters, just split by status.
+        $preTab = Hire::query()
             ->when($request->string('search')->toString(), function ($query, $search) {
                 $query->where(function ($query) use ($search) {
                     $query->where('description', 'like', "%{$search}%")
@@ -60,6 +66,12 @@ class HireController extends Controller
             // Hire::scopeInDateRange().
             ->when($dateFrom || $dateTo, fn ($query) => $query->inDateRange($dateFrom, $dateTo));
 
+        $tabCounts = collect(Hire::TABS)->mapWithKeys(
+            fn ($oneTab) => [$oneTab => (clone $preTab)->tab($oneTab)->count()]
+        );
+
+        $filtered = (clone $preTab)->tab($tab);
+
         // The totals of everything the filters match, not just the page
         // shown — a customer's "this month" tab wants the real total, not
         // just what fits on page one. Cloned before ->with() so the raw
@@ -70,12 +82,23 @@ class HireController extends Controller
         $fullValueTotal = round((float) $summaryRow->full_value, 2);
         $ourValueTotal = round((float) $summaryRow->our_value, 2);
 
+        // Same ordering as the per-vehicle tabbed list (Api\Admin\VehicleController::hires()):
+        // today soonest-first (started hires first), scheduled soonest-first,
+        // completed/cancelled most-recent-first — "all" keeps this
+        // endpoint's own pre-existing upcoming/latest behavior.
+        match ($tab) {
+            'today' => $filtered->orderByRaw("CASE WHEN status = 'started' THEN 0 ELSE 1 END")
+                ->orderByRaw('COALESCE(start_time, created_at) asc'),
+            'scheduled' => $filtered->orderBy('start_time'),
+            'completed', 'cancelled' => $filtered->orderByRaw('COALESCE(start_time, created_at) desc'),
+            default => $showUpcoming ? $filtered->orderBy('start_time') : $filtered->latest(),
+        };
+
         $hires = $filtered
             ->with([
                 'package', 'customer', 'driver', 'vehicle',
                 'fromLocation.location', 'toLocation.location', 'stayLocations.location',
             ])
-            ->when($showUpcoming, fn ($query) => $query->orderBy('start_time'), fn ($query) => $query->latest())
             ->paginate(20);
 
         return HireResource::collection($hires)->additional([
@@ -84,6 +107,7 @@ class HireController extends Controller
                 'hire_full_value_total' => $fullValueTotal,
                 'our_hire_value_total' => $ourValueTotal,
                 'commission_total' => round($fullValueTotal - $ourValueTotal, 2),
+                'tab_counts' => $tabCounts,
             ],
         ]);
     }

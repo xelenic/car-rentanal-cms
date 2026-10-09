@@ -132,6 +132,10 @@ void main() {
       await _show(tester, server);
       await tester.tap(find.byKey(const Key('driver-card-1')));
       await tester.pumpAndSettle();
+
+      // Overview is the default (leading) tab; these tests want Details.
+      await tester.tap(find.byKey(const Key('tab-details')));
+      await tester.pumpAndSettle();
     }
 
     testWidgets('shows the driver\'s details', (tester) async {
@@ -177,6 +181,58 @@ void main() {
 
       expect(server.deletedDrivers, [1]);
       expect(find.text('ZZZ Test Zebra'), findsNothing); // popped, and gone from the roster
+    });
+  });
+
+  group('the Overview tab', () {
+    Future<void> openOverview(WidgetTester tester, FakeServer server) async {
+      await _show(tester, server);
+      await tester.tap(find.byKey(const Key('driver-card-1')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('is the default tab, showing the month\'s salary and figures', (tester) async {
+      final server = _roster()
+        ..driverSummary = defaultDriverSummaryJson(
+          year: _now.year,
+          month: _now.month,
+          hireCount: 2,
+          hireFullValueTotal: 8000,
+          ourHireValueTotal: 6000,
+          commissionTotal: 2000,
+          expensesTotal: 500,
+          salaryPayable: 1200,
+        );
+      await openOverview(tester, server);
+
+      expect(find.byKey(const Key('driver-overview-salary')), findsOneWidget);
+      expect(find.text(_thisMonthLabel), findsOneWidget);
+      expect(find.text('Rs. 1,200.00'), findsOneWidget);
+      expect(find.text('Salary Payable · 2 hires'), findsOneWidget);
+      expect(find.text('Full Value'), findsOneWidget);
+      expect(find.text('Our Hire Value'), findsOneWidget);
+      expect(find.text('Commission'), findsOneWidget);
+      expect(find.text('Expenses'), findsOneWidget);
+    });
+
+    testWidgets('shows a payroll status pill once it is finalized or paid', (tester) async {
+      final server = _roster()
+        ..driverSummary = defaultDriverSummaryJson(year: _now.year, month: _now.month, payrollStatus: 'paid');
+      await openOverview(tester, server);
+
+      expect(find.text('Paid'), findsOneWidget);
+    });
+
+    testWidgets('stepping to the previous month asks for that period', (tester) async {
+      final server = _roster()..driverSummary = defaultDriverSummaryJson(year: _now.year, month: _now.month);
+      await openOverview(tester, server);
+
+      await tester.tap(find.byKey(const Key('driver-overview-month-prev')));
+      await tester.pumpAndSettle();
+
+      final requests = server.requestsTo('/api/admin/drivers/1/summary');
+      expect(requests.last.url.queryParameters['year'], '${_lastMonth.year}');
+      expect(requests.last.url.queryParameters['month'], '${_lastMonth.month}');
     });
   });
 

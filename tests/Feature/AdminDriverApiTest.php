@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\Driver;
+use App\Models\DriverPayroll;
+use App\Models\Hire;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -212,6 +214,85 @@ describe('editing a driver', function () {
         $this->putJson('/api/admin/drivers/999', [
             'name' => 'ZZZ', 'license' => 'ZZZ', 'contact_number' => '0770000000', 'email' => 'zzz@example.test',
         ])->assertNotFound();
+    });
+});
+
+describe('the summary (Overview tab)', function () {
+    it('needs drivers.view', function () {
+        $driver = testDriver();
+        signedInForDrivers(['hires.view']);
+
+        $this->getJson("/api/admin/drivers/{$driver->id}/summary")->assertForbidden();
+    });
+
+    it('totals this driver\'s hires for the given month, not another driver\'s', function () {
+        signedInForDrivers();
+        $driver = testDriver('ZZZ Nimal');
+        $someoneElse = testDriver('ZZZ Kamal', ['email' => 'zzz.kamal@example.test']);
+
+        Hire::create([
+            'tour_type' => 'drop_pickup', 'hire_full_value' => 5000, 'our_hire_value' => 3500,
+            'payment_type' => 'cash', 'start_time' => '2026-09-10 10:00:00', 'driver_id' => $driver->id,
+        ]);
+        Hire::create([
+            'tour_type' => 'drop_pickup', 'hire_full_value' => 3000, 'our_hire_value' => 2000,
+            'payment_type' => 'cash', 'start_time' => '2026-09-15 10:00:00', 'driver_id' => $driver->id,
+        ]);
+        Hire::create([
+            'tour_type' => 'drop_pickup', 'hire_full_value' => 9999, 'our_hire_value' => 9999,
+            'payment_type' => 'cash', 'start_time' => '2026-09-10 10:00:00', 'driver_id' => $someoneElse->id,
+        ]);
+        Hire::create([
+            'tour_type' => 'drop_pickup', 'hire_full_value' => 7777, 'our_hire_value' => 7777,
+            'payment_type' => 'cash', 'start_time' => '2026-08-10 10:00:00', 'driver_id' => $driver->id,
+        ]);
+
+        $response = $this->getJson("/api/admin/drivers/{$driver->id}/summary?year=2026&month=9")->assertOk();
+
+        $response->assertJsonPath('year', 2026)
+            ->assertJsonPath('month', 9)
+            ->assertJsonPath('period_label', 'September 2026')
+            ->assertJsonPath('summary.hire_count', 2)
+            ->assertJsonPath('summary.hire_full_value_total', 8000)
+            ->assertJsonPath('summary.our_hire_value_total', 5500)
+            ->assertJsonPath('summary.commission_total', 2500);
+    });
+
+    it('defaults to the current month when none is given', function () {
+        signedInForDrivers();
+        $driver = testDriver();
+
+        $response = $this->getJson("/api/admin/drivers/{$driver->id}/summary")->assertOk();
+
+        $response->assertJsonPath('year', (int) now()->format('Y'))
+            ->assertJsonPath('month', (int) now()->format('n'));
+    });
+
+    it('uses a finalized payroll\'s amount over the calculated one, when there is one', function () {
+        signedInForDrivers();
+        $driver = testDriver();
+        Hire::create([
+            'tour_type' => 'drop_pickup', 'hire_full_value' => 5000, 'our_hire_value' => 3500,
+            'payment_type' => 'cash', 'start_time' => '2026-09-10 10:00:00', 'driver_id' => $driver->id,
+        ]);
+        DriverPayroll::create([
+            'driver_id' => $driver->id, 'year' => 2026, 'month' => 9, 'hire_count' => 1,
+            'our_hire_value_total' => 3500, 'expenses_total' => 0, 'salary' => 700,
+            'advance_deduction_total' => 0, 'carryover_deduction_total' => 0, 'arrears_deduction_total' => 0,
+            'deposit_balance' => 0, 'arrears_loan_offset' => 0, 'net_before_adjustment' => 700,
+            'manual_adjustment' => 50, 'final_amount' => 750, 'status' => 'paid',
+        ]);
+
+        $response = $this->getJson("/api/admin/drivers/{$driver->id}/summary?year=2026&month=9")->assertOk();
+
+        $response->assertJsonPath('summary.salary_payable', 750)
+            ->assertJsonPath('payroll_status', 'paid');
+    });
+
+    it('is 404 for a driver that does not exist', function () {
+        signedInForDrivers();
+
+        $this->getJson('/api/admin/drivers/999/summary')->assertNotFound();
     });
 });
 

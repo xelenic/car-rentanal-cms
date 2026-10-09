@@ -189,12 +189,18 @@ class HireListSummary {
     this.hireFullValueTotal = 0,
     this.ourHireValueTotal = 0,
     this.commissionTotal = 0,
+    this.tabCounts = const {},
   });
 
   final int count;
   final double hireFullValueTotal;
   final double ourHireValueTotal;
   final double commissionTotal;
+
+  /// How many hires fall under each HireTab.apiValue ("all", "today",
+  /// "scheduled", "completed", "cancelled") given the same filters as this
+  /// response — every tab's count, not just whichever one was asked for.
+  final Map<String, int> tabCounts;
 
   factory HireListSummary.fromJson(Map<String, dynamic>? json) {
     if (json == null) return const HireListSummary();
@@ -203,6 +209,8 @@ class HireListSummary {
       hireFullValueTotal: Hire._parseDouble(json['hire_full_value_total']),
       ourHireValueTotal: Hire._parseDouble(json['our_hire_value_total']),
       commissionTotal: Hire._parseDouble(json['commission_total']),
+      tabCounts: (json['tab_counts'] as Map<String, dynamic>? ?? const {})
+          .map((key, value) => MapEntry(key, (value as num?)?.toInt() ?? 0)),
     );
   }
 }

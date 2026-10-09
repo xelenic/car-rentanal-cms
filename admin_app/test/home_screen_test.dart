@@ -110,6 +110,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Hires'), findsWidgets);
+
+    // Overview (the profit summary) is the Hires page's default tab; switch
+    // to "All" to see the hire list itself.
+    await tester.tap(find.byKey(const Key('tab-all')));
+    await tester.pumpAndSettle();
+
     expect(find.text('ZZZ Test Customer'), findsOneWidget);
   });
 

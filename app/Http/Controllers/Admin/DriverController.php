@@ -125,6 +125,96 @@ class DriverController extends Controller implements HasMiddleware
         ]);
     }
 
+    /** How many trailing months (including the current one) the hire trend chart covers. */
+    private const TREND_MONTHS = 6;
+
+    public function show(Request $request, Driver $driver): View
+    {
+        // Earnings view: cancelled hires earned nothing, so they are left out.
+        $hires = Hire::query()
+            ->counted()
+            ->where('driver_id', $driver->id)
+            ->with(['customer', 'vehicle'])
+            ->get()
+            ->sortByDesc(fn (Hire $hire) => $hire->effective_month_date)
+            ->values();
+
+        $salaryPaidTotal = round(
+            (float) DriverPayroll::query()->where('driver_id', $driver->id)->where('status', 'paid')->sum('final_amount'),
+            2
+        );
+
+        $summary = [
+            'hire_count' => $hires->count(),
+            'hire_full_value_total' => round((float) $hires->sum('hire_full_value'), 2),
+            'our_hire_value_total' => round((float) $hires->sum('our_hire_value'), 2),
+            'commission_total' => round((float) $hires->sum('commission'), 2),
+            'salary_paid_total' => $salaryPaidTotal,
+        ];
+
+        $now = now();
+        $trend = collect(range(self::TREND_MONTHS - 1, 0))
+            ->map(function (int $monthsAgo) use ($now, $hires) {
+                $date = $now->copy()->subMonthsNoOverflow($monthsAgo);
+                $monthHires = $hires->filter(fn (Hire $hire) => $hire->effective_month_date?->isSameMonth($date) ?? false);
+
+                return [
+                    'label' => $date->format('M Y'),
+                    'hire_full_value_total' => round((float) $monthHires->sum('hire_full_value'), 2),
+                    'commission_total' => round((float) $monthHires->sum('commission'), 2),
+                ];
+            })
+            ->values();
+
+        // Earnings by month for this one driver — the dropdown only ever
+        // offers periods this driver actually has hires in.
+        $periods = MonthlyPeriods::fromTimestamps($hires->pluck('effective_month_date')->filter());
+        $availableYears = $periods['years'];
+        $monthsByYear = $periods['months_by_year'];
+
+        $selectedYear = $request->filled('year')
+            ? $request->integer('year')
+            : ($availableYears[0] ?? (int) $now->format('Y'));
+
+        $selectedMonth = $request->filled('month')
+            ? $request->integer('month')
+            : ($monthsByYear[$selectedYear][0] ?? (int) $now->format('n'));
+
+        $periodHires = $hires->filter(
+            fn (Hire $hire) => $hire->effective_month_date?->year === $selectedYear
+                && $hire->effective_month_date?->month === $selectedMonth
+        )->values();
+
+        $periodSalary = DriverSalaryCalculator::calculate($driver, $selectedYear, $selectedMonth);
+        $periodPayroll = DriverPayroll::query()
+            ->where('driver_id', $driver->id)
+            ->where('year', $selectedYear)
+            ->where('month', $selectedMonth)
+            ->first();
+
+        $periodSummary = [
+            'hire_count' => $periodHires->count(),
+            'hire_full_value_total' => round((float) $periodHires->sum('hire_full_value'), 2),
+            'our_hire_value_total' => round((float) $periodHires->sum('our_hire_value'), 2),
+            'commission_total' => round((float) $periodHires->sum('commission'), 2),
+            'salary_payable' => round((float) ($periodPayroll->final_amount ?? $periodSalary['net_salary_payable']), 2),
+        ];
+
+        return view('admin.drivers.show', [
+            'driver' => $driver,
+            'periodHires' => $periodHires,
+            'periodSummary' => $periodSummary,
+            'periodPayroll' => $periodPayroll,
+            'periodLabel' => now()->setDate($selectedYear, $selectedMonth, 1)->format('F Y'),
+            'availableYears' => $availableYears,
+            'monthsByYear' => $monthsByYear,
+            'selectedYear' => $selectedYear,
+            'selectedMonth' => $selectedMonth,
+            'summary' => $summary,
+            'trend' => $trend,
+        ]);
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);

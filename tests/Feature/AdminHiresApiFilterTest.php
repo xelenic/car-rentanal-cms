@@ -56,6 +56,17 @@ function apiFilterHire(array $attributes = []): Hire
     ]);
 }
 
+/** One hire in each of the four real tabs, keyed by the tab it falls under. */
+function apiFilterHiresByTab(): array
+{
+    return [
+        'today' => apiFilterHire(['status' => 'pending', 'start_time' => now()->subHour()]),
+        'scheduled' => apiFilterHire(['status' => 'pending', 'start_time' => now()->addDays(2)]),
+        'completed' => apiFilterHire(['status' => 'completed', 'start_time' => now()->subDays(3)]),
+        'cancelled' => apiFilterHire(['status' => 'cancelled', 'start_time' => now()->subDays(3)]),
+    ];
+}
+
 it('shows only one driver\'s hires when filtered by driver_id', function () {
     apiHiresAdmin();
     $nimal = apiFilterDriver('ZZZ Nimal');
@@ -143,6 +154,53 @@ describe('the date range filter', function () {
 
         $ids = collect($response->json('data'))->pluck('id');
         expect($ids)->toContain($scheduled->id)->and($ids)->toContain($unscheduled->id)->and($ids)->toHaveCount(2);
+    });
+});
+
+describe('the tab filter', function () {
+    it('shows only one tab\'s hires when filtered by tab', function () {
+        apiHiresAdmin();
+        $hires = apiFilterHiresByTab();
+
+        $response = $this->getJson('/api/admin/hires?tab=today')->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('id');
+        expect($ids)->toContain($hires['today']->id)->and($ids)->toHaveCount(1);
+    });
+
+    it('gives the count of every tab, not just the one selected', function () {
+        apiHiresAdmin();
+        apiFilterHiresByTab();
+
+        $response = $this->getJson('/api/admin/hires?tab=completed')->assertOk();
+
+        $response->assertJsonPath('summary.tab_counts.all', 4)
+            ->assertJsonPath('summary.tab_counts.today', 1)
+            ->assertJsonPath('summary.tab_counts.scheduled', 1)
+            ->assertJsonPath('summary.tab_counts.completed', 1)
+            ->assertJsonPath('summary.tab_counts.cancelled', 1);
+    });
+
+    it('scopes the tab counts to the other active filters too', function () {
+        apiHiresAdmin();
+        $nimal = apiFilterDriver('ZZZ Nimal');
+        apiFilterHiresByTab(); // none of these belong to Nimal
+        apiFilterHire(['driver_id' => $nimal->id, 'status' => 'completed', 'start_time' => now()->subDay()]);
+
+        $response = $this->getJson('/api/admin/hires?driver_id='.$nimal->id)->assertOk();
+
+        $response->assertJsonPath('summary.tab_counts.all', 1)
+            ->assertJsonPath('summary.tab_counts.today', 0)
+            ->assertJsonPath('summary.tab_counts.completed', 1);
+    });
+
+    it('treats an unrecognized tab value the same as "all"', function () {
+        apiHiresAdmin();
+        $hires = apiFilterHiresByTab();
+
+        $response = $this->getJson('/api/admin/hires?tab=not-a-real-tab')->assertOk();
+
+        expect($response->json('data'))->toHaveCount(4);
     });
 });
 

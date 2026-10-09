@@ -587,17 +587,22 @@ class _HireFormScreenState extends State<HireFormScreen> {
               decoration: const InputDecoration(labelText: 'Customer phone'),
             ),
           ] else
-            DropdownButtonFormField<int>(
-              initialValue: _customerId,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Select customer'),
-              items: reference.customers
-                  .map((c) => DropdownMenuItem(
+            DropdownMenu<int>(
+              key: const Key('customer-picker'),
+              initialSelection: _customerId,
+              expandedInsets: EdgeInsets.zero,
+              enableFilter: true,
+              requestFocusOnTap: true,
+              label: const Text('Select customer'),
+              hintText: 'Search by name or phone…',
+              menuHeight: 320,
+              dropdownMenuEntries: reference.customers
+                  .map((c) => DropdownMenuEntry(
                         value: c.id,
-                        child: Text(c.subtitle != null && c.subtitle!.isNotEmpty ? '${c.name} · ${c.subtitle}' : c.name),
+                        label: c.subtitle != null && c.subtitle!.isNotEmpty ? '${c.name} · ${c.subtitle}' : c.name,
                       ))
                   .toList(),
-              onChanged: (value) => setState(() => _customerId = value),
+              onSelected: (value) => setState(() => _customerId = value),
             ),
           const SizedBox(height: 20),
 

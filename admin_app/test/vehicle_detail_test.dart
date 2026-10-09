@@ -8,7 +8,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/fake_server.dart';
 
 /// A van with one hire in each tab (two in "completed"), its numbers to match.
-FakeServer _vanWithHires({int pageSize = 20, bool canCreateHires = true}) {
+FakeServer _vanWithHires({
+  int pageSize = 20,
+  bool canCreateHires = true,
+  List<Map<String, dynamic>>? referenceCustomers,
+}) {
   final stats = vehicleStatsJson(
     hireCount: 5,
     full: 500000,
@@ -26,6 +30,7 @@ FakeServer _vanWithHires({int pageSize = 20, bool canCreateHires = true}) {
   return FakeServer(
     pageSize: pageSize,
     canCreateHires: canCreateHires,
+    referenceCustomers: referenceCustomers,
     vehicles: [vehicleJson(id: 1, model: 'ZZZ Test Van', condition: 'Excellent', seats: 9, pax: 8, description: 'ZZZ roomy', stats: stats)],
     hires: {
       1: [
@@ -315,7 +320,7 @@ void main() {
       await tester.tap(find.byKey(const Key('new-hire')));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButtonFormField<int>).first);
+      await tester.tap(find.byType(DropdownMenu<int>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('ZZZ Test Customer · 0770000000').last);
       await tester.pumpAndSettle();
@@ -368,7 +373,7 @@ void main() {
       await tester.tap(find.byKey(const Key('status-completed')));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButtonFormField<int>).first);
+      await tester.tap(find.byType(DropdownMenu<int>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('ZZZ Test Customer · 0770000000').last);
       await tester.pumpAndSettle();
@@ -385,6 +390,56 @@ void main() {
 
       expect(server.createdHires, hasLength(1));
       expect(server.createdHires.single['status'], 'completed');
+    });
+
+    testWidgets('the customer picker is searchable by name or phone', (tester) async {
+      tester.view.physicalSize = const Size(412, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final server = _vanWithHires(referenceCustomers: [
+        {'id': 1, 'name': 'ZZZ Amal Perera', 'phone': '0771111111'},
+        {'id': 2, 'name': 'ZZZ Bimal Silva', 'phone': '0772222222'},
+      ]);
+      await server.install();
+      await tester.pumpWidget(MaterialApp(
+        theme: buildAdminAppTheme(),
+        home: VehicleDetailScreen(vehicle: Vehicle.fromJson(server.vehicles.first), user: _user()),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('new-hire')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('customer-picker')));
+      await tester.pumpAndSettle();
+      expect(find.text('ZZZ Amal Perera · 0771111111'), findsOneWidget);
+      expect(find.text('ZZZ Bimal Silva · 0772222222'), findsOneWidget);
+
+      // Typing part of the second customer's phone number narrows the menu
+      // down to just them.
+      await tester.enterText(
+        find.descendant(of: find.byKey(const Key('customer-picker')), matching: find.byType(TextField)),
+        '2222222',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('ZZZ Amal Perera · 0771111111'), findsNothing);
+      expect(find.text('ZZZ Bimal Silva · 0772222222'), findsOneWidget);
+
+      await tester.tap(find.text('ZZZ Bimal Silva · 0772222222').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextFormField, 'From location'), 'ZZZ Pickup Place');
+      await tester.enterText(find.widgetWithText(TextFormField, 'To location'), 'ZZZ Drop Place');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Hire full value (Rs.)'), '25000');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Our hire value (Rs.)'), '20000');
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final create = find.widgetWithText(ElevatedButton, 'Create Hire');
+      await tester.ensureVisible(create);
+      await tester.tap(create);
+      await tester.pumpAndSettle();
+
+      expect(server.createdHires, hasLength(1));
+      expect(server.createdHires.single['customer_id'], 2);
     });
   });
 

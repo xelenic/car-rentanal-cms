@@ -17,6 +17,10 @@ Future<void> _show(WidgetTester tester, FakeServer server) async {
     MaterialApp(theme: buildAdminAppTheme(), home: HiresScreen(user: server.adminUser)),
   );
   await tester.pumpAndSettle();
+
+  // Overview is the default (leading) tab; most callers want the hire list.
+  await tester.tap(find.byKey(const Key('tab-all')));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -33,10 +37,68 @@ void main() {
     expect(find.text('ZZZ Second Customer'), findsOneWidget);
   });
 
+  testWidgets('shows this month\'s profit summary on its own Overview tab', (tester) async {
+    await _show(
+      tester,
+      FakeServer(
+        allHires: [hireJson(id: 1)],
+        dashboard: defaultDashboardJson()
+          ..['summary'] = {
+            'hire_full_value_total': 10000,
+            'our_hire_value_total': 7000,
+            'commission_total': 3000,
+            'expenses_total': 500,
+            'salary_total': 1300,
+            'profit_total': 5200,
+          },
+      ),
+    );
+
+    // Not shown on the default "All" tab — it lives on its own tab instead.
+    expect(find.byKey(const Key('hires-summary-profit')), findsNothing);
+
+    await tester.ensureVisible(find.byKey(const Key('tab-overview')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('tab-overview')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('hires-summary-profit')), findsOneWidget);
+    expect(find.text('Rs. 5,200.00'), findsOneWidget);
+    expect(find.text('Total Our Hire Value'), findsOneWidget);
+    expect(find.text('Total Full Value'), findsOneWidget);
+    expect(find.text('Total Expenses'), findsOneWidget);
+    expect(find.text('Total Driver Salary'), findsOneWidget);
+  });
+
+  testWidgets('the Overview tab shows a retry option when the dashboard fails to load', (tester) async {
+    await _show(tester, FakeServer(allHires: [hireJson(id: 1)])..failWith = 500);
+
+    await tester.ensureVisible(find.byKey(const Key('tab-overview')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('tab-overview')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('hires-summary-profit')), findsNothing);
+    expect(find.text('Retry'), findsOneWidget);
+  });
+
   testWidgets('shows an empty state with no hires yet', (tester) async {
     await _show(tester, FakeServer());
 
     expect(find.text('No hires yet'), findsOneWidget);
+    expect(find.text('Hires you book will show up here.'), findsOneWidget);
+  });
+
+  testWidgets('says no hires match instead, when a search finds nothing', (tester) async {
+    final server = FakeServer(allHires: [hireJson(id: 1, customer: 'ZZZ Findable')]);
+    await _show(tester, server);
+
+    await tester.enterText(find.byKey(const Key('hire-search')), 'ZZZ Nothing Like This');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No hires match'), findsOneWidget);
+    expect(find.text('Try a different search or filter.'), findsOneWidget);
   });
 
   testWidgets('search narrows the list and asks the server for it', (tester) async {
@@ -85,6 +147,95 @@ void main() {
     await _show(tester, FakeServer()..canCreateHires = false);
 
     expect(find.byKey(const Key('new-hire')), findsNothing);
+  });
+
+  group('status tabs', () {
+    testWidgets('shows a tab for each status, with counts for all of them', (tester) async {
+      final now = DateTime.now();
+      await _show(
+        tester,
+        FakeServer(allHires: [
+          hireJson(
+            id: 1,
+            customer: 'ZZZ Today Hire',
+            status: 'pending',
+            startTime: now.subtract(const Duration(hours: 2)).toIso8601String(),
+          ),
+          hireJson(
+            id: 2,
+            customer: 'ZZZ Scheduled Hire',
+            status: 'pending',
+            startTime: now.add(const Duration(days: 3)).toIso8601String(),
+          ),
+          hireJson(
+            id: 3,
+            customer: 'ZZZ Completed Hire',
+            status: 'completed',
+            startTime: now.subtract(const Duration(days: 3)).toIso8601String(),
+          ),
+          hireJson(
+            id: 4,
+            customer: 'ZZZ Cancelled Hire',
+            status: 'cancelled',
+            startTime: now.subtract(const Duration(days: 3)).toIso8601String(),
+          ),
+        ]),
+      );
+
+      Finder inTabBar(String text) => find.descendant(of: find.byType(TabBar), matching: find.text(text));
+
+      expect(inTabBar('All'), findsOneWidget);
+      expect(inTabBar('Today'), findsOneWidget);
+      expect(inTabBar('Scheduled'), findsOneWidget);
+      expect(inTabBar('Completed'), findsOneWidget);
+      expect(inTabBar('Cancelled'), findsOneWidget);
+      expect(inTabBar('4'), findsOneWidget); // All's badge
+      expect(inTabBar('1'), findsNWidgets(4)); // the other four tabs, one hire each
+
+      // The default "All" tab shows every hire.
+      expect(find.text('ZZZ Today Hire'), findsOneWidget);
+      expect(find.text('ZZZ Cancelled Hire'), findsOneWidget);
+    });
+
+    testWidgets('tapping a tab shows only that tab\'s hires', (tester) async {
+      final now = DateTime.now();
+      await _show(
+        tester,
+        FakeServer(allHires: [
+          hireJson(
+            id: 1,
+            customer: 'ZZZ Today Hire',
+            status: 'pending',
+            startTime: now.subtract(const Duration(hours: 2)).toIso8601String(),
+          ),
+          hireJson(
+            id: 3,
+            customer: 'ZZZ Completed Hire',
+            status: 'completed',
+            startTime: now.subtract(const Duration(days: 3)).toIso8601String(),
+          ),
+        ]),
+      );
+
+      await tester.ensureVisible(find.byKey(const Key('tab-completed')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('tab-completed')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ZZZ Completed Hire'), findsOneWidget);
+      expect(find.text('ZZZ Today Hire'), findsNothing);
+    });
+
+    testWidgets('an empty tab shows its own empty message', (tester) async {
+      await _show(tester, FakeServer());
+
+      await tester.ensureVisible(find.byKey(const Key('tab-cancelled')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('tab-cancelled')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No cancelled hires'), findsOneWidget);
+    });
   });
 
   group('filters', () {
@@ -209,6 +360,37 @@ void main() {
       final requests = server.requestsTo('/api/admin/hires');
       expect(requests.last.url.queryParameters['date_from'], today);
       expect(requests.last.url.queryParameters['date_to'], today);
+    });
+
+    testWidgets('a driver/vehicle/customer/date filter narrows every tab, not just All', (tester) async {
+      final server = FakeServer(
+        allHires: [
+          hireJson(id: 1, customer: 'ZZZ Nimal Hire', driverId: 11, driver: 'ZZZ Nimal', status: 'completed'),
+          hireJson(id: 2, customer: 'ZZZ Kamal Hire', driverId: 12, driver: 'ZZZ Kamal', status: 'completed'),
+        ],
+        referenceDrivers: [
+          {'id': 11, 'name': 'ZZZ Nimal'},
+          {'id': 12, 'name': 'ZZZ Kamal'},
+        ],
+      );
+      await _show(tester, server);
+
+      await tester.tap(find.byKey(const Key('hire-filters')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter-driver')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ZZZ Nimal').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter-apply')));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.byKey(const Key('tab-completed')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('tab-completed')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ZZZ Nimal Hire'), findsOneWidget);
+      expect(find.text('ZZZ Kamal Hire'), findsNothing);
     });
 
     testWidgets('the filter icon badge reflects the active filter count, and Clear all resets it', (tester) async {

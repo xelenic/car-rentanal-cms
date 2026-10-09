@@ -9,6 +9,7 @@ import '../models/admin_user.dart';
 import '../models/customer.dart';
 import '../models/dashboard_summary.dart';
 import '../models/driver.dart';
+import '../models/driver_summary.dart';
 import '../models/hire.dart';
 import '../models/hire_period.dart';
 import '../models/hire_tab.dart';
@@ -164,6 +165,7 @@ class ApiClient {
     int? customerId,
     DateTime? dateFrom,
     DateTime? dateTo,
+    HireTab? tab,
     int page = 1,
   }) async {
     final uri = Uri.parse('$baseUrl/admin/hires').replace(
@@ -175,6 +177,7 @@ class ApiClient {
         if (customerId != null) 'customer_id': '$customerId',
         if (dateFrom != null) 'date_from': _dateOnly(dateFrom),
         if (dateTo != null) 'date_to': _dateOnly(dateTo),
+        if (tab != null) 'tab': tab.apiValue,
         'page': '$page',
       },
     );
@@ -727,6 +730,24 @@ class ApiClient {
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       return Driver.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// This driver's Overview tab: one month's earnings — defaults to the
+  /// current month, same as fetchDashboard().
+  Future<DriverSummary> fetchDriverSummary(int driverId, {int? year, int? month}) async {
+    final uri = Uri.parse('$baseUrl/admin/drivers/$driverId/summary').replace(
+      queryParameters: {
+        if (year != null) 'year': '$year',
+        if (month != null) 'month': '$month',
+      },
+    );
+    final response = await _http.get(uri, headers: await _headers(auth: true));
+
+    if (response.statusCode == 200) {
+      return DriverSummary.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     }
 
     throw ApiException(_extractError(response));

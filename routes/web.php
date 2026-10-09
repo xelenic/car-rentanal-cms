@@ -53,7 +53,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::delete('leasing/{leasing}', [VehicleLeasingController::class, 'destroy'])->name('leasing.destroy');
     Route::post('leasing/{leasing}/settlements', [VehicleLeasingSettlementController::class, 'store'])->name('leasing.settlements.store');
     Route::delete('leasing/{leasing}/settlements/{settlement}', [VehicleLeasingSettlementController::class, 'destroy'])->name('leasing.settlements.destroy');
-    Route::resource('drivers', DriverController::class)->except(['show', 'create', 'edit']);
+    Route::resource('drivers', DriverController::class)->except(['create', 'edit']);
     Route::post('drivers/{driver}/payroll', [PayrollController::class, 'finalize'])->name('drivers.payroll.finalize');
     Route::post('drivers/{driver}/payroll/{payroll}/mark-paid', [PayrollController::class, 'markPaid'])->name('drivers.payroll.mark-paid');
     Route::delete('drivers/{driver}/payroll/{payroll}/revert', [PayrollController::class, 'revert'])->name('drivers.payroll.revert');

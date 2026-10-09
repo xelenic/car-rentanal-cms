@@ -191,6 +191,9 @@
                             </td>
                             <td class="text-end">
                                 <div class="d-inline-flex gap-1">
+                                    <a href="{{ route('admin.drivers.show', $driver) }}" class="btn btn-sm btn-light border btn-icon">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
                                     @can('drivers.update')
                                         <button type="button" class="btn btn-sm btn-light border btn-icon" data-bs-toggle="modal" data-bs-target="#modal-edit-{{ $driver->id }}">
                                             <i class="bi bi-pencil"></i>

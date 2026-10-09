@@ -84,6 +84,10 @@ class FakeServer {
   /// when not set.
   Map<String, dynamic>? dashboard;
 
+  /// The raw JSON GET /admin/drivers/{id}/summary answers with, for every
+  /// driver and every month asked — [defaultDriverSummaryJson] when not set.
+  Map<String, dynamic>? driverSummary;
+
   bool canViewVehicles;
   bool canCreateVehicles;
   bool canUpdateVehicles;
@@ -798,6 +802,11 @@ class FakeServer {
       return _json({'data': driver}, 201);
     }
 
+    final driverSummaryMatch = RegExp(r'^/admin/drivers/(\d+)/summary$').firstMatch(path);
+    if (driverSummaryMatch != null && request.method == 'GET') {
+      return _json(driverSummary ?? defaultDriverSummaryJson());
+    }
+
     final driverOne = RegExp(r'^/admin/drivers/(\d+)$').firstMatch(path);
     if (driverOne != null) {
       final id = int.parse(driverOne.group(1)!);
@@ -910,8 +919,13 @@ class FakeServer {
       final customerId = request.url.queryParameters['customer_id'];
       final dateFrom = request.url.queryParameters['date_from'];
       final dateTo = request.url.queryParameters['date_to'];
+      final tab = request.url.queryParameters['tab'] ?? 'all';
       final page = int.parse(request.url.queryParameters['page'] ?? '1');
-      final matching = allHires
+
+      // Every filter except the tab itself, mirroring Api\Admin\HireController::index()'s
+      // own $preTab — so every tab's count reflects the same search/driver/
+      // vehicle/customer/date filters, just split by status.
+      final preTab = allHires
           .where((h) => search.isEmpty || '${h['customer']?['name']} ${h['description']}'.toLowerCase().contains(search))
           .where((h) => !upcoming || h['is_upcoming'] == true)
           .where((h) => driverId == null || '${(h['driver'] as Map<String, dynamic>?)?['id']}' == driverId)
@@ -920,6 +934,33 @@ class FakeServer {
           .where((h) => dateFrom == null || ((h['start_time'] as String?)?.compareTo(dateFrom) ?? -1) >= 0)
           .where((h) => dateTo == null || ((h['start_time'] as String?)?.compareTo('$dateTo 23:59:59') ?? 1) <= 0)
           .toList();
+
+      final now = DateTime.now();
+      final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
+
+      bool isOpenStatus(Map<String, dynamic> h) {
+        final status = h['status'] as String? ?? 'pending';
+        return status != 'completed' && status != 'cancelled';
+      }
+
+      bool matchesTab(Map<String, dynamic> h, String tabValue) {
+        final status = h['status'] as String? ?? 'pending';
+        final startTimeStr = h['start_time'] as String?;
+        final startTime = startTimeStr == null ? null : DateTime.tryParse(startTimeStr);
+        return switch (tabValue) {
+          'today' => isOpenStatus(h) && (startTime == null || startTime.isBefore(startOfTomorrow)),
+          'scheduled' => isOpenStatus(h) && startTime != null && !startTime.isBefore(startOfTomorrow),
+          'completed' => status == 'completed',
+          'cancelled' => status == 'cancelled',
+          _ => true,
+        };
+      }
+
+      const tabs = ['all', 'today', 'scheduled', 'completed', 'cancelled'];
+      final tabCounts = {for (final t in tabs) t: preTab.where((h) => matchesTab(h, t)).length};
+
+      final matching = preTab.where((h) => matchesTab(h, tab)).toList();
+
       final start = (page - 1) * pageSize;
       final fullValueTotal = matching.fold<num>(0, (sum, h) => sum + (h['hire_full_value'] as num));
       final ourValueTotal = matching.fold<num>(0, (sum, h) => sum + (h['our_hire_value'] as num));
@@ -931,6 +972,7 @@ class FakeServer {
           'hire_full_value_total': fullValueTotal,
           'our_hire_value_total': ourValueTotal,
           'commission_total': fullValueTotal - ourValueTotal,
+          'tab_counts': tabCounts,
         },
       });
     }
@@ -1228,6 +1270,42 @@ Map<String, dynamic> defaultDashboardJson({int year = 2026, int month = 9, List<
       'profit_total': null,
     },
     'vehicle_cards': vehicleCards ?? [],
+  };
+}
+
+/// GET /admin/drivers/{id}/summary's shape with every figure at zero —
+/// the driver Overview tab's "no hires this month" baseline. A test that
+/// wants specific numbers passes FakeServer(driverSummary:
+/// defaultDriverSummaryJson(...)) with the relevant named arguments instead.
+Map<String, dynamic> defaultDriverSummaryJson({
+  int year = 2026,
+  int month = 9,
+  int hireCount = 0,
+  num hireFullValueTotal = 0,
+  num ourHireValueTotal = 0,
+  num commissionTotal = 0,
+  num expensesTotal = 0,
+  num salaryPayable = 0,
+  String? payrollStatus,
+}) {
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
+  return {
+    'year': year,
+    'month': month,
+    'period_label': '${monthNames[month - 1]} $year',
+    'summary': {
+      'hire_count': hireCount,
+      'hire_full_value_total': hireFullValueTotal,
+      'our_hire_value_total': ourHireValueTotal,
+      'commission_total': commissionTotal,
+      'expenses_total': expensesTotal,
+      'salary_payable': salaryPayable,
+    },
+    'payroll_status': payrollStatus,
   };
 }
 

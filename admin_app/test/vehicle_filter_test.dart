@@ -289,7 +289,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('new-hire')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(DropdownButtonFormField<int>).first);
+    await tester.tap(find.byType(DropdownMenu<int>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('ZZZ Test Customer · 0770000000').last);
     await tester.pumpAndSettle();

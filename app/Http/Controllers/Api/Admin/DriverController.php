@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\DriverResource;
 use App\Models\Driver;
+use App\Models\DriverPayroll;
 use App\Models\User;
+use App\Services\DriverSalaryCalculator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -73,6 +76,45 @@ class DriverController extends Controller
         $this->authorizeView($request);
 
         return new DriverResource($driver);
+    }
+
+    /**
+     * This driver's Overview tab: one month's earnings (the same
+     * DriverSalaryCalculator formula as the web panel's driver page and the
+     * admin app's own company-wide dashboard) — defaults to the current
+     * month, same as GET /admin/dashboard.
+     */
+    public function summary(Request $request, Driver $driver): JsonResponse
+    {
+        $this->authorizeView($request);
+
+        $year = $request->filled('year') ? $request->integer('year') : (int) now()->format('Y');
+        $month = $request->filled('month') ? $request->integer('month') : (int) now()->format('n');
+
+        $salary = DriverSalaryCalculator::calculate($driver, $year, $month);
+        $payroll = DriverPayroll::query()
+            ->where('driver_id', $driver->id)
+            ->where('year', $year)
+            ->where('month', $month)
+            ->first();
+
+        $hireFullValueTotal = (float) $salary['hire_full_value_total'];
+        $ourHireValueTotal = (float) $salary['our_hire_value_total'];
+
+        return response()->json([
+            'year' => $year,
+            'month' => $month,
+            'period_label' => Carbon::create($year, $month, 1)->format('F Y'),
+            'summary' => [
+                'hire_count' => $salary['hire_count'],
+                'hire_full_value_total' => round($hireFullValueTotal, 2),
+                'our_hire_value_total' => round($ourHireValueTotal, 2),
+                'commission_total' => round($hireFullValueTotal - $ourHireValueTotal, 2),
+                'expenses_total' => round((float) $salary['expenses_total'], 2),
+                'salary_payable' => round((float) ($payroll->final_amount ?? $salary['net_salary_payable']), 2),
+            ],
+            'payroll_status' => $payroll?->status,
+        ]);
     }
 
     public function update(Request $request, Driver $driver): DriverResource
