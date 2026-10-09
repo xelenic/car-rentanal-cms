@@ -195,15 +195,19 @@ describe('the date range filter', function () {
         $toOnly->assertDontSee('Hire #'.$late->id);
     });
 
-    it('excludes hires with no scheduled date at all', function () {
+    it('matches an unscheduled hire by when it was recorded instead of excluding it', function () {
         hiresAdmin();
         $scheduled = filterHire(['start_time' => '2026-09-15 10:00:00']);
         $unscheduled = filterHire(['start_time' => null]);
+        $unscheduled->forceFill(['created_at' => '2026-09-20 10:00:00'])->saveQuietly();
+        $unscheduledOutsideRange = filterHire(['start_time' => null]);
+        $unscheduledOutsideRange->forceFill(['created_at' => '2026-08-20 10:00:00'])->saveQuietly();
 
         $response = $this->get('/admin/hires?date_from=2026-09-01&date_to=2026-09-30');
 
         $response->assertSee('Hire #'.$scheduled->id);
-        $response->assertDontSee('Hire #'.$unscheduled->id);
+        $response->assertSee('Hire #'.$unscheduled->id);
+        $response->assertDontSee('Hire #'.$unscheduledOutsideRange->id);
     });
 
     it('does not error out on a malformed date value', function () {

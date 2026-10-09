@@ -121,6 +121,37 @@ class Hire extends Model
         });
     }
 
+    /**
+     * Scopes hires to a date range by the same "effective date" as
+     * getEffectiveMonthDateAttribute()/scopeInMonth(): start_time for a hire
+     * that's scheduled, created_at for one that was never given a schedule —
+     * so an unscheduled hire is matched by when it was recorded instead of
+     * silently falling outside every date-range filter. Either bound may be
+     * null to leave that side open.
+     */
+    public function scopeInDateRange(Builder $query, ?CarbonInterface $from, ?CarbonInterface $to): Builder
+    {
+        return $query->where(function (Builder $query) use ($from, $to) {
+            $query->where(function (Builder $query) use ($from, $to) {
+                $query->whereNotNull('start_time');
+                if ($from !== null) {
+                    $query->whereDate('start_time', '>=', $from);
+                }
+                if ($to !== null) {
+                    $query->whereDate('start_time', '<=', $to);
+                }
+            })->orWhere(function (Builder $query) use ($from, $to) {
+                $query->whereNull('start_time');
+                if ($from !== null) {
+                    $query->whereDate('created_at', '>=', $from);
+                }
+                if ($to !== null) {
+                    $query->whereDate('created_at', '<=', $to);
+                }
+            });
+        });
+    }
+
     public function getIsCompletedAttribute(): bool
     {
         return $this->status === 'completed';

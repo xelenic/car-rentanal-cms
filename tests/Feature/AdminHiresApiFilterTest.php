@@ -119,6 +119,31 @@ describe('the date range filter', function () {
         $ids = collect($response->json('data'))->pluck('id');
         expect($ids)->toContain($hire->id);
     });
+
+    it('matches an unscheduled hire by when it was recorded instead of excluding it', function () {
+        apiHiresAdmin();
+        $unscheduled = apiFilterHire(['start_time' => null]);
+        $unscheduled->forceFill(['created_at' => '2026-09-15 10:00:00'])->saveQuietly();
+        $outsideRange = apiFilterHire(['start_time' => null]);
+        $outsideRange->forceFill(['created_at' => '2026-08-20 10:00:00'])->saveQuietly();
+
+        $response = $this->getJson('/api/admin/hires?date_from=2026-09-01&date_to=2026-09-30');
+
+        $ids = collect($response->json('data'))->pluck('id');
+        expect($ids)->toContain($unscheduled->id)->and($ids)->not->toContain($outsideRange->id);
+    });
+
+    it('matches both a scheduled and an unscheduled hire that fall in the same range', function () {
+        apiHiresAdmin();
+        $scheduled = apiFilterHire(['start_time' => '2026-09-10 10:00:00']);
+        $unscheduled = apiFilterHire(['start_time' => null]);
+        $unscheduled->forceFill(['created_at' => '2026-09-20 10:00:00'])->saveQuietly();
+
+        $response = $this->getJson('/api/admin/hires?date_from=2026-09-01&date_to=2026-09-30');
+
+        $ids = collect($response->json('data'))->pluck('id');
+        expect($ids)->toContain($scheduled->id)->and($ids)->toContain($unscheduled->id)->and($ids)->toHaveCount(2);
+    });
 });
 
 it('combines driver, vehicle, customer and date filters together', function () {

@@ -36,6 +36,8 @@ class HireController extends Controller implements HasMiddleware
     public function index(Request $request): View
     {
         $showUpcoming = $request->boolean('upcoming');
+        $dateFrom = $this->parseDate($request, 'date_from');
+        $dateTo = $this->parseDate($request, 'date_to');
 
         $upcomingScope = fn ($query) => $query->where('status', 'pending')
             ->whereNotNull('start_time')
@@ -65,10 +67,10 @@ class HireController extends Controller implements HasMiddleware
                 in_array($request->string('payment_type')->toString(), array_keys(Hire::PAYMENT_TYPES), true),
                 fn ($query) => $query->where('payment_type', $request->string('payment_type')->toString()),
             )
-            // Date range — by start_time (the "Scheduled" column), so a hire
-            // never scheduled at all naturally falls outside any range given.
-            ->when($this->parseDate($request, 'date_from'), fn ($query, $date) => $query->whereDate('start_time', '>=', $date))
-            ->when($this->parseDate($request, 'date_to'), fn ($query, $date) => $query->whereDate('start_time', '<=', $date))
+            // Date range — by each hire's effective date (its scheduled
+            // start_time, or created_at for one never scheduled at all); see
+            // Hire::scopeInDateRange().
+            ->when($dateFrom || $dateTo, fn ($query) => $query->inDateRange($dateFrom, $dateTo))
             ->when($showUpcoming, $upcomingScope)
             // Upcoming hires read soonest-first; otherwise newest-created-first, as before.
             ->when($showUpcoming, fn ($query) => $query->orderBy('start_time'), fn ($query) => $query->latest())

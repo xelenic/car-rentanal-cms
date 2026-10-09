@@ -34,6 +34,8 @@ class HireController extends Controller
         $this->authorizeView($request);
 
         $showUpcoming = $request->boolean('upcoming');
+        $dateFrom = $this->parseDate($request, 'date_from');
+        $dateTo = $this->parseDate($request, 'date_to');
 
         $filtered = Hire::query()
             ->when($request->string('search')->toString(), function ($query, $search) {
@@ -53,8 +55,10 @@ class HireController extends Controller
             ->when($request->filled('driver_id'), fn ($query) => $query->where('driver_id', $request->integer('driver_id')))
             ->when($request->filled('vehicle_id'), fn ($query) => $query->where('vehicle_id', $request->integer('vehicle_id')))
             ->when($request->filled('customer_id'), fn ($query) => $query->where('customer_id', $request->integer('customer_id')))
-            ->when($this->parseDate($request, 'date_from'), fn ($query, $date) => $query->whereDate('start_time', '>=', $date))
-            ->when($this->parseDate($request, 'date_to'), fn ($query, $date) => $query->whereDate('start_time', '<=', $date));
+            // Date range — by each hire's effective date (its scheduled
+            // start_time, or created_at for one never scheduled at all); see
+            // Hire::scopeInDateRange().
+            ->when($dateFrom || $dateTo, fn ($query) => $query->inDateRange($dateFrom, $dateTo));
 
         // The totals of everything the filters match, not just the page
         // shown — a customer's "this month" tab wants the real total, not
