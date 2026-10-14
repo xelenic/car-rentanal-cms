@@ -3,6 +3,7 @@
 use App\Models\Customer;
 use App\Models\Driver;
 use App\Models\Hire;
+use App\Models\HireExpense;
 use App\Models\User;
 use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -128,4 +129,62 @@ it('matches an unscheduled hire into the month it was recorded', function () {
 
     $response->assertOk();
     $response->assertSee('Rs. 4,567.00');
+});
+
+it('lists only the selected driver\'s expenses for the selected month, with category and amount', function () {
+    driverShowAdmin();
+    $driver = driverShowDriver();
+    $someoneElse = driverShowDriver('ZZZ Kamal');
+
+    test()->travelTo(\Illuminate\Support\Carbon::parse('2026-09-16 12:00:00'));
+    HireExpense::create(['driver_id' => $driver->id, 'category' => 'fuel', 'amount' => 1500]);
+    HireExpense::create(['driver_id' => $driver->id, 'category' => 'parking', 'amount' => 250]);
+    HireExpense::create(['driver_id' => $someoneElse->id, 'category' => 'fuel', 'amount' => 9999]);
+
+    test()->travelTo(\Illuminate\Support\Carbon::parse('2026-08-16 12:00:00'));
+    HireExpense::create(['driver_id' => $driver->id, 'category' => 'repair', 'amount' => 7777]);
+
+    $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9');
+
+    $response->assertOk();
+    $response->assertSee('Fuel');
+    $response->assertSee('Rs. 1,500.00');
+    $response->assertSee('Parking Tickets');
+    $response->assertSee('Rs. 250.00');
+    $response->assertDontSee('Rs. 9,999.00');
+    $response->assertDontSee('Rs. 7,777.00');
+    $response->assertViewHas('periodSummary', fn (array $summary) => $summary['expenses_total'] === 1750.0);
+});
+
+it('totals this driver\'s expenses across all time for the summary card', function () {
+    driverShowAdmin();
+    $driver = driverShowDriver();
+    $someoneElse = driverShowDriver('ZZZ Kamal');
+
+    HireExpense::create(['driver_id' => $driver->id, 'category' => 'fuel', 'amount' => 1000]);
+    HireExpense::create(['driver_id' => $driver->id, 'category' => 'repair', 'amount' => 2000]);
+    HireExpense::create(['driver_id' => $someoneElse->id, 'category' => 'fuel', 'amount' => 9999]);
+
+    $response = $this->get('/admin/drivers/'.$driver->id);
+
+    $response->assertOk();
+    $response->assertViewHas('summary', fn (array $summary) => $summary['expenses_total'] === 3000.0);
+});
+
+it('links to the receipt when an expense has one, and shows a hire\'s tour type when tied to one', function () {
+    driverShowAdmin();
+    $driver = driverShowDriver();
+    $hire = driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00']);
+
+    test()->travelTo(\Illuminate\Support\Carbon::parse('2026-09-16 12:00:00'));
+    HireExpense::create([
+        'driver_id' => $driver->id, 'hire_id' => $hire->id, 'category' => 'fuel', 'amount' => 800,
+        'receipt_path' => 'hire-expenses/'.$hire->id.'/receipt.jpg',
+    ]);
+
+    $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9');
+
+    $response->assertOk();
+    $response->assertSee('Drop and Pickup');
+    $response->assertSee(route('hire-expenses.receipt', HireExpense::first()));
 });

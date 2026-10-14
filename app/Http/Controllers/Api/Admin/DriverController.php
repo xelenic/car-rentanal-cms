@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\DriverResource;
+use App\Http\Resources\DriverExpenseResource;
 use App\Models\Driver;
 use App\Models\DriverPayroll;
+use App\Models\HireExpense;
 use App\Models\User;
 use App\Services\DriverSalaryCalculator;
 use Illuminate\Http\JsonResponse;
@@ -114,6 +116,38 @@ class DriverController extends Controller
                 'salary_payable' => round((float) ($payroll->final_amount ?? $salary['net_salary_payable']), 2),
             ],
             'payroll_status' => $payroll?->status,
+        ]);
+    }
+
+    /**
+     * This driver's Expenses tab: their hire_expenses rows, one month at a
+     * time (same month-stepper convention as summary()), newest first —
+     * mirrors Admin\ExpenseController's driver_id filter, scoped to one
+     * driver instead of listing across all of them.
+     */
+    public function expenses(Request $request, Driver $driver): AnonymousResourceCollection
+    {
+        $this->authorizeView($request);
+
+        $category = $request->string('category')->toString() ?: null;
+
+        $filtered = HireExpense::query()
+            ->where('driver_id', $driver->id)
+            ->when($category, fn ($query) => $query->where('category', $category))
+            ->when($request->filled('year'), fn ($query) => $query->whereYear('created_at', $request->integer('year')))
+            ->when($request->filled('month'), fn ($query) => $query->whereMonth('created_at', $request->integer('month')));
+
+        $summaryRow = (clone $filtered)
+            ->selectRaw('COUNT(*) as count, COALESCE(SUM(amount), 0) as total')
+            ->first();
+
+        $expenses = $filtered->with('hire')->latest()->paginate(20);
+
+        return DriverExpenseResource::collection($expenses)->additional([
+            'summary' => [
+                'count' => (int) $summaryRow->count,
+                'total' => round((float) $summaryRow->total, 2),
+            ],
         ]);
     }
 

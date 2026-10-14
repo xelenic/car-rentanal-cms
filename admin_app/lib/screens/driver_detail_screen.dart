@@ -7,6 +7,7 @@ import '../models/driver_summary.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 import '../util/format.dart';
+import '../widgets/driver_expenses_tab.dart';
 import '../widgets/hire_history_tab.dart';
 import '../widgets/state_views.dart';
 import 'driver_form_screen.dart';
@@ -26,7 +27,7 @@ class DriverDetailScreen extends StatefulWidget {
 }
 
 class _DriverDetailScreenState extends State<DriverDetailScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 3, vsync: this);
+  late final TabController _tabs = TabController(length: 4, vsync: this);
   late Driver _driver = widget.driver;
 
   bool get _canEdit => widget.user?.canUpdateDrivers ?? false;
@@ -119,6 +120,7 @@ class _DriverDetailScreenState extends State<DriverDetailScreen> with SingleTick
                 Tab(key: Key('tab-overview'), text: 'Overview'),
                 Tab(key: Key('tab-details'), text: 'Details'),
                 Tab(key: Key('tab-hires'), text: 'Hires'),
+                Tab(key: Key('tab-expenses'), text: 'Expenses'),
               ],
             ),
           ),
@@ -129,6 +131,7 @@ class _DriverDetailScreenState extends State<DriverDetailScreen> with SingleTick
                 _DriverOverviewTab(driverId: _driver.id),
                 _buildDetails(),
                 HireHistoryTab(driverId: _driver.id, user: widget.user),
+                DriverExpensesTab(driverId: _driver.id),
               ],
             ),
           ),

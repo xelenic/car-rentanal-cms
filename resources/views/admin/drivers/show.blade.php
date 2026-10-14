@@ -29,7 +29,7 @@
         </div>
     </div>
 
-    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-2 mb-2">
+    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-5 g-2 mb-2">
         <div class="col">
             <div class="card border-0">
                 <div class="card-body d-flex align-items-center gap-2">
@@ -65,6 +65,19 @@
                     <div>
                         <div class="text-muted small">Total Commission</div>
                         <div class="fs-5 fw-bold">Rs. {{ number_format($summary['commission_total'], 2) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card border-0">
+                <div class="card-body d-flex align-items-center gap-2">
+                    <div class="stat-icon" style="background: #fdeee7; color: #c95a26;">
+                        <i class="bi bi-receipt"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Total Expenses (all time)</div>
+                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['expenses_total'], 2) }}</div>
                     </div>
                 </div>
             </div>
@@ -122,7 +135,7 @@
             </form>
         </div>
 
-        <div class="row row-cols-2 row-cols-md-5 g-2 p-3 border-bottom">
+        <div class="row row-cols-2 row-cols-md-3 row-cols-xl-6 g-2 p-3 border-bottom">
             <div class="col">
                 <div class="text-muted" style="font-size: .7rem;">Hires</div>
                 <div class="fw-semibold" style="font-size: .85rem;">{{ $periodSummary['hire_count'] }}</div>
@@ -138,6 +151,10 @@
             <div class="col">
                 <div class="text-muted" style="font-size: .7rem;">Commission</div>
                 <div class="fw-semibold" style="color: #1baf7a; font-size: .85rem;">Rs. {{ number_format($periodSummary['commission_total'], 2) }}</div>
+            </div>
+            <div class="col">
+                <div class="text-muted" style="font-size: .7rem;">Expenses</div>
+                <div class="fw-semibold" style="color: #c95a26; font-size: .85rem;">Rs. {{ number_format($periodSummary['expenses_total'], 2) }}</div>
             </div>
             <div class="col">
                 <div class="text-muted" style="font-size: .7rem;">Salary Payable</div>
@@ -174,6 +191,54 @@
                     @empty
                         <tr>
                             <td colspan="7" class="text-center text-muted py-4">No hires for {{ $periodLabel }}.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card border-0 mb-2">
+        <div class="card-header">
+            <span class="fw-semibold" style="font-size: .85rem;">Expenses &middot; {{ $periodLabel }}</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Category</th>
+                        <th>Hire</th>
+                        <th>Amount</th>
+                        <th class="text-end">Receipt</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($periodExpenses as $expense)
+                        <tr>
+                            <td class="text-muted" style="font-size: .8rem;">{{ $expense->created_at?->format('M j, Y') ?? '—' }}</td>
+                            <td><span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ $expense->category_label }}</span></td>
+                            <td class="text-muted" style="font-size: .8rem;">
+                                @if ($expense->hire)
+                                    #{{ $expense->hire_id }} &middot; {{ \App\Models\Hire::TOUR_TYPES[$expense->hire->tour_type] ?? $expense->hire->tour_type }}
+                                @else
+                                    &mdash;
+                                @endif
+                            </td>
+                            <td class="fw-semibold" style="color: #c95a26; font-size: .82rem;">Rs. {{ number_format($expense->amount, 2) }}</td>
+                            <td class="text-end">
+                                @if ($expense->receipt_url)
+                                    <a href="{{ $expense->receipt_url }}" target="_blank" class="btn btn-sm btn-light border btn-icon" title="View Receipt">
+                                        <i class="bi bi-receipt"></i>
+                                    </a>
+                                @else
+                                    &mdash;
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">No expenses for {{ $periodLabel }}.</td>
                         </tr>
                     @endforelse
                 </tbody>

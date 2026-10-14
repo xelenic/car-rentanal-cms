@@ -8,6 +8,7 @@ use App\Models\DriverArrearsLoan;
 use App\Models\DriverDepositTransfer;
 use App\Models\DriverPayroll;
 use App\Models\Hire;
+use App\Models\HireExpense;
 use App\Models\User;
 use App\Services\DriverSalaryCalculator;
 use App\Support\MonthlyPeriods;
@@ -150,6 +151,7 @@ class DriverController extends Controller implements HasMiddleware
             'our_hire_value_total' => round((float) $hires->sum('our_hire_value'), 2),
             'commission_total' => round((float) $hires->sum('commission'), 2),
             'salary_paid_total' => $salaryPaidTotal,
+            'expenses_total' => round((float) HireExpense::query()->where('driver_id', $driver->id)->sum('amount'), 2),
         ];
 
         $now = now();
@@ -192,17 +194,32 @@ class DriverController extends Controller implements HasMiddleware
             ->where('month', $selectedMonth)
             ->first();
 
+        // This driver's logged expenses for the same period the Earnings
+        // table above shows — fuel, repairs, and the rest of
+        // HireExpense::CATEGORIES, whether tied to a hire or logged
+        // directly (see Admin\ExpenseController for the all-drivers view
+        // this mirrors, scoped here to just this one driver).
+        $periodExpenses = HireExpense::query()
+            ->where('driver_id', $driver->id)
+            ->whereYear('created_at', $selectedYear)
+            ->whereMonth('created_at', $selectedMonth)
+            ->with('hire')
+            ->latest()
+            ->get();
+
         $periodSummary = [
             'hire_count' => $periodHires->count(),
             'hire_full_value_total' => round((float) $periodHires->sum('hire_full_value'), 2),
             'our_hire_value_total' => round((float) $periodHires->sum('our_hire_value'), 2),
             'commission_total' => round((float) $periodHires->sum('commission'), 2),
+            'expenses_total' => round((float) $periodExpenses->sum('amount'), 2),
             'salary_payable' => round((float) ($periodPayroll->final_amount ?? $periodSalary['net_salary_payable']), 2),
         ];
 
         return view('admin.drivers.show', [
             'driver' => $driver,
             'periodHires' => $periodHires,
+            'periodExpenses' => $periodExpenses,
             'periodSummary' => $periodSummary,
             'periodPayroll' => $periodPayroll,
             'periodLabel' => now()->setDate($selectedYear, $selectedMonth, 1)->format('F Y'),

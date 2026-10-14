@@ -212,7 +212,11 @@ void main() {
       expect(find.text('Full Value'), findsOneWidget);
       expect(find.text('Our Hire Value'), findsOneWidget);
       expect(find.text('Commission'), findsOneWidget);
-      expect(find.text('Expenses'), findsOneWidget);
+      // Scoped to the tab body: the Expenses *tab* label also reads "Expenses".
+      expect(
+        find.descendant(of: find.byType(TabBarView), matching: find.text('Expenses')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('shows a payroll status pill once it is finalized or paid', (tester) async {

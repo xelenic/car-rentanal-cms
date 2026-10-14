@@ -9,6 +9,7 @@ import '../models/admin_user.dart';
 import '../models/customer.dart';
 import '../models/dashboard_summary.dart';
 import '../models/driver.dart';
+import '../models/driver_expense.dart';
 import '../models/driver_summary.dart';
 import '../models/hire.dart';
 import '../models/hire_period.dart';
@@ -748,6 +749,32 @@ class ApiClient {
 
     if (response.statusCode == 200) {
       return DriverSummary.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// This driver's Expenses tab: one month's hire_expenses rows at a time —
+  /// defaults to the current month, same as fetchDriverSummary().
+  Future<DriverExpensePage> fetchDriverExpenses(
+    int driverId, {
+    int? year,
+    int? month,
+    String? category,
+    int page = 1,
+  }) async {
+    final uri = Uri.parse('$baseUrl/admin/drivers/$driverId/expenses').replace(
+      queryParameters: {
+        if (year != null) 'year': '$year',
+        if (month != null) 'month': '$month',
+        if (category != null && category.isNotEmpty) 'category': category,
+        'page': '$page',
+      },
+    );
+    final response = await _http.get(uri, headers: await _headers(auth: true));
+
+    if (response.statusCode == 200) {
+      return DriverExpensePage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     }
 
     throw ApiException(_extractError(response));

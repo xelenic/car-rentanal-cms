@@ -3,7 +3,9 @@
 use App\Models\Driver;
 use App\Models\DriverPayroll;
 use App\Models\Hire;
+use App\Models\HireExpense;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Permission;
@@ -293,6 +295,92 @@ describe('the summary (Overview tab)', function () {
         signedInForDrivers();
 
         $this->getJson('/api/admin/drivers/999/summary')->assertNotFound();
+    });
+});
+
+describe('the expenses (Expenses tab)', function () {
+    it('needs drivers.view', function () {
+        $driver = testDriver();
+        signedInForDrivers(['hires.view']);
+
+        $this->getJson("/api/admin/drivers/{$driver->id}/expenses")->assertForbidden();
+    });
+
+    it('lists only this driver\'s expenses for the given month, not another driver\'s or another month\'s', function () {
+        signedInForDrivers();
+        $driver = testDriver('ZZZ Nimal');
+        $someoneElse = testDriver('ZZZ Kamal', ['email' => 'zzz.kamal@example.test']);
+
+        $this->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        HireExpense::create(['driver_id' => $driver->id, 'category' => 'fuel', 'amount' => 1500]);
+        HireExpense::create(['driver_id' => $driver->id, 'category' => 'parking', 'amount' => 250]);
+        HireExpense::create(['driver_id' => $someoneElse->id, 'category' => 'fuel', 'amount' => 9999]);
+
+        $this->travelTo(Carbon::parse('2026-08-16 12:00:00'));
+        HireExpense::create(['driver_id' => $driver->id, 'category' => 'repair', 'amount' => 7777]);
+
+        $response = $this->getJson("/api/admin/drivers/{$driver->id}/expenses?year=2026&month=9")->assertOk();
+
+        expect(collect($response->json('data'))->pluck('category')->sort()->values()->all())
+            ->toBe(['fuel', 'parking'])
+            ->and($response->json('summary.count'))->toBe(2)
+            ->and($response->json('summary.total'))->toBe(1750);
+    });
+
+    it('includes the category label, amount, receipt and which hire it was logged against', function () {
+        signedInForDrivers();
+        $driver = testDriver();
+        $hire = Hire::create([
+            'tour_type' => 'drop_pickup', 'hire_full_value' => 5000, 'our_hire_value' => 3500,
+            'payment_type' => 'cash', 'start_time' => '2026-09-10 10:00:00', 'driver_id' => $driver->id,
+        ]);
+        $this->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        HireExpense::create(['driver_id' => $driver->id, 'hire_id' => $hire->id, 'category' => 'fuel', 'amount' => 1200]);
+
+        $response = $this->getJson("/api/admin/drivers/{$driver->id}/expenses?year=2026&month=9")->assertOk();
+
+        $response->assertJsonPath('data.0.category', 'fuel')
+            ->assertJsonPath('data.0.category_label', 'Fuel')
+            ->assertJsonPath('data.0.amount', 1200)
+            ->assertJsonPath('data.0.hire_id', $hire->id)
+            ->assertJsonPath('data.0.hire_tour_type_label', Hire::TOUR_TYPES['drop_pickup'])
+            ->assertJsonPath('data.0.receipt_url', null);
+    });
+
+    it('defaults to the current month when none is given', function () {
+        signedInForDrivers();
+        $driver = testDriver();
+
+        $this->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        HireExpense::create(['driver_id' => $driver->id, 'category' => 'fuel', 'amount' => 500]);
+
+        $this->getJson("/api/admin/drivers/{$driver->id}/expenses")
+            ->assertOk()
+            ->assertJsonPath('summary.count', 1);
+    });
+
+    it('pages the list', function () {
+        signedInForDrivers();
+        $driver = testDriver();
+
+        $this->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        foreach (range(1, 23) as $number) {
+            HireExpense::create(['driver_id' => $driver->id, 'category' => 'fuel', 'amount' => $number]);
+        }
+
+        $first = $this->getJson("/api/admin/drivers/{$driver->id}/expenses?year=2026&month=9")->assertOk();
+        $second = $this->getJson("/api/admin/drivers/{$driver->id}/expenses?year=2026&month=9&page=2")->assertOk();
+
+        expect($first->json('data'))->toHaveCount(20)
+            ->and($first->json('meta.last_page'))->toBe(2)
+            ->and($first->json('summary.count'))->toBe(23)
+            ->and($second->json('data'))->toHaveCount(3);
+    });
+
+    it('is 404 for a driver that does not exist', function () {
+        signedInForDrivers();
+
+        $this->getJson('/api/admin/drivers/999/expenses')->assertNotFound();
     });
 });
 
