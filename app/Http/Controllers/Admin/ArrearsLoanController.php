@@ -32,6 +32,7 @@ class ArrearsLoanController extends Controller implements HasMiddleware
             'deduction_type' => ['required', Rule::in(array_keys(DriverArrearsLoan::DEDUCTION_TYPES))],
             'installment_months' => ['required_if:deduction_type,installments', 'nullable', 'integer', 'min:1', 'max:60'],
             'search' => ['nullable', 'string'],
+            'redirect_to' => ['nullable', 'string', Rule::in(['index', 'show'])],
         ]);
 
         $year = (int) $data['year'];
@@ -44,7 +45,7 @@ class ArrearsLoanController extends Controller implements HasMiddleware
         $unresolvedDeficit = $this->currentUnresolvedDeficit($driver, $year, $month);
 
         if ($unresolvedDeficit >= 0) {
-            return $this->back($data)->with('error', 'There is no deficit for this period — there is nothing to convert.');
+            return $this->back($driver, $data)->with('error', 'There is no deficit for this period — there is nothing to convert.');
         }
 
         $amount = round(abs($unresolvedDeficit), 2);
@@ -66,7 +67,7 @@ class ArrearsLoanController extends Controller implements HasMiddleware
             );
         });
 
-        return $this->back($data)->with('status', "Converted \${$this->money($amount)} of \"{$driver->name}\"'s deficit into an arrears loan.");
+        return $this->back($driver, $data)->with('status', "Converted \${$this->money($amount)} of \"{$driver->name}\"'s deficit into an arrears loan.");
     }
 
     private function currentUnresolvedDeficit(Driver $driver, int $year, int $month): float
@@ -95,8 +96,22 @@ class ArrearsLoanController extends Controller implements HasMiddleware
         return number_format($amount, 2);
     }
 
-    private function back(array $data): RedirectResponse
+    /**
+     * Back to wherever this action was submitted from — the driver's own
+     * details page (Salary tab) when it carries 'redirect_to' => 'show',
+     * otherwise the all-drivers list this originally only ever came from.
+     */
+    private function back(Driver $driver, array $data): RedirectResponse
     {
+        if (($data['redirect_to'] ?? null) === 'show') {
+            return redirect()->route('admin.drivers.show', array_filter([
+                'driver' => $driver->id,
+                'tab' => 'salary',
+                'year' => $data['year'] ?? null,
+                'month' => $data['month'] ?? null,
+            ]));
+        }
+
         return redirect()->route('admin.drivers.index', array_filter([
             'year' => $data['year'] ?? null,
             'month' => $data['month'] ?? null,

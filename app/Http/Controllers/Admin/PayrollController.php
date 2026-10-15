@@ -17,6 +17,7 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\Response;
 
 class PayrollController extends Controller implements HasMiddleware
@@ -37,6 +38,7 @@ class PayrollController extends Controller implements HasMiddleware
             'manual_adjustment' => ['nullable', 'numeric'],
             'adjustment_note' => ['nullable', 'string', 'max:1000'],
             'search' => ['nullable', 'string'],
+            'redirect_to' => ['nullable', 'string', Rule::in(['index', 'show'])],
         ]);
 
         $existing = DriverPayroll::query()
@@ -46,7 +48,7 @@ class PayrollController extends Controller implements HasMiddleware
             ->first();
 
         if ($existing && $existing->status === 'paid') {
-            return $this->back($data)->with('error', "Payroll for \"{$driver->name}\" is already paid and can no longer be modified.");
+            return $this->back($driver, $data)->with('error', "Payroll for \"{$driver->name}\" is already paid and can no longer be modified.");
         }
 
         $calculation = DriverSalaryCalculator::calculate($driver, (int) $data['year'], (int) $data['month']);
@@ -94,7 +96,7 @@ class PayrollController extends Controller implements HasMiddleware
             ]
         );
 
-        return $this->back($data)->with('status', "Payroll finalized for \"{$driver->name}\".");
+        return $this->back($driver, $data)->with('status', "Payroll finalized for \"{$driver->name}\".");
     }
 
     public function markPaid(Request $request, Driver $driver, DriverPayroll $payroll): RedirectResponse
@@ -105,10 +107,11 @@ class PayrollController extends Controller implements HasMiddleware
             'year' => ['required', 'integer'],
             'month' => ['required', 'integer'],
             'search' => ['nullable', 'string'],
+            'redirect_to' => ['nullable', 'string', Rule::in(['index', 'show'])],
         ]);
 
         if ($payroll->status !== 'finalized') {
-            return $this->back($data)->with('error', 'Only a finalized payroll can be marked as paid.');
+            return $this->back($driver, $data)->with('error', 'Only a finalized payroll can be marked as paid.');
         }
 
         $carryoverNote = '';
@@ -139,7 +142,7 @@ class PayrollController extends Controller implements HasMiddleware
             }
         });
 
-        return $this->back($data)->with('status', "Payroll for \"{$driver->name}\" was marked as paid.".$carryoverNote);
+        return $this->back($driver, $data)->with('status', "Payroll for \"{$driver->name}\" was marked as paid.".$carryoverNote);
     }
 
     /**
@@ -156,15 +159,16 @@ class PayrollController extends Controller implements HasMiddleware
             'year' => ['required', 'integer'],
             'month' => ['required', 'integer'],
             'search' => ['nullable', 'string'],
+            'redirect_to' => ['nullable', 'string', Rule::in(['index', 'show'])],
         ]);
 
         if ($payroll->status !== 'finalized') {
-            return $this->back($data)->with('error', 'Only a finalized (not yet paid) payroll can be reverted.');
+            return $this->back($driver, $data)->with('error', 'Only a finalized (not yet paid) payroll can be reverted.');
         }
 
         $payroll->delete();
 
-        return $this->back($data)->with('status', "Payroll finalization for \"{$driver->name}\" was reverted.");
+        return $this->back($driver, $data)->with('status', "Payroll finalization for \"{$driver->name}\" was reverted.");
     }
 
     /**
@@ -189,8 +193,22 @@ class PayrollController extends Controller implements HasMiddleware
         return $pdf->stream($filename);
     }
 
-    private function back(array $data): RedirectResponse
+    /**
+     * Back to wherever this action was submitted from — the driver's own
+     * details page (Salary tab) when it carries 'redirect_to' => 'show',
+     * otherwise the all-drivers list this originally only ever came from.
+     */
+    private function back(Driver $driver, array $data): RedirectResponse
     {
+        if (($data['redirect_to'] ?? null) === 'show') {
+            return redirect()->route('admin.drivers.show', array_filter([
+                'driver' => $driver->id,
+                'tab' => 'salary',
+                'year' => $data['year'] ?? null,
+                'month' => $data['month'] ?? null,
+            ]));
+        }
+
         return redirect()->route('admin.drivers.index', array_filter([
             'year' => $data['year'] ?? null,
             'month' => $data['month'] ?? null,

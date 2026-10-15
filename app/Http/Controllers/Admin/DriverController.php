@@ -216,6 +216,25 @@ class DriverController extends Controller implements HasMiddleware
             'salary_payable' => round((float) ($periodPayroll->final_amount ?? $periodSalary['net_salary_payable']), 2),
         ];
 
+        // The Salary tab's Deposit section and its "Change as Arrears Loan"
+        // button need these same two inputs the index page's salary modal
+        // uses — see DriverSalaryCalculator::deposit_amount and
+        // ArrearsLoanController::currentUnresolvedDeficit() for the formula
+        // built on top of them.
+        $transferredTotal = round((float) DriverDepositTransfer::query()
+            ->where('driver_id', $driver->id)
+            ->where('year', $selectedYear)
+            ->where('month', $selectedMonth)
+            ->sum('amount'), 2);
+
+        $arrearsLoans = DriverArrearsLoan::query()
+            ->where('driver_id', $driver->id)
+            ->where('source_year', $selectedYear)
+            ->where('source_month', $selectedMonth)
+            ->with('deductions')
+            ->latest()
+            ->get();
+
         $tab = $request->string('tab')->toString();
         $tab = in_array($tab, ['earnings', 'expenses', 'salary'], true) ? $tab : 'earnings';
 
@@ -227,6 +246,8 @@ class DriverController extends Controller implements HasMiddleware
             'periodSummary' => $periodSummary,
             'periodSalary' => $periodSalary,
             'periodPayroll' => $periodPayroll,
+            'transferredTotal' => $transferredTotal,
+            'arrearsLoans' => $arrearsLoans,
             'periodLabel' => now()->setDate($selectedYear, $selectedMonth, 1)->format('F Y'),
             'availableYears' => $availableYears,
             'monthsByYear' => $monthsByYear,
