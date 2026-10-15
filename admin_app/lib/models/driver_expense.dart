@@ -4,6 +4,19 @@ double _number(dynamic value) {
   return double.tryParse(value.toString()) ?? 0;
 }
 
+/// Mirrors the backend's `HireExpense::CATEGORIES` — the fixed set a
+/// driver-logged expense is filed under, used for the edit form's dropdown.
+const driverExpenseCategories = <String, String>{
+  'fuel': 'Fuel',
+  'repair': 'Vehicle Repair',
+  'emergency': 'Emergency',
+  'highway': 'Highway Charges',
+  'food': 'Driver Foods',
+  'room': 'Room Charges',
+  'parking': 'Parking Tickets',
+  'others': 'Others',
+};
+
 /// One expense a driver logged — mirrors Http\Resources\DriverExpenseResource.
 /// May or may not be tied to a hire (see HireExpense::CATEGORIES on the
 /// backend for the full category set).

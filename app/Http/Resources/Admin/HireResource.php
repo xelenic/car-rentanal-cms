@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Admin;
 
+use App\Http\Resources\HirePaymentResource;
 use App\Models\Hire;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -35,6 +36,7 @@ class HireResource extends JsonResource
             'paid_amount' => $this->paid_amount,
             'balance_remaining' => $this->balance_remaining,
             'payment_status' => $this->payment_status,
+            'payments' => HirePaymentResource::collection($this->whenLoaded('payments')),
             'customer' => $this->whenLoaded('customer', fn () => [
                 'id' => $this->customer->id,
                 'name' => $this->customer->name,

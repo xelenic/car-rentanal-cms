@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../models/admin_user.dart';
 import '../models/driver_expense.dart';
+import '../screens/driver_expense_edit_sheet.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 import '../util/format.dart';
@@ -13,9 +15,10 @@ import 'state_views.dart';
 /// HireHistoryTab). The total up top covers every expense the month
 /// matched, not just the page shown.
 class DriverExpensesTab extends StatefulWidget {
-  const DriverExpensesTab({super.key, required this.driverId});
+  const DriverExpensesTab({super.key, required this.driverId, this.user});
 
   final int driverId;
+  final AdminUser? user;
 
   @override
   State<DriverExpensesTab> createState() => _DriverExpensesTabState();
@@ -110,6 +113,62 @@ class _DriverExpensesTabState extends State<DriverExpensesTab> with AutomaticKee
     _load();
   }
 
+  double _round2(double value) => double.parse(value.toStringAsFixed(2));
+
+  Future<void> _edit(DriverExpense expense) async {
+    final updated = await showModalBottomSheet<DriverExpense>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => DriverExpenseEditSheet(expense: expense),
+    );
+    if (updated == null || !mounted) return;
+
+    setState(() {
+      _expenses = [for (final e in _expenses) if (e.id == updated.id) updated else e];
+      _summary = DriverExpenseListSummary(
+        count: _summary.count,
+        total: _round2(_summary.total - expense.amount + updated.amount),
+      );
+    });
+  }
+
+  Future<void> _delete(DriverExpense expense) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete this expense?'),
+        content: Text('${expense.categoryLabel} · ${formatRsExact(expense.amount)}. This can\'t be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Keep it')),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ApiClient.instance.deleteDriverExpense(expense.id);
+      if (!mounted) return;
+      setState(() {
+        _expenses = _expenses.where((e) => e.id != expense.id).toList();
+        _summary = DriverExpenseListSummary(count: _summary.count - 1, total: _round2(_summary.total - expense.amount));
+      });
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Could not reach the server. Nothing was deleted.')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -189,7 +248,11 @@ class _DriverExpensesTabState extends State<DriverExpensesTab> with AutomaticKee
               )
             else ...[
               for (final expense in _expenses) ...[
-                DriverExpenseCard(expense: expense),
+                DriverExpenseCard(
+                  expense: expense,
+                  onEdit: widget.user?.canUpdateHires ?? false ? () => _edit(expense) : null,
+                  onDelete: widget.user?.canDeleteHires ?? false ? () => _delete(expense) : null,
+                ),
                 const SizedBox(height: 10),
               ],
               if (_hasMore)

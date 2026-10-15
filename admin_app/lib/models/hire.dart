@@ -37,6 +37,29 @@ class HireVehicle {
   }
 }
 
+/// One payment recorded against a credit hire's balance — mirrors
+/// Http\Resources\HirePaymentResource. No method/reference field exists;
+/// just the amount, the day it was recorded, and an optional note.
+class HirePayment {
+  const HirePayment({required this.id, required this.amount, this.paidAt, this.notes, this.createdAt});
+
+  final int id;
+  final double amount;
+  final DateTime? paidAt;
+  final String? notes;
+  final DateTime? createdAt;
+
+  factory HirePayment.fromJson(Map<String, dynamic> json) {
+    return HirePayment(
+      id: json['id'] as int,
+      amount: Hire._parseDouble(json['amount']),
+      paidAt: json['paid_at'] != null ? DateTime.tryParse(json['paid_at'] as String) : null,
+      notes: json['notes'] as String?,
+      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) : null,
+    );
+  }
+}
+
 /// Mirrors App\Http\Resources\Admin\HireResource's shape exactly.
 class Hire {
   const Hire({
@@ -62,6 +85,7 @@ class Hire {
     required this.paidAmount,
     required this.balanceRemaining,
     required this.paymentStatus,
+    this.payments = const [],
     this.customer,
     this.driver,
     this.vehicle,
@@ -95,6 +119,10 @@ class Hire {
   final double paidAmount;
   final double balanceRemaining;
   final String paymentStatus;
+
+  /// This credit hire's payment history, newest first — empty (not
+  /// necessarily meaning none exist) wherever the response didn't load it.
+  final List<HirePayment> payments;
   final HireCustomer? customer;
   final HireDriver? driver;
   final HireVehicle? vehicle;
@@ -137,6 +165,9 @@ class Hire {
       paidAmount: _parseDouble(json['paid_amount']),
       balanceRemaining: _parseDouble(json['balance_remaining']),
       paymentStatus: json['payment_status'] as String? ?? 'unpaid',
+      payments: (json['payments'] as List<dynamic>? ?? [])
+          .map((e) => HirePayment.fromJson(e as Map<String, dynamic>))
+          .toList(),
       customer: json['customer'] != null
           ? HireCustomer.fromJson(json['customer'] as Map<String, dynamic>)
           : null,

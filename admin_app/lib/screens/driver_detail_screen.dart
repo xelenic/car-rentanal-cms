@@ -131,7 +131,7 @@ class _DriverDetailScreenState extends State<DriverDetailScreen> with SingleTick
                 _DriverOverviewTab(driverId: _driver.id),
                 _buildDetails(),
                 HireHistoryTab(driverId: _driver.id, user: widget.user),
-                DriverExpensesTab(driverId: _driver.id),
+                DriverExpensesTab(driverId: _driver.id, user: widget.user),
               ],
             ),
           ),

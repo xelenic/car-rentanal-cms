@@ -205,6 +205,40 @@ class ApiClient {
     throw ApiException(_extractError(response));
   }
 
+  /// Records a payment against a credit hire's remaining balance — the
+  /// amount and an optional note are the only inputs; the date is always
+  /// today, set server-side. Returns the hire with its updated totals and
+  /// payment history.
+  Future<Hire> claimHirePayment(int hireId, {required double amount, String? notes}) async {
+    final response = await _http.post(
+      Uri.parse('$baseUrl/admin/hires/$hireId/payments'),
+      headers: await _headers(auth: true),
+      body: jsonEncode({'amount': amount, if (notes != null && notes.isNotEmpty) 'notes': notes}),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return Hire.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// Undoes a recorded payment, returning the hire with its restored totals.
+  Future<Hire> deleteHirePayment(int hireId, int paymentId) async {
+    final response = await _http.delete(
+      Uri.parse('$baseUrl/admin/hires/$hireId/payments/$paymentId'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return Hire.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
   static String _dateOnly(DateTime date) {
     final y = date.year.toString().padLeft(4, '0');
     final m = date.month.toString().padLeft(2, '0');
@@ -776,6 +810,33 @@ class ApiClient {
     if (response.statusCode == 200) {
       return DriverExpensePage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// Corrects a driver-logged expense's category or amount.
+  Future<DriverExpense> updateDriverExpense(int id, {required String category, required double amount}) async {
+    final response = await _http.put(
+      Uri.parse('$baseUrl/admin/expenses/$id'),
+      headers: await _headers(auth: true),
+      body: jsonEncode({'category': category, 'amount': amount}),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return DriverExpense.fromJson(data['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  Future<void> deleteDriverExpense(int id) async {
+    final response = await _http.delete(
+      Uri.parse('$baseUrl/admin/expenses/$id'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 204) return;
 
     throw ApiException(_extractError(response));
   }

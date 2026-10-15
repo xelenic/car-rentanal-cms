@@ -6,6 +6,7 @@ import '../models/hire.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/hire_card.dart';
+import 'claim_payment_sheet.dart';
 import 'hire_form_screen.dart';
 
 class HireDetailScreen extends StatefulWidget {
@@ -29,6 +30,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
 
   static final _currency = NumberFormat.currency(locale: 'en_LK', symbol: 'Rs. ', decimalDigits: 2);
   static final _dateFormat = DateFormat('MMM d, y · h:mm a');
+  static final _paymentDateFormat = DateFormat('MMM d, y');
 
   @override
   void initState() {
@@ -108,6 +110,55 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not reach the server. The hire was not deleted.')),
       );
+    }
+  }
+
+  Future<void> _claimPayment() async {
+    final hire = _hire!;
+    final updated = await showModalBottomSheet<Hire>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => ClaimPaymentSheet(hireId: hire.id, balanceRemaining: hire.balanceRemaining),
+    );
+    if (updated == null || !mounted) return;
+
+    setState(() => _hire = updated);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(updated.isFullyPaid ? 'Payment recorded — fully paid.' : 'Payment recorded.')),
+    );
+  }
+
+  Future<void> _deletePayment(HirePayment payment) async {
+    final hire = _hire!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove this payment?'),
+        content: Text('${_currency.format(payment.amount)}. This can\'t be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Keep it')),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final updated = await ApiClient.instance.deleteHirePayment(hire.id, payment.id);
+      if (mounted) setState(() => _hire = updated);
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Could not reach the server. Nothing was removed.')));
+      }
     }
   }
 
@@ -316,6 +367,8 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
   }
 
   Widget _paymentCard(Hire hire) {
+    final canClaim = widget.user?.canUpdateHires ?? false;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -337,8 +390,68 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
             const SizedBox(height: 10),
             _valueRow('Paid so far', _currency.format(hire.paidAmount)),
             _valueRow('Balance remaining', _currency.format(hire.balanceRemaining)),
+            if (canClaim && !hire.isFullyPaid) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  key: const Key('claim-payment'),
+                  onPressed: _claimPayment,
+                  icon: const Icon(Icons.payments_outlined, size: 18),
+                  label: const Text('Claim Payment'),
+                ),
+              ),
+            ],
+            if (hire.payments.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+              const _SectionTitle('Payment History'),
+              const SizedBox(height: 6),
+              for (final payment in hire.payments) _paymentRow(payment, canDelete: canClaim),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _paymentRow(HirePayment payment, {required bool canDelete}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _currency.format(payment.amount),
+                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                ),
+                if (payment.paidAt != null)
+                  Text(
+                    _paymentDateFormat.format(payment.paidAt!),
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                if ((payment.notes ?? '').trim().isNotEmpty)
+                  Text(
+                    payment.notes!.trim(),
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+              ],
+            ),
+          ),
+          if (canDelete)
+            IconButton(
+              key: Key('delete-payment-${payment.id}'),
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
+              tooltip: 'Remove',
+              onPressed: () => _deletePayment(payment),
+            ),
+        ],
       ),
     );
   }

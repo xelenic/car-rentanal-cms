@@ -42,6 +42,7 @@ class FakeServer {
     List<Map<String, dynamic>>? incomes,
     List<Map<String, dynamic>>? revenues,
     List<Map<String, dynamic>>? drivers,
+    Map<int, List<Map<String, dynamic>>>? driverExpenses,
     List<Map<String, dynamic>>? customers,
     List<Map<String, dynamic>>? referenceDrivers,
     List<Map<String, dynamic>>? referenceCustomers,
@@ -60,6 +61,7 @@ class FakeServer {
         incomes = incomes ?? [],
         revenues = revenues ?? [],
         drivers = drivers ?? [],
+        driverExpenses = driverExpenses ?? {},
         customers = customers ?? [],
         referenceDrivers = referenceDrivers ?? [
           {'id': 1, 'name': 'ZZZ Test Driver'},
@@ -112,6 +114,10 @@ class FakeServer {
   /// The driver roster and customer list, each in the API's JSON shape.
   final List<Map<String, dynamic>> drivers;
   final List<Map<String, dynamic>> customers;
+
+  /// Each driver's logged hire_expenses rows, keyed by driver id — mirrors
+  /// [hires] above, which is keyed by vehicle id the same way.
+  final Map<int, List<Map<String, dynamic>>> driverExpenses;
 
   /// Id/name options for the hire form's and hire filter's driver/customer
   /// dropdowns (GET /admin/hires/reference-data) — independent of [drivers]
@@ -185,12 +191,16 @@ class FakeServer {
   final List<Map<String, dynamic>> createdDrivers = [];
   final List<({int id, Map<String, dynamic> body})> updatedDrivers = [];
   final List<int> deletedDrivers = [];
+  final List<({int id, Map<String, dynamic> body})> savedDriverExpenses = [];
+  final List<int> deletedDriverExpenses = [];
   final List<Map<String, dynamic>> createdCustomers = [];
   final List<({int id, Map<String, dynamic> body})> updatedCustomers = [];
   final List<int> deletedCustomers = [];
   final List<Map<String, dynamic>> createdHires = [];
   final List<({int id, Map<String, dynamic> body})> updatedHires = [];
   final List<int> deletedHires = [];
+  final List<({int hireId, Map<String, dynamic> body})> claimedPayments = [];
+  final List<({int hireId, int paymentId})> deletedPayments = [];
   final List<({int? id, Map<String, dynamic> body})> savedExpenses = [];
   final List<int> deletedExpenses = [];
   final List<({int? id, Map<String, dynamic> body})> savedIncomes = [];
@@ -807,6 +817,54 @@ class FakeServer {
       return _json(driverSummary ?? defaultDriverSummaryJson());
     }
 
+    final driverExpensesMatch = RegExp(r'^/admin/drivers/(\d+)/expenses$').firstMatch(path);
+    if (driverExpensesMatch != null && request.method == 'GET') {
+      final driverId = int.parse(driverExpensesMatch.group(1)!);
+      final p = _period(request);
+      final matching = (driverExpenses[driverId] ?? [])
+          .where((e) => _inMonth(e, 'created_at', p.year, p.month))
+          .toList()
+        ..sort((a, b) => (b['created_at'] as String).compareTo(a['created_at'] as String));
+      final start = (p.page - 1) * pageSize;
+      final total = matching.fold<double>(0, (sum, e) => sum + (e['amount'] as num));
+      return _json({
+        'data': matching.skip(start).take(pageSize).toList(),
+        'meta': {'current_page': p.page, 'last_page': (matching.length / pageSize).ceil().clamp(1, 999)},
+        'summary': {'count': matching.length, 'total': total},
+      });
+    }
+
+    final driverExpenseOne = RegExp(r'^/admin/expenses/(\d+)$').firstMatch(path);
+    if (driverExpenseOne != null && (request.method == 'PUT' || request.method == 'DELETE')) {
+      final id = int.parse(driverExpenseOne.group(1)!);
+      Map<String, dynamic>? found;
+      List<Map<String, dynamic>>? ownerList;
+      for (final list in driverExpenses.values) {
+        final match = list.where((e) => e['id'] == id).firstOrNull;
+        if (match != null) {
+          found = match;
+          ownerList = list;
+          break;
+        }
+      }
+      if (found == null || ownerList == null) return _json({'message': 'Not found.'}, 404);
+
+      if (request.method == 'DELETE') {
+        ownerList.remove(found);
+        deletedDriverExpenses.add(id);
+        return _json({'message': 'Expense deleted.'});
+      }
+
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      savedDriverExpenses.add((id: id, body: body));
+      final category = body['category'] as String? ?? found['category'];
+      found
+        ..['category'] = category
+        ..['category_label'] = _driverExpenseCategoryLabels[category] ?? category
+        ..['amount'] = num.tryParse('${body['amount']}') ?? found['amount'];
+      return _json({'data': found});
+    }
+
     final driverOne = RegExp(r'^/admin/drivers/(\d+)$').firstMatch(path);
     if (driverOne != null) {
       final id = int.parse(driverOne.group(1)!);
@@ -1046,6 +1104,59 @@ class FakeServer {
       return _json({'message': 'Not found.'}, 404);
     }
 
+    Map<String, dynamic>? findHire(int id) =>
+        hires.values.expand((list) => list).where((h) => h['id'] == id).firstOrNull;
+
+    void recomputePaymentTotals(Map<String, dynamic> hire) {
+      final payments = (hire['payments'] as List).cast<Map<String, dynamic>>();
+      final full = hire['hire_full_value'] as num;
+      final paid = payments.fold<num>(0, (sum, p) => sum + (p['amount'] as num));
+      hire
+        ..['paid_amount'] = paid
+        ..['balance_remaining'] = full - paid
+        ..['payment_status'] = paid <= 0 ? 'unpaid' : (paid >= full ? 'paid' : 'partial');
+    }
+
+    final hirePaymentsMatch = RegExp(r'^/admin/hires/(\d+)/payments$').firstMatch(path);
+    if (hirePaymentsMatch != null && request.method == 'POST') {
+      final hireId = int.parse(hirePaymentsMatch.group(1)!);
+      final hire = findHire(hireId);
+      if (hire == null) return _json({'message': 'Not found.'}, 404);
+
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      claimedPayments.add((hireId: hireId, body: body));
+      final amount = num.tryParse('${body['amount']}') ?? 0;
+      if (amount <= 0 || amount > (hire['hire_full_value'] as num) - (hire['paid_amount'] as num) + 0.004) {
+        return _json({
+          'message': 'The amount field must be between 0.01 and the balance remaining.',
+          'errors': {'amount': ['The amount field must be between 0.01 and the balance remaining.']},
+        }, 422);
+      }
+
+      final payments = (hire['payments'] as List).cast<Map<String, dynamic>>();
+      final newId = (payments.map((p) => p['id'] as int).fold<int>(0, (a, b) => a > b ? a : b)) + 1;
+      payments.insert(0, hirePaymentJson(id: newId, amount: amount, notes: body['notes'] as String?));
+      recomputePaymentTotals(hire);
+      return _json({'data': {...hire}..remove('_tab')..remove('_month')});
+    }
+
+    final hirePaymentOne = RegExp(r'^/admin/hires/(\d+)/payments/(\d+)$').firstMatch(path);
+    if (hirePaymentOne != null && request.method == 'DELETE') {
+      final hireId = int.parse(hirePaymentOne.group(1)!);
+      final paymentId = int.parse(hirePaymentOne.group(2)!);
+      final hire = findHire(hireId);
+      if (hire == null) return _json({'message': 'Not found.'}, 404);
+
+      final payments = (hire['payments'] as List).cast<Map<String, dynamic>>();
+      final found = payments.where((p) => p['id'] == paymentId).firstOrNull;
+      if (found == null) return _json({'message': 'Not found.'}, 404);
+
+      deletedPayments.add((hireId: hireId, paymentId: paymentId));
+      payments.remove(found);
+      recomputePaymentTotals(hire);
+      return _json({'data': {...hire}..remove('_tab')..remove('_month')});
+    }
+
     final hireOne = RegExp(r'^/admin/hires/(\d+)$').firstMatch(path);
     if (hireOne != null) {
       final id = int.parse(hireOne.group(1)!);
@@ -1175,6 +1286,9 @@ Map<String, dynamic> hireJson({
   String? cancelReason,
   num full = 1000,
   num? our,
+  String paymentType = 'cash',
+  num paidAmount = 0,
+  List<Map<String, dynamic>>? payments,
 }) =>
     {
       '_tab': tab,
@@ -1206,11 +1320,12 @@ Map<String, dynamic> hireJson({
       'hire_full_value': full,
       'our_hire_value': our ?? full * 0.8,
       'commission': full - (our ?? full * 0.8),
-      'payment_type': 'cash',
-      'payment_type_label': 'Cash',
-      'paid_amount': 0,
-      'balance_remaining': full,
-      'payment_status': 'unpaid',
+      'payment_type': paymentType,
+      'payment_type_label': paymentType == 'credit' ? 'Credit' : 'Cash',
+      'paid_amount': paidAmount,
+      'balance_remaining': full - paidAmount,
+      'payment_status': paidAmount <= 0 ? 'unpaid' : (paidAmount >= full ? 'paid' : 'partial'),
+      'payments': payments ?? [],
       'customer': {'id': customerId, 'name': customer, 'phone': '0770000000'},
       'driver': driver == null ? null : {'id': driverId ?? 1, 'name': driver},
       'vehicle': vehicleId == null ? null : {'id': vehicleId, 'model': 'ZZZ Test Van'},
@@ -1221,6 +1336,16 @@ Map<String, dynamic> hireJson({
       'cancel_reason': cancelReason,
       'created_at': null,
     };
+
+/// A payment recorded against a credit hire, in the API's shape — mirrors
+/// Http\Resources\HirePaymentResource.
+Map<String, dynamic> hirePaymentJson({
+  required int id,
+  num amount = 500,
+  String paidAt = '2026-09-10',
+  String? notes,
+}) =>
+    {'id': id, 'amount': amount, 'paid_at': paidAt, 'notes': notes, 'created_at': '${paidAt}T00:00:00.000000Z'};
 
 
 /// The nine categories My Expenses starts with, A to Z.
@@ -1333,6 +1458,34 @@ Map<String, dynamic> dashboardVehicleCardJson({
     };
 
 /// An expense in the API's shape.
+/// Mirrors HireExpense::CATEGORIES — enough of it for tests to pick from.
+const _driverExpenseCategoryLabels = <String, String>{
+  'fuel': 'Fuel',
+  'repair': 'Vehicle Repair',
+  'parking': 'Parking Tickets',
+};
+
+/// A driver-logged expense in the API's shape — mirrors DriverExpenseResource.
+Map<String, dynamic> driverExpenseJson({
+  required int id,
+  int? hireId,
+  String? hireTourTypeLabel,
+  String category = 'fuel',
+  num amount = 500,
+  String? receiptUrl,
+  required String createdAt,
+}) =>
+    {
+      'id': id,
+      'hire_id': hireId,
+      'hire_tour_type_label': hireTourTypeLabel,
+      'category': category,
+      'category_label': _driverExpenseCategoryLabels[category] ?? category,
+      'amount': amount,
+      'receipt_url': receiptUrl,
+      'created_at': createdAt,
+    };
+
 Map<String, dynamic> expenseJson({
   required int id,
   String title = 'ZZZ Test Rent',

@@ -786,3 +786,89 @@
         })();
     </script>
 @endpush
+
+@push('scripts')
+    <script>
+        (function () {
+            function updatePreview(input) {
+                var wrapper = input.closest('.payroll-form-wrapper');
+                var preview = wrapper.querySelector('.payroll-final-preview');
+                var base = parseFloat(input.dataset.base || '0');
+                var adjustment = parseFloat(input.value) || 0;
+                var final = Math.round((base + adjustment) * 100) / 100;
+                var sign = final < 0 ? '-' : '';
+                preview.textContent = 'Final Payable: ' + sign + 'Rs. ' + Math.abs(final).toFixed(2);
+                preview.classList.toggle('text-danger', final < 0);
+                var note = wrapper.querySelector('.payroll-final-negative-note');
+                if (note) {
+                    note.classList.toggle('d-none', final >= 0);
+                }
+            }
+
+            document.addEventListener('click', function (event) {
+                var button = event.target.closest('.make-payroll-btn');
+                if (!button) return;
+                var target = document.querySelector(button.dataset.target);
+                if (target) {
+                    target.classList.remove('d-none');
+                    button.classList.add('d-none');
+                }
+            });
+
+            document.addEventListener('input', function (event) {
+                if (event.target.classList.contains('manual-adjustment-input')) {
+                    updatePreview(event.target);
+                }
+            });
+
+            function toggleArrearsFields(form) {
+                var installmentsSelected = form.querySelector('.arrears-type-radio[value="installments"]').checked;
+                var fields = form.querySelector('.arrears-installment-fields');
+                fields.classList.toggle('d-none', !installmentsSelected);
+            }
+
+            function updateArrearsPreview(form) {
+                var totalAmount = parseFloat(form.dataset.amount || '0');
+                var monthsInput = form.querySelector('.arrears-months-input');
+                var preview = form.querySelector('.arrears-installment-preview');
+                if (!monthsInput || !preview) return;
+
+                var months = Math.max(parseInt(monthsInput.value, 10) || 0, 0);
+                if (months <= 0) {
+                    preview.textContent = 'Enter how many months to split it over.';
+                    return;
+                }
+
+                var perMonth = Math.floor((totalAmount / months) * 100) / 100;
+                var last = Math.round((totalAmount - perMonth * (months - 1)) * 100) / 100;
+
+                var text;
+                if (months === 1) {
+                    text = 'Rs. ' + last.toFixed(2) + ' next month.';
+                } else if (perMonth === last) {
+                    text = 'Rs. ' + perMonth.toFixed(2) + '/month for ' + months + ' upcoming months.';
+                } else {
+                    text = 'Rs. ' + perMonth.toFixed(2) + '/month for ' + (months - 1) + ' months, then Rs. ' + last.toFixed(2) + ' in the final month.';
+                }
+                preview.textContent = text;
+            }
+
+            document.addEventListener('change', function (event) {
+                var form = event.target.closest('.arrears-loan-form');
+                if (!form) return;
+                if (event.target.classList.contains('arrears-type-radio')) {
+                    toggleArrearsFields(form);
+                    updateArrearsPreview(form);
+                }
+            });
+
+            document.addEventListener('input', function (event) {
+                var form = event.target.closest('.arrears-loan-form');
+                if (!form) return;
+                if (event.target.classList.contains('arrears-months-input')) {
+                    updateArrearsPreview(form);
+                }
+            });
+        })();
+    </script>
+@endpush

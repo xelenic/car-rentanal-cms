@@ -119,6 +119,7 @@ class HireController extends Controller
         $hire->load([
             'package', 'customer', 'driver', 'vehicle',
             'fromLocation.location', 'toLocation.location', 'stayLocations.location',
+            'payments',
         ]);
 
         return new HireResource($hire);

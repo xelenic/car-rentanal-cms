@@ -2,11 +2,14 @@
 
 use App\Models\Customer;
 use App\Models\Driver;
+use App\Models\DriverArrearsLoan;
+use App\Models\DriverPayroll;
 use App\Models\Hire;
 use App\Models\HireExpense;
 use App\Models\User;
 use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Spatie\Permission\Models\Permission;
 
 uses(RefreshDatabase::class);
@@ -244,4 +247,141 @@ it('defaults to the Earnings tab, and switches to Expenses only when asked', fun
     $expensesTab->assertOk()->assertViewHas('tab', 'expenses');
     $expensesTab->assertSee('Fuel');
     $expensesTab->assertSee('Rs. 1,234.00');
+});
+
+describe('Make Payroll (Salary tab)', function () {
+    it('shows the button to someone with payroll.manage, and hides it from someone without', function () {
+        $driver = driverShowDriver();
+        test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00', 'hire_full_value' => 1000, 'our_hire_value' => 500]);
+
+        driverShowAdmin(['drivers.view']);
+        $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=salary')->assertDontSee('Make Payroll');
+
+        driverShowAdmin(['drivers.view', 'payroll.manage']);
+        $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=salary')->assertSee('Make Payroll');
+    });
+
+    it('needs payroll.manage to finalize one', function () {
+        $driver = driverShowDriver();
+        driverShowAdmin(['drivers.view']);
+
+        $this->post("/admin/drivers/{$driver->id}/payroll", ['year' => 2026, 'month' => 9])->assertForbidden();
+        expect(DriverPayroll::count())->toBe(0);
+    });
+
+    it('finalizes a payroll and, given redirect_to=show, returns to the Salary tab', function () {
+        $driver = driverShowDriver();
+        driverShowAdmin(['drivers.view', 'payroll.manage']);
+        test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00', 'hire_full_value' => 1000, 'our_hire_value' => 500]);
+
+        $response = $this->post("/admin/drivers/{$driver->id}/payroll", [
+            'year' => 2026, 'month' => 9, 'redirect_to' => 'show',
+        ]);
+
+        $response->assertRedirect(route('admin.drivers.show', ['driver' => $driver->id, 'tab' => 'salary', 'year' => 2026, 'month' => 9]));
+        $payroll = DriverPayroll::where('driver_id', $driver->id)->first();
+        expect($payroll)->not->toBeNull()
+            ->and($payroll->status)->toBe('finalized');
+    });
+
+    it('without redirect_to, still falls back to the drivers index (unchanged default)', function () {
+        $driver = driverShowDriver();
+        driverShowAdmin(['drivers.view', 'payroll.manage']);
+        test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00', 'hire_full_value' => 1000, 'our_hire_value' => 500]);
+
+        $response = $this->post("/admin/drivers/{$driver->id}/payroll", ['year' => 2026, 'month' => 9]);
+
+        $response->assertRedirect(route('admin.drivers.index', ['year' => 2026, 'month' => 9]));
+    });
+
+    it('marking a finalized payroll as paid redirects back to the Salary tab', function () {
+        $driver = driverShowDriver();
+        driverShowAdmin(['drivers.view', 'payroll.manage']);
+        test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00', 'hire_full_value' => 1000, 'our_hire_value' => 500]);
+        $this->post("/admin/drivers/{$driver->id}/payroll", ['year' => 2026, 'month' => 9]);
+        $payroll = DriverPayroll::where('driver_id', $driver->id)->first();
+
+        $response = $this->post("/admin/drivers/{$driver->id}/payroll/{$payroll->id}/mark-paid", [
+            'year' => 2026, 'month' => 9, 'redirect_to' => 'show',
+        ]);
+
+        $response->assertRedirect(route('admin.drivers.show', ['driver' => $driver->id, 'tab' => 'salary', 'year' => 2026, 'month' => 9]));
+        expect($payroll->fresh()->status)->toBe('paid');
+    });
+
+    it('reverting a finalized payroll redirects back to the Salary tab', function () {
+        $driver = driverShowDriver();
+        driverShowAdmin(['drivers.view', 'payroll.manage']);
+        test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00', 'hire_full_value' => 1000, 'our_hire_value' => 500]);
+        $this->post("/admin/drivers/{$driver->id}/payroll", ['year' => 2026, 'month' => 9]);
+        $payroll = DriverPayroll::where('driver_id', $driver->id)->first();
+
+        $response = $this->delete("/admin/drivers/{$driver->id}/payroll/{$payroll->id}/revert", [
+            'year' => 2026, 'month' => 9, 'redirect_to' => 'show',
+        ]);
+
+        $response->assertRedirect(route('admin.drivers.show', ['driver' => $driver->id, 'tab' => 'salary', 'year' => 2026, 'month' => 9]));
+        expect(DriverPayroll::find($payroll->id))->toBeNull();
+    });
+});
+
+describe('Change as Arrears Loan (Salary tab)', function () {
+    it('shows the button only when there is a deficit, and only to payroll.manage', function () {
+        $driver = driverShowDriver();
+        test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        // Collected Rs. 1000 cash (owed to the company) on a hire that only
+        // earns the driver a small salary — a deficit, since 20% of our hire
+        // value (500) is far less than the cash they're holding.
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00', 'hire_full_value' => 1000, 'our_hire_value' => 100]);
+
+        driverShowAdmin(['drivers.view']);
+        $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=salary')->assertDontSee('Change as Arrears Loan');
+
+        driverShowAdmin(['drivers.view', 'payroll.manage']);
+        $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=salary')->assertSee('Change as Arrears Loan');
+    });
+
+    it('hides the button when there is no deficit', function () {
+        $driver = driverShowDriver();
+        driverShowAdmin(['drivers.view', 'payroll.manage']);
+        test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        // All credit (nothing owed in cash) — no deficit to convert.
+        driverShowHire([
+            'driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00',
+            'hire_full_value' => 1000, 'our_hire_value' => 500, 'payment_type' => 'credit',
+        ]);
+
+        $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=salary')->assertDontSee('Change as Arrears Loan');
+    });
+
+    it('needs payroll.manage to convert a deficit', function () {
+        $driver = driverShowDriver();
+        driverShowAdmin(['drivers.view']);
+
+        $this->post("/admin/drivers/{$driver->id}/arrears-loan", [
+            'year' => 2026, 'month' => 9, 'deduction_type' => 'full',
+        ])->assertForbidden();
+        expect(DriverArrearsLoan::count())->toBe(0);
+    });
+
+    it('converts the deficit into an arrears loan and redirects back to the Salary tab', function () {
+        $driver = driverShowDriver();
+        driverShowAdmin(['drivers.view', 'payroll.manage']);
+        test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00', 'hire_full_value' => 1000, 'our_hire_value' => 100]);
+
+        $response = $this->post("/admin/drivers/{$driver->id}/arrears-loan", [
+            'year' => 2026, 'month' => 9, 'deduction_type' => 'full', 'redirect_to' => 'show',
+        ]);
+
+        $response->assertRedirect(route('admin.drivers.show', ['driver' => $driver->id, 'tab' => 'salary', 'year' => 2026, 'month' => 9]));
+        $loan = DriverArrearsLoan::where('driver_id', $driver->id)->first();
+        expect($loan)->not->toBeNull()
+            ->and($loan->deduction_type)->toBe('full');
+    });
 });

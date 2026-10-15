@@ -21,10 +21,15 @@ IconData driverExpenseCategoryIcon(String category) => switch (category) {
 /// One expense a driver logged: category, amount, when, which hire (if any)
 /// and a receipt thumbnail (if one was attached).
 class DriverExpenseCard extends StatelessWidget {
-  const DriverExpenseCard({super.key, required this.expense, this.onTap});
+  const DriverExpenseCard({super.key, required this.expense, this.onTap, this.onEdit, this.onDelete});
 
   final DriverExpense expense;
   final VoidCallback? onTap;
+
+  /// Shown only when non-null — gated by the signed-in user's own
+  /// hires.update/hires.delete permissions (same as the web admin panel).
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   static final _dateFormat = DateFormat('MMM d, y · h:mm a');
 
@@ -103,6 +108,30 @@ class DriverExpenseCard extends StatelessWidget {
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
                         ),
+                      ),
+                    ],
+                    if (onEdit != null || onDelete != null) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (onEdit != null)
+                            IconButton(
+                              key: Key('edit-expense-${expense.id}'),
+                              visualDensity: VisualDensity.compact,
+                              icon: const Icon(Icons.edit_outlined, size: 18),
+                              tooltip: 'Edit',
+                              onPressed: onEdit,
+                            ),
+                          if (onDelete != null)
+                            IconButton(
+                              key: Key('delete-expense-${expense.id}'),
+                              visualDensity: VisualDensity.compact,
+                              icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
+                              tooltip: 'Delete',
+                              onPressed: onDelete,
+                            ),
+                        ],
                       ),
                     ],
                   ],

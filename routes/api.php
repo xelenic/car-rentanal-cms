@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\Admin\CustomerController as AdminCustomerController
 use App\Http\Controllers\Api\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Api\Admin\DriverController as AdminDriverController;
 use App\Http\Controllers\Api\Admin\HireController as AdminHireController;
+use App\Http\Controllers\Api\Admin\HireExpenseController as AdminHireExpenseController;
+use App\Http\Controllers\Api\Admin\HirePaymentController as AdminHirePaymentController;
 use App\Http\Controllers\Api\Admin\MyExpenseCategoryController as AdminMyExpenseCategoryController;
 use App\Http\Controllers\Api\Admin\MyExpenseController as AdminMyExpenseController;
 use App\Http\Controllers\Api\Admin\OtherCompanyRevenueController as AdminOtherCompanyRevenueController;
@@ -78,6 +80,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/admin/hires', [AdminHireController::class, 'store']);
     Route::put('/admin/hires/{hire}', [AdminHireController::class, 'update']);
     Route::delete('/admin/hires/{hire}', [AdminHireController::class, 'destroy']);
+    Route::post('/admin/hires/{hire}/payments', [AdminHirePaymentController::class, 'store']);
+    Route::delete('/admin/hires/{hire}/payments/{payment}', [AdminHirePaymentController::class, 'destroy']);
 
     Route::get('/admin/vehicles', [AdminVehicleController::class, 'index']);
     Route::post('/admin/vehicles', [AdminVehicleController::class, 'store']);
@@ -94,6 +98,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/admin/drivers/{driver}', [AdminDriverController::class, 'destroy']);
     Route::get('/admin/drivers/{driver}/summary', [AdminDriverController::class, 'summary']);
     Route::get('/admin/drivers/{driver}/expenses', [AdminDriverController::class, 'expenses']);
+    Route::put('/admin/expenses/{hireExpense}', [AdminHireExpenseController::class, 'update']);
+    Route::delete('/admin/expenses/{hireExpense}', [AdminHireExpenseController::class, 'destroy']);
 
     Route::get('/admin/customers', [AdminCustomerController::class, 'index']);
     Route::post('/admin/customers', [AdminCustomerController::class, 'store']);
