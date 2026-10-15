@@ -106,17 +106,39 @@
         </div>
     </div>
 
+    @php $periodQuery = ['year' => $selectedYear, 'month' => $selectedMonth]; @endphp
+
+    <ul class="nav nav-tabs mb-2" id="driver-period-tabs">
+        <li class="nav-item">
+            <a class="nav-link {{ $tab === 'earnings' ? 'active' : '' }}" id="tab-earnings" href="{{ route('admin.drivers.show', ['driver' => $driver] + $periodQuery) }}">
+                Earnings
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {{ $tab === 'expenses' ? 'active' : '' }}" id="tab-expenses" href="{{ route('admin.drivers.show', ['driver' => $driver, 'tab' => 'expenses'] + $periodQuery) }}">
+                Expenses
+                @if ($periodExpenses->isNotEmpty())
+                    <span class="badge rounded-pill bg-light text-dark border ms-1">{{ $periodExpenses->count() }}</span>
+                @endif
+            </a>
+        </li>
+    </ul>
+
     <div class="card border-0 mb-2">
         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
             <span class="fw-semibold" style="font-size: .85rem;">
-                Earnings &middot; {{ $periodLabel }}
-                @if ($periodPayroll?->status === 'paid')
+                {{ $tab === 'expenses' ? 'Expenses' : 'Earnings' }} &middot; {{ $periodLabel }}
+                @if ($tab === 'earnings' && $periodPayroll?->status === 'paid')
                     <span class="badge rounded-pill bg-success-subtle text-success-emphasis ms-1">Paid</span>
-                @elseif ($periodPayroll?->status === 'finalized')
+                @elseif ($tab === 'earnings' && $periodPayroll?->status === 'finalized')
                     <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis ms-1">Finalized &middot; awaiting payment</span>
                 @endif
             </span>
             <form method="GET" class="d-flex flex-wrap align-items-center gap-2">
+                @if ($tab === 'expenses')
+                    <input type="hidden" name="tab" value="expenses">
+                @endif
+
                 <select name="year" class="form-select form-select-sm" style="max-width: 110px;" onchange="this.form.submit()">
                     @forelse ($availableYears as $year)
                         <option value="{{ $year }}" {{ (string) $selectedYear === (string) $year ? 'selected' : '' }}>{{ $year }}</option>
@@ -135,138 +157,142 @@
             </form>
         </div>
 
-        <div class="row row-cols-2 row-cols-md-3 row-cols-xl-6 g-2 p-3 border-bottom">
-            <div class="col">
-                <div class="text-muted" style="font-size: .7rem;">Hires</div>
-                <div class="fw-semibold" style="font-size: .85rem;">{{ $periodSummary['hire_count'] }}</div>
-            </div>
-            <div class="col">
-                <div class="text-muted" style="font-size: .7rem;">Full Value</div>
-                <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSummary['hire_full_value_total'], 2) }}</div>
-            </div>
-            <div class="col">
-                <div class="text-muted" style="font-size: .7rem;">Our Hire Value</div>
-                <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSummary['our_hire_value_total'], 2) }}</div>
-            </div>
-            <div class="col">
-                <div class="text-muted" style="font-size: .7rem;">Commission</div>
-                <div class="fw-semibold" style="color: #1baf7a; font-size: .85rem;">Rs. {{ number_format($periodSummary['commission_total'], 2) }}</div>
-            </div>
-            <div class="col">
-                <div class="text-muted" style="font-size: .7rem;">Expenses</div>
-                <div class="fw-semibold" style="color: #c95a26; font-size: .85rem;">Rs. {{ number_format($periodSummary['expenses_total'], 2) }}</div>
-            </div>
-            <div class="col">
-                <div class="text-muted" style="font-size: .7rem;">Salary Payable</div>
-                <div class="fw-semibold" style="font-size: .85rem;">
-                    <span class="{{ $periodSummary['salary_payable'] < 0 ? 'text-danger' : '' }}">Rs. {{ number_format($periodSummary['salary_payable'], 2) }}</span>
+        @if ($tab === 'earnings')
+            <div class="row row-cols-2 row-cols-md-5 g-2 p-3 border-bottom">
+                <div class="col">
+                    <div class="text-muted" style="font-size: .7rem;">Hires</div>
+                    <div class="fw-semibold" style="font-size: .85rem;">{{ $periodSummary['hire_count'] }}</div>
+                </div>
+                <div class="col">
+                    <div class="text-muted" style="font-size: .7rem;">Full Value</div>
+                    <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSummary['hire_full_value_total'], 2) }}</div>
+                </div>
+                <div class="col">
+                    <div class="text-muted" style="font-size: .7rem;">Our Hire Value</div>
+                    <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSummary['our_hire_value_total'], 2) }}</div>
+                </div>
+                <div class="col">
+                    <div class="text-muted" style="font-size: .7rem;">Commission</div>
+                    <div class="fw-semibold" style="color: #1baf7a; font-size: .85rem;">Rs. {{ number_format($periodSummary['commission_total'], 2) }}</div>
+                </div>
+                <div class="col">
+                    <div class="text-muted" style="font-size: .7rem;">Salary Payable</div>
+                    <div class="fw-semibold" style="font-size: .85rem;">
+                        <span class="{{ $periodSummary['salary_payable'] < 0 ? 'text-danger' : '' }}">Rs. {{ number_format($periodSummary['salary_payable'], 2) }}</span>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div class="table-responsive">
-            <table class="table align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Customer</th>
-                        <th>Vehicle</th>
-                        <th>Type</th>
-                        <th>Full Value</th>
-                        <th>Commission</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($periodHires as $hire)
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead>
                         <tr>
-                            <td class="text-muted" style="font-size: .8rem;">{{ $hire->effective_month_date?->format('M j, Y') ?? '—' }}</td>
-                            <td style="font-size: .8rem;">{{ $hire->customer->name ?? '—' }}</td>
-                            <td class="text-muted" style="font-size: .8rem;">{{ $hire->vehicle->model ?? '—' }}</td>
-                            <td><span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">{{ \App\Models\Hire::TOUR_TYPES[$hire->tour_type] ?? $hire->tour_type }}</span></td>
-                            <td class="text-muted" style="font-size: .8rem;">Rs. {{ number_format($hire->hire_full_value, 2) }}</td>
-                            <td class="fw-semibold" style="color: #1baf7a; font-size: .8rem;">Rs. {{ number_format($hire->commission, 2) }}</td>
-                            <td><span class="badge rounded-pill bg-light text-dark border">{{ $hire->status_label }}</span></td>
+                            <th>Date</th>
+                            <th>Customer</th>
+                            <th>Vehicle</th>
+                            <th>Type</th>
+                            <th>Full Value</th>
+                            <th>Commission</th>
+                            <th>Status</th>
                         </tr>
-                    @empty
-                        <tr>
-                            <td colspan="7" class="text-center text-muted py-4">No hires for {{ $periodLabel }}.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-    </div>
+                    </thead>
+                    <tbody>
+                        @forelse ($periodHires as $hire)
+                            <tr>
+                                <td class="text-muted" style="font-size: .8rem;">{{ $hire->effective_month_date?->format('M j, Y') ?? '—' }}</td>
+                                <td style="font-size: .8rem;">{{ $hire->customer->name ?? '—' }}</td>
+                                <td class="text-muted" style="font-size: .8rem;">{{ $hire->vehicle->model ?? '—' }}</td>
+                                <td><span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">{{ \App\Models\Hire::TOUR_TYPES[$hire->tour_type] ?? $hire->tour_type }}</span></td>
+                                <td class="text-muted" style="font-size: .8rem;">Rs. {{ number_format($hire->hire_full_value, 2) }}</td>
+                                <td class="fw-semibold" style="color: #1baf7a; font-size: .8rem;">Rs. {{ number_format($hire->commission, 2) }}</td>
+                                <td><span class="badge rounded-pill bg-light text-dark border">{{ $hire->status_label }}</span></td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">No hires for {{ $periodLabel }}.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        @else
+            <div class="row row-cols-2 row-cols-md-2 g-2 p-3 border-bottom">
+                <div class="col">
+                    <div class="text-muted" style="font-size: .7rem;">Expenses</div>
+                    <div class="fw-semibold" style="font-size: .85rem;">{{ $periodExpenses->count() }}</div>
+                </div>
+                <div class="col">
+                    <div class="text-muted" style="font-size: .7rem;">Total</div>
+                    <div class="fw-semibold" style="color: #c95a26; font-size: .85rem;">Rs. {{ number_format($periodSummary['expenses_total'], 2) }}</div>
+                </div>
+            </div>
 
-    <div class="card border-0 mb-2">
-        <div class="card-header">
-            <span class="fw-semibold" style="font-size: .85rem;">Expenses &middot; {{ $periodLabel }}</span>
-        </div>
-        <div class="table-responsive">
-            <table class="table align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Category</th>
-                        <th>Hire</th>
-                        <th>Amount</th>
-                        <th class="text-end">Receipt</th>
-                        @canany(['hires.update', 'hires.delete'])
-                            <th class="text-end">Actions</th>
-                        @endcanany
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($periodExpenses as $expense)
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead>
                         <tr>
-                            <td class="text-muted" style="font-size: .8rem;">{{ $expense->created_at?->format('M j, Y') ?? '—' }}</td>
-                            <td><span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ $expense->category_label }}</span></td>
-                            <td class="text-muted" style="font-size: .8rem;">
-                                @if ($expense->hire)
-                                    #{{ $expense->hire_id }} &middot; {{ \App\Models\Hire::TOUR_TYPES[$expense->hire->tour_type] ?? $expense->hire->tour_type }}
-                                @else
-                                    &mdash;
-                                @endif
-                            </td>
-                            <td class="fw-semibold" style="color: #c95a26; font-size: .82rem;">Rs. {{ number_format($expense->amount, 2) }}</td>
-                            <td class="text-end">
-                                @if ($expense->receipt_url)
-                                    <a href="{{ $expense->receipt_url }}" target="_blank" class="btn btn-sm btn-light border btn-icon" title="View Receipt">
-                                        <i class="bi bi-receipt"></i>
-                                    </a>
-                                @else
-                                    &mdash;
-                                @endif
-                            </td>
+                            <th>Date</th>
+                            <th>Category</th>
+                            <th>Hire</th>
+                            <th>Amount</th>
+                            <th class="text-end">Receipt</th>
                             @canany(['hires.update', 'hires.delete'])
-                                <td class="text-end">
-                                    <div class="d-inline-flex gap-1">
-                                        @can('hires.update')
-                                            <button type="button" class="btn btn-sm btn-light border btn-icon" data-bs-toggle="modal" data-bs-target="#modal-edit-expense-{{ $expense->id }}" title="Edit">
-                                                <i class="bi bi-pencil"></i>
-                                            </button>
-                                        @endcan
-                                        @can('hires.delete')
-                                            <form method="POST" action="{{ route('admin.expenses.destroy', $expense) }}" onsubmit="return confirm('Delete this expense?');">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="btn btn-sm btn-light border btn-icon text-danger" title="Delete">
-                                                    <i class="bi bi-trash"></i>
-                                                </button>
-                                            </form>
-                                        @endcan
-                                    </div>
-                                </td>
+                                <th class="text-end">Actions</th>
                             @endcanany
                         </tr>
-                    @empty
-                        <tr>
-                            <td colspan="6" class="text-center text-muted py-4">No expenses for {{ $periodLabel }}.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
+                    </thead>
+                    <tbody>
+                        @forelse ($periodExpenses as $expense)
+                            <tr>
+                                <td class="text-muted" style="font-size: .8rem;">{{ $expense->created_at?->format('M j, Y') ?? '—' }}</td>
+                                <td><span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">{{ $expense->category_label }}</span></td>
+                                <td class="text-muted" style="font-size: .8rem;">
+                                    @if ($expense->hire)
+                                        #{{ $expense->hire_id }} &middot; {{ \App\Models\Hire::TOUR_TYPES[$expense->hire->tour_type] ?? $expense->hire->tour_type }}
+                                    @else
+                                        &mdash;
+                                    @endif
+                                </td>
+                                <td class="fw-semibold" style="color: #c95a26; font-size: .82rem;">Rs. {{ number_format($expense->amount, 2) }}</td>
+                                <td class="text-end">
+                                    @if ($expense->receipt_url)
+                                        <a href="{{ $expense->receipt_url }}" target="_blank" class="btn btn-sm btn-light border btn-icon" title="View Receipt">
+                                            <i class="bi bi-receipt"></i>
+                                        </a>
+                                    @else
+                                        &mdash;
+                                    @endif
+                                </td>
+                                @canany(['hires.update', 'hires.delete'])
+                                    <td class="text-end">
+                                        <div class="d-inline-flex gap-1">
+                                            @can('hires.update')
+                                                <button type="button" class="btn btn-sm btn-light border btn-icon" data-bs-toggle="modal" data-bs-target="#modal-edit-expense-{{ $expense->id }}" title="Edit">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                            @endcan
+                                            @can('hires.delete')
+                                                <form method="POST" action="{{ route('admin.expenses.destroy', $expense) }}" onsubmit="return confirm('Delete this expense?');">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn btn-sm btn-light border btn-icon text-danger" title="Delete">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </form>
+                                            @endcan
+                                        </div>
+                                    </td>
+                                @endcanany
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">No expenses for {{ $periodLabel }}.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        @endif
     </div>
 
     @can('hires.update')
@@ -303,6 +329,11 @@
 @push('styles')
     <style>
         .vehicle-trend-chart-container { position: relative; height: 300px; }
+
+        /* The tabs in the panel's own colours, not Bootstrap's default blue. */
+        #driver-period-tabs .nav-link { color: var(--text-muted); font-weight: 500; }
+        #driver-period-tabs .nav-link:hover { color: var(--text-dark); }
+        #driver-period-tabs .nav-link.active { color: var(--primary); font-weight: 600; }
     </style>
 @endpush
 

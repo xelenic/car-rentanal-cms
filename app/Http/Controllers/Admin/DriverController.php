@@ -216,8 +216,12 @@ class DriverController extends Controller implements HasMiddleware
             'salary_payable' => round((float) ($periodPayroll->final_amount ?? $periodSalary['net_salary_payable']), 2),
         ];
 
+        $tab = $request->string('tab')->toString();
+        $tab = in_array($tab, ['earnings', 'expenses'], true) ? $tab : 'earnings';
+
         return view('admin.drivers.show', [
             'driver' => $driver,
+            'tab' => $tab,
             'periodHires' => $periodHires,
             'periodExpenses' => $periodExpenses,
             'periodSummary' => $periodSummary,

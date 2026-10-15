@@ -144,7 +144,7 @@ it('lists only the selected driver\'s expenses for the selected month, with cate
     test()->travelTo(\Illuminate\Support\Carbon::parse('2026-08-16 12:00:00'));
     HireExpense::create(['driver_id' => $driver->id, 'category' => 'repair', 'amount' => 7777]);
 
-    $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9');
+    $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=expenses');
 
     $response->assertOk();
     $response->assertSee('Fuel');
@@ -182,9 +182,28 @@ it('links to the receipt when an expense has one, and shows a hire\'s tour type 
         'receipt_path' => 'hire-expenses/'.$hire->id.'/receipt.jpg',
     ]);
 
-    $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9');
+    $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=expenses');
 
     $response->assertOk();
     $response->assertSee('Drop and Pickup');
     $response->assertSee(route('hire-expenses.receipt', HireExpense::first()));
+});
+
+it('defaults to the Earnings tab, and switches to Expenses only when asked', function () {
+    driverShowAdmin();
+    $driver = driverShowDriver();
+
+    test()->travelTo(\Illuminate\Support\Carbon::parse('2026-09-16 12:00:00'));
+    HireExpense::create(['driver_id' => $driver->id, 'category' => 'fuel', 'amount' => 1234]);
+
+    $default = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9');
+    $default->assertOk()->assertViewHas('tab', 'earnings');
+    // The category badge only ever appears in the Expenses tab's own table,
+    // unlike the amount, which the all-time stat tile also shows.
+    $default->assertDontSee('Fuel');
+
+    $expensesTab = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=expenses');
+    $expensesTab->assertOk()->assertViewHas('tab', 'expenses');
+    $expensesTab->assertSee('Fuel');
+    $expensesTab->assertSee('Rs. 1,234.00');
 });
