@@ -211,6 +211,9 @@
                         <th>Hire</th>
                         <th>Amount</th>
                         <th class="text-end">Receipt</th>
+                        @canany(['hires.update', 'hires.delete'])
+                            <th class="text-end">Actions</th>
+                        @endcanany
                     </tr>
                 </thead>
                 <tbody>
@@ -235,16 +238,66 @@
                                     &mdash;
                                 @endif
                             </td>
+                            @canany(['hires.update', 'hires.delete'])
+                                <td class="text-end">
+                                    <div class="d-inline-flex gap-1">
+                                        @can('hires.update')
+                                            <button type="button" class="btn btn-sm btn-light border btn-icon" data-bs-toggle="modal" data-bs-target="#modal-edit-expense-{{ $expense->id }}" title="Edit">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                        @endcan
+                                        @can('hires.delete')
+                                            <form method="POST" action="{{ route('admin.expenses.destroy', $expense) }}" onsubmit="return confirm('Delete this expense?');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-sm btn-light border btn-icon text-danger" title="Delete">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        @endcan
+                                    </div>
+                                </td>
+                            @endcanany
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="text-center text-muted py-4">No expenses for {{ $periodLabel }}.</td>
+                            <td colspan="6" class="text-center text-muted py-4">No expenses for {{ $periodLabel }}.</td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
     </div>
+
+    @can('hires.update')
+        @foreach ($periodExpenses as $expense)
+            <x-modal id="modal-edit-expense-{{ $expense->id }}" title="Edit Expense">
+                <form id="form-edit-expense-{{ $expense->id }}" method="POST" action="{{ route('admin.expenses.update', $expense) }}">
+                    @csrf
+                    @method('PUT')
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label for="edit-expense-{{ $expense->id }}-category" class="form-label">Category</label>
+                            <select id="edit-expense-{{ $expense->id }}-category" name="category" class="form-select" required>
+                                @foreach (\App\Models\HireExpense::CATEGORIES as $key => $label)
+                                    <option value="{{ $key }}" {{ $expense->category === $key ? 'selected' : '' }}>{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="edit-expense-{{ $expense->id }}-amount" class="form-label">Amount (Rs.)</label>
+                            <input id="edit-expense-{{ $expense->id }}-amount" type="number" step="0.01" min="0.01" name="amount"
+                                value="{{ $expense->amount }}" class="form-control" placeholder="0.00" required>
+                        </div>
+                    </div>
+                </form>
+                <x-slot:footer>
+                    <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" form="form-edit-expense-{{ $expense->id }}" class="btn btn-primary">Update Expense</button>
+                </x-slot:footer>
+            </x-modal>
+        @endforeach
+    @endcan
 @endsection
 
 @push('styles')

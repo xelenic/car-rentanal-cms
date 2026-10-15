@@ -67,6 +67,8 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::post('hires/{hire}/payments', [HirePaymentController::class, 'store'])->name('hires.payments.store');
     Route::delete('hires/{hire}/payments/{payment}', [HirePaymentController::class, 'destroy'])->name('hires.payments.destroy');
     Route::get('expenses', [ExpenseController::class, 'index'])->name('expenses.index');
+    Route::put('expenses/{hireExpense}', [ExpenseController::class, 'update'])->name('expenses.update');
+    Route::delete('expenses/{hireExpense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
     Route::resource('my-expenses', MyExpenseController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::resource('my-expense-categories', MyExpenseCategoryController::class)->only(['store', 'update', 'destroy']);
     Route::resource('other-incomes', OtherIncomeController::class)->only(['store', 'update', 'destroy']);

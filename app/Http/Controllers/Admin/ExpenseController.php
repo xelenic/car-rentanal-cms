@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Driver;
 use App\Models\HireExpense;
 use App\Support\MonthlyPeriods;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class ExpenseController extends Controller implements HasMiddleware
@@ -17,6 +20,8 @@ class ExpenseController extends Controller implements HasMiddleware
     {
         return [
             new Middleware('permission:hires.view', only: ['index']),
+            new Middleware('permission:hires.update', only: ['update']),
+            new Middleware('permission:hires.delete', only: ['destroy']),
         ];
     }
 
@@ -93,6 +98,34 @@ class ExpenseController extends Controller implements HasMiddleware
             'availableYears' => $periods['years'],
             'monthsByYear' => $periods['months_by_year'],
         ]);
+    }
+
+    /**
+     * Corrects a driver-logged expense's category or amount — who it's
+     * attributed to (driver/hire) isn't editable here, just what was
+     * mis-entered.
+     */
+    public function update(Request $request, HireExpense $hireExpense): RedirectResponse
+    {
+        $data = $request->validate([
+            'category' => ['required', 'string', Rule::in(array_keys(HireExpense::CATEGORIES))],
+            'amount' => ['required', 'numeric', 'min:0.01'],
+        ]);
+
+        $hireExpense->update($data);
+
+        return back()->with('status', 'Expense updated.');
+    }
+
+    public function destroy(HireExpense $hireExpense): RedirectResponse
+    {
+        if ($hireExpense->receipt_path) {
+            Storage::disk('public')->delete($hireExpense->receipt_path);
+        }
+
+        $hireExpense->delete();
+
+        return back()->with('status', 'Expense deleted.');
     }
 
     /**
