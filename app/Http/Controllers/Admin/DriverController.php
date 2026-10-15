@@ -217,7 +217,7 @@ class DriverController extends Controller implements HasMiddleware
         ];
 
         $tab = $request->string('tab')->toString();
-        $tab = in_array($tab, ['earnings', 'expenses'], true) ? $tab : 'earnings';
+        $tab = in_array($tab, ['earnings', 'expenses', 'salary'], true) ? $tab : 'earnings';
 
         return view('admin.drivers.show', [
             'driver' => $driver,
@@ -225,6 +225,7 @@ class DriverController extends Controller implements HasMiddleware
             'periodHires' => $periodHires,
             'periodExpenses' => $periodExpenses,
             'periodSummary' => $periodSummary,
+            'periodSalary' => $periodSalary,
             'periodPayroll' => $periodPayroll,
             'periodLabel' => now()->setDate($selectedYear, $selectedMonth, 1)->format('F Y'),
             'availableYears' => $availableYears,

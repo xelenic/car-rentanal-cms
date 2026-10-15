@@ -189,6 +189,44 @@ it('links to the receipt when an expense has one, and shows a hire\'s tour type 
     $response->assertSee(route('hire-expenses.receipt', HireExpense::first()));
 });
 
+it('shows the month\'s salary calculation, with only salary-deductible expenses in the breakdown', function () {
+    driverShowAdmin();
+    $driver = driverShowDriver();
+
+    test()->travelTo(\Illuminate\Support\Carbon::parse('2026-09-16 12:00:00'));
+    driverShowHire([
+        'driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00',
+        'hire_full_value' => 1500, 'our_hire_value' => 1000,
+    ]);
+    HireExpense::create(['driver_id' => $driver->id, 'category' => 'fuel', 'amount' => 200]);
+    HireExpense::create(['driver_id' => $driver->id, 'category' => 'repair', 'amount' => 300]);
+
+    $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=salary');
+
+    $response->assertOk()->assertViewHas('tab', 'salary');
+    $response->assertSee('Rs. 1,500.00'); // Total Hired Value
+    $response->assertSee('Rs. 1,000.00'); // Our Hire Value
+    $response->assertSee('Rs. 500.00');   // Commission
+    $response->assertSee('Fuel');
+    $response->assertSee('-Rs. 200.00');  // Deductible expense
+    $response->assertSee('Rs. 800.00');   // Net Before Salary (1000 - 200)
+    $response->assertSee('20% Driver Salary');
+    $response->assertSee('Rs. 160.00');   // 20% of 800
+    $response->assertSee('Net Salary Payable');
+    // 'repair' isn't a salary-deductible category, so it's excluded from this breakdown.
+    $response->assertDontSee('Vehicle Repair');
+});
+
+it('says so when there are no hires to calculate salary from', function () {
+    driverShowAdmin();
+    $driver = driverShowDriver();
+
+    $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=salary');
+
+    $response->assertOk();
+    $response->assertSee('No hires recorded for September 2026 yet.');
+});
+
 it('defaults to the Earnings tab, and switches to Expenses only when asked', function () {
     driverShowAdmin();
     $driver = driverShowDriver();

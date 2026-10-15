@@ -122,21 +122,26 @@
                 @endif
             </a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link {{ $tab === 'salary' ? 'active' : '' }}" id="tab-salary" href="{{ route('admin.drivers.show', ['driver' => $driver, 'tab' => 'salary'] + $periodQuery) }}">
+                Salary
+            </a>
+        </li>
     </ul>
 
     <div class="card border-0 mb-2">
         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
             <span class="fw-semibold" style="font-size: .85rem;">
-                {{ $tab === 'expenses' ? 'Expenses' : 'Earnings' }} &middot; {{ $periodLabel }}
-                @if ($tab === 'earnings' && $periodPayroll?->status === 'paid')
+                {{ ['expenses' => 'Expenses', 'salary' => 'Salary'][$tab] ?? 'Earnings' }} &middot; {{ $periodLabel }}
+                @if ($tab !== 'expenses' && $periodPayroll?->status === 'paid')
                     <span class="badge rounded-pill bg-success-subtle text-success-emphasis ms-1">Paid</span>
-                @elseif ($tab === 'earnings' && $periodPayroll?->status === 'finalized')
+                @elseif ($tab !== 'expenses' && $periodPayroll?->status === 'finalized')
                     <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis ms-1">Finalized &middot; awaiting payment</span>
                 @endif
             </span>
             <form method="GET" class="d-flex flex-wrap align-items-center gap-2">
-                @if ($tab === 'expenses')
-                    <input type="hidden" name="tab" value="expenses">
+                @if ($tab !== 'earnings')
+                    <input type="hidden" name="tab" value="{{ $tab }}">
                 @endif
 
                 <select name="year" class="form-select form-select-sm" style="max-width: 110px;" onchange="this.form.submit()">
@@ -215,7 +220,7 @@
                     </tbody>
                 </table>
             </div>
-        @else
+        @elseif ($tab === 'expenses')
             <div class="row row-cols-2 row-cols-md-2 g-2 p-3 border-bottom">
                 <div class="col">
                     <div class="text-muted" style="font-size: .7rem;">Expenses</div>
@@ -291,6 +296,77 @@
                         @endforelse
                     </tbody>
                 </table>
+            </div>
+        @else
+            <div class="p-3">
+                <div class="row row-cols-2 row-cols-md-3 g-2 mb-3">
+                    <div class="col">
+                        <div class="text-muted" style="font-size: .7rem;">Total Hired Value</div>
+                        <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSalary['hire_full_value_total'], 2) }}</div>
+                    </div>
+                    <div class="col">
+                        <div class="text-muted" style="font-size: .7rem;">Our Hire Value</div>
+                        <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSalary['our_hire_value_total'], 2) }}</div>
+                    </div>
+                    <div class="col">
+                        <div class="text-muted" style="font-size: .7rem;">Commission</div>
+                        <div class="fw-semibold" style="color: #1baf7a; font-size: .85rem;">Rs. {{ number_format($periodSummary['commission_total'], 2) }}</div>
+                    </div>
+                </div>
+
+                @if ($periodSalary['hire_count'] === 0 && $periodSalary['advance_deduction_total'] <= 0 && $periodSalary['carryover_deduction_total'] <= 0 && $periodSalary['arrears_deduction_total'] <= 0)
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-cash-coin fs-3 d-block mb-2"></i>
+                        No hires recorded for {{ $periodLabel }} yet.
+                    </div>
+                @else
+                    <div class="fw-semibold mb-2" style="font-size: .82rem;">Expenses deducted from salary</div>
+                    <div class="d-flex flex-column gap-2 mb-3">
+                        @foreach ($periodSalary['expenses_by_category'] as $category => $amount)
+                            <div class="d-flex align-items-center justify-content-between border rounded p-2">
+                                <span style="font-size: .8rem;">{{ \App\Models\HireExpense::CATEGORIES[$category] ?? $category }}</span>
+                                <span class="text-danger fw-semibold" style="font-size: .8rem;">-Rs. {{ number_format($amount, 2) }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+
+                    <div class="border-top pt-3">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="text-muted" style="font-size: .82rem;">Total Expenses</span>
+                            <span class="fw-semibold text-danger" style="font-size: .85rem;">-Rs. {{ number_format($periodSalary['expenses_total'], 2) }}</span>
+                        </div>
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="text-muted" style="font-size: .82rem;">Net Before Salary</span>
+                            <span class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSalary['net_before_salary'], 2) }}</span>
+                        </div>
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="fw-semibold" style="font-size: .9rem;">{{ $periodSalary['salary_percentage'] }}% Driver Salary</span>
+                            <span class="fw-bold text-success" style="font-size: 1.1rem;">Rs. {{ number_format($periodSalary['salary'], 2) }}</span>
+                        </div>
+                        @if ($periodSalary['advance_deduction_total'] > 0)
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <span class="text-muted" style="font-size: .82rem;">Salary Advance Deduction</span>
+                                <span class="fw-semibold text-danger" style="font-size: .85rem;">-Rs. {{ number_format($periodSalary['advance_deduction_total'], 2) }}</span>
+                            </div>
+                        @endif
+                        @if ($periodSalary['carryover_deduction_total'] > 0)
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <span class="text-muted" style="font-size: .82rem;">Carried Over from Previous Month</span>
+                                <span class="fw-semibold text-danger" style="font-size: .85rem;">-Rs. {{ number_format($periodSalary['carryover_deduction_total'], 2) }}</span>
+                            </div>
+                        @endif
+                        @if ($periodSalary['arrears_deduction_total'] > 0)
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <span class="text-muted" style="font-size: .82rem;">Arrears Loan Deduction</span>
+                                <span class="fw-semibold text-danger" style="font-size: .85rem;">-Rs. {{ number_format($periodSalary['arrears_deduction_total'], 2) }}</span>
+                            </div>
+                        @endif
+                        <div class="d-flex align-items-center justify-content-between border-top pt-2">
+                            <span class="fw-semibold" style="font-size: .9rem;">Net Salary Payable</span>
+                            <span class="fw-bold {{ $periodSalary['net_salary_payable'] < 0 ? 'text-danger' : 'text-success' }}" style="font-size: 1.1rem;">Rs. {{ number_format($periodSalary['net_salary_payable'], 2) }}</span>
+                        </div>
+                    </div>
+                @endif
             </div>
         @endif
     </div>
