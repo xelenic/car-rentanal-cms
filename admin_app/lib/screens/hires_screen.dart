@@ -18,20 +18,42 @@ import 'hire_detail_screen.dart';
 import 'hire_form_screen.dart';
 
 /// One combination of the filter sheet's selections — driver, vehicle,
-/// customer and a scheduled-date range, all optional and independent.
+/// customer, payment type, payment status and a scheduled-date range, all
+/// optional and independent.
 class _HireFilters {
-  const _HireFilters({this.driverId, this.vehicleId, this.customerId, this.dateFrom, this.dateTo});
+  const _HireFilters({
+    this.driverId,
+    this.vehicleId,
+    this.customerId,
+    this.paymentType,
+    this.paymentStatus,
+    this.dateFrom,
+    this.dateTo,
+  });
 
   final int? driverId;
   final int? vehicleId;
   final int? customerId;
+
+  /// 'cash' or 'credit' — see Hire::PAYMENT_TYPES.
+  final String? paymentType;
+
+  /// 'unpaid', 'partial' or 'paid' — see Hire::getPaymentStatusAttribute().
+  final String? paymentStatus;
   final DateTime? dateFrom;
   final DateTime? dateTo;
 
   bool get isEmpty =>
-      driverId == null && vehicleId == null && customerId == null && dateFrom == null && dateTo == null;
+      driverId == null &&
+      vehicleId == null &&
+      customerId == null &&
+      paymentType == null &&
+      paymentStatus == null &&
+      dateFrom == null &&
+      dateTo == null;
 
-  int get activeCount => [driverId, vehicleId, customerId, dateFrom, dateTo].where((v) => v != null).length;
+  int get activeCount =>
+      [driverId, vehicleId, customerId, paymentType, paymentStatus, dateFrom, dateTo].where((v) => v != null).length;
 }
 
 /// Every hire across the whole fleet, one tap away from the home screen —
@@ -293,6 +315,8 @@ class _HiresScreenState extends State<HiresScreen> with SingleTickerProviderStat
                     driverId: _filters.driverId,
                     vehicleId: _filters.vehicleId,
                     customerId: _filters.customerId,
+                    paymentType: _filters.paymentType,
+                    paymentStatus: _filters.paymentStatus,
                     dateFrom: _filters.dateFrom,
                     dateTo: _filters.dateTo,
                     user: widget.user,
@@ -349,6 +373,8 @@ class _HiresListTab extends StatefulWidget {
     this.driverId,
     this.vehicleId,
     this.customerId,
+    this.paymentType,
+    this.paymentStatus,
     this.dateFrom,
     this.dateTo,
     this.user,
@@ -358,8 +384,8 @@ class _HiresListTab extends StatefulWidget {
   final String search;
   final bool upcoming;
 
-  /// Whether any search/upcoming/driver/vehicle/customer/date filter is
-  /// active — the "All" tab's empty state tells "nothing matches" apart
+  /// Whether any search/upcoming/driver/vehicle/customer/payment/date filter
+  /// is active — the "All" tab's empty state tells "nothing matches" apart
   /// from "nothing booked yet" with this; the other tabs' own fixed
   /// messages (Today/Scheduled/Completed/Cancelled) don't need the
   /// distinction.
@@ -368,6 +394,8 @@ class _HiresListTab extends StatefulWidget {
   final int? driverId;
   final int? vehicleId;
   final int? customerId;
+  final String? paymentType;
+  final String? paymentStatus;
   final DateTime? dateFrom;
   final DateTime? dateTo;
   final AdminUser? user;
@@ -410,6 +438,8 @@ class _HiresListTabState extends State<_HiresListTab> with AutomaticKeepAliveCli
         driverId: widget.driverId,
         vehicleId: widget.vehicleId,
         customerId: widget.customerId,
+        paymentType: widget.paymentType,
+        paymentStatus: widget.paymentStatus,
         dateFrom: widget.dateFrom,
         dateTo: widget.dateTo,
         tab: widget.tab,
@@ -441,6 +471,8 @@ class _HiresListTabState extends State<_HiresListTab> with AutomaticKeepAliveCli
         driverId: widget.driverId,
         vehicleId: widget.vehicleId,
         customerId: widget.customerId,
+        paymentType: widget.paymentType,
+        paymentStatus: widget.paymentStatus,
         dateFrom: widget.dateFrom,
         dateTo: widget.dateTo,
         tab: widget.tab,
@@ -708,9 +740,9 @@ class _HiresStatTile extends StatelessWidget {
   }
 }
 
-/// Driver / vehicle / customer / scheduled-date-range filters, all optional
-/// and independent — returns the chosen combination on "Apply", or null if
-/// dismissed without applying.
+/// Driver / vehicle / customer / payment type / payment status /
+/// scheduled-date-range filters, all optional and independent — returns the
+/// chosen combination on "Apply", or null if dismissed without applying.
 class _HireFiltersSheet extends StatefulWidget {
   const _HireFiltersSheet({required this.reference, required this.initial});
 
@@ -725,6 +757,8 @@ class _HireFiltersSheetState extends State<_HireFiltersSheet> {
   late int? _driverId = widget.initial.driverId;
   late int? _vehicleId = widget.initial.vehicleId;
   late int? _customerId = widget.initial.customerId;
+  late String? _paymentType = widget.initial.paymentType;
+  late String? _paymentStatus = widget.initial.paymentStatus;
   late DateTime? _dateFrom = widget.initial.dateFrom;
   late DateTime? _dateTo = widget.initial.dateTo;
 
@@ -745,6 +779,8 @@ class _HireFiltersSheetState extends State<_HireFiltersSheet> {
       _driverId = null;
       _vehicleId = null;
       _customerId = null;
+      _paymentType = null;
+      _paymentStatus = null;
       _dateFrom = null;
       _dateTo = null;
     });
@@ -755,6 +791,8 @@ class _HireFiltersSheetState extends State<_HireFiltersSheet> {
       driverId: _driverId,
       vehicleId: _vehicleId,
       customerId: _customerId,
+      paymentType: _paymentType,
+      paymentStatus: _paymentStatus,
       dateFrom: _dateFrom,
       dateTo: _dateTo,
     ));
@@ -814,6 +852,33 @@ class _HireFiltersSheetState extends State<_HireFiltersSheet> {
                     ...reference.customers.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))),
                   ],
                   onChanged: (value) => setState(() => _customerId = value),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: const Key('filter-payment-type'),
+                  initialValue: _paymentType,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Payment Type'),
+                  items: const [
+                    DropdownMenuItem<String>(value: null, child: Text('Cash & Credit')),
+                    DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                    DropdownMenuItem(value: 'credit', child: Text('Credit')),
+                  ],
+                  onChanged: (value) => setState(() => _paymentType = value),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: const Key('filter-payment-status'),
+                  initialValue: _paymentStatus,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Payment Status'),
+                  items: const [
+                    DropdownMenuItem<String>(value: null, child: Text('Any status')),
+                    DropdownMenuItem(value: 'unpaid', child: Text('Unpaid')),
+                    DropdownMenuItem(value: 'partial', child: Text('Partially Paid')),
+                    DropdownMenuItem(value: 'paid', child: Text('Fully Paid')),
+                  ],
+                  onChanged: (value) => setState(() => _paymentStatus = value),
                 ),
                 const SizedBox(height: 12),
                 Row(

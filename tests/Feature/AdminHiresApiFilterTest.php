@@ -3,6 +3,7 @@
 use App\Models\Customer;
 use App\Models\Driver;
 use App\Models\Hire;
+use App\Models\HirePayment;
 use App\Models\User;
 use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -201,6 +202,101 @@ describe('the tab filter', function () {
         $response = $this->getJson('/api/admin/hires?tab=not-a-real-tab')->assertOk();
 
         expect($response->json('data'))->toHaveCount(4);
+    });
+});
+
+describe('the payment type filter', function () {
+    it('shows only cash hires when filtered by payment_type=cash', function () {
+        apiHiresAdmin();
+        $cashHire = apiFilterHire(['payment_type' => 'cash']);
+        apiFilterHire(['payment_type' => 'credit']);
+
+        $response = $this->getJson('/api/admin/hires?payment_type=cash')->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('id');
+        expect($ids)->toContain($cashHire->id)->and($ids)->toHaveCount(1);
+    });
+
+    it('shows only credit hires when filtered by payment_type=credit', function () {
+        apiHiresAdmin();
+        apiFilterHire(['payment_type' => 'cash']);
+        $creditHire = apiFilterHire(['payment_type' => 'credit']);
+
+        $response = $this->getJson('/api/admin/hires?payment_type=credit')->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('id');
+        expect($ids)->toContain($creditHire->id)->and($ids)->toHaveCount(1);
+    });
+
+    it('ignores an unrecognized payment_type value', function () {
+        apiHiresAdmin();
+        apiFilterHire(['payment_type' => 'cash']);
+        apiFilterHire(['payment_type' => 'credit']);
+
+        $response = $this->getJson('/api/admin/hires?payment_type=not-a-real-type')->assertOk();
+
+        expect($response->json('data'))->toHaveCount(2);
+    });
+});
+
+describe('the payment status filter', function () {
+    it('shows only hires with no payments at all when filtered by payment_status=unpaid', function () {
+        apiHiresAdmin();
+        $unpaid = apiFilterHire(['payment_type' => 'credit', 'hire_full_value' => 1000]);
+        $partial = apiFilterHire(['payment_type' => 'credit', 'hire_full_value' => 1000]);
+        HirePayment::create(['hire_id' => $partial->id, 'amount' => 400, 'paid_at' => now()]);
+
+        $response = $this->getJson('/api/admin/hires?payment_status=unpaid')->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('id');
+        expect($ids)->toContain($unpaid->id)->and($ids)->not->toContain($partial->id);
+    });
+
+    it('shows only partially paid hires when filtered by payment_status=partial', function () {
+        apiHiresAdmin();
+        $partial = apiFilterHire(['payment_type' => 'credit', 'hire_full_value' => 1000]);
+        HirePayment::create(['hire_id' => $partial->id, 'amount' => 400, 'paid_at' => now()]);
+        $paid = apiFilterHire(['payment_type' => 'credit', 'hire_full_value' => 1000]);
+        HirePayment::create(['hire_id' => $paid->id, 'amount' => 1000, 'paid_at' => now()]);
+
+        $response = $this->getJson('/api/admin/hires?payment_status=partial')->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('id');
+        expect($ids)->toContain($partial->id)->and($ids)->not->toContain($paid->id);
+    });
+
+    it('shows only fully paid hires when filtered by payment_status=paid', function () {
+        apiHiresAdmin();
+        $partial = apiFilterHire(['payment_type' => 'credit', 'hire_full_value' => 1000]);
+        HirePayment::create(['hire_id' => $partial->id, 'amount' => 400, 'paid_at' => now()]);
+        $paid = apiFilterHire(['payment_type' => 'credit', 'hire_full_value' => 1000]);
+        HirePayment::create(['hire_id' => $paid->id, 'amount' => 1000, 'paid_at' => now()]);
+
+        $response = $this->getJson('/api/admin/hires?payment_status=paid')->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('id');
+        expect($ids)->toContain($paid->id)->and($ids)->not->toContain($partial->id);
+    });
+
+    it('treats an overpayment as fully paid, not partial', function () {
+        apiHiresAdmin();
+        $overpaid = apiFilterHire(['payment_type' => 'credit', 'hire_full_value' => 1000]);
+        HirePayment::create(['hire_id' => $overpaid->id, 'amount' => 1200, 'paid_at' => now()]);
+
+        $response = $this->getJson('/api/admin/hires?payment_status=paid')->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('id');
+        expect($ids)->toContain($overpaid->id);
+    });
+
+    it('ignores an unrecognized payment_status value', function () {
+        apiHiresAdmin();
+        apiFilterHire(['payment_type' => 'credit', 'hire_full_value' => 1000]);
+        apiFilterHire(['payment_type' => 'credit', 'hire_full_value' => 1000]);
+
+        $response = $this->getJson('/api/admin/hires?payment_status=not-a-real-status')->assertOk();
+
+        expect($response->json('data'))->toHaveCount(2);
     });
 });
 

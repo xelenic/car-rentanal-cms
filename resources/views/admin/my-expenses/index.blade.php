@@ -103,7 +103,7 @@
                             <i class="bi bi-info-circle ms-1" title="Click for the full calculation"></i>
                         </div>
                         <div class="fs-5 fw-bold {{ $myProfit < 0 ? 'text-danger' : 'text-success' }}">{{ $money($myProfit) }}</div>
-                        <div class="text-muted" style="font-size: .7rem;">Hires + other income − my expenses</div>
+                        <div class="text-muted" style="font-size: .7rem;">Hires + other income + other company revenue − my expenses</div>
                     </div>
                 </div>
             </div>

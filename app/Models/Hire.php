@@ -212,6 +212,24 @@ class Hire extends Model
     }
 
     /**
+     * 'unpaid' / 'partial' / 'paid' — the same three states
+     * getPaymentStatusAttribute() computes per hire, done here at the query
+     * level (via a correlated subquery against hire_payments, same shape as
+     * getPaidAmountAttribute()) so the Hires list can filter by it.
+     */
+    public function scopePaymentStatus(Builder $query, string $status): Builder
+    {
+        $paidAmount = '(select coalesce(sum(amount), 0) from hire_payments where hire_payments.hire_id = hires.id)';
+
+        return match ($status) {
+            'unpaid' => $query->whereRaw("{$paidAmount} <= 0"),
+            'paid' => $query->whereRaw("{$paidAmount} > 0")->whereRaw("hire_full_value - {$paidAmount} <= 0"),
+            'partial' => $query->whereRaw("{$paidAmount} > 0")->whereRaw("hire_full_value - {$paidAmount} > 0"),
+            default => $query,
+        };
+    }
+
+    /**
      * GPS fixes wobble by several metres even while the vehicle is parked, and
      * a fix arrives every 15 seconds — adding up every wobble would invent
      * kilometres of "travel" per hour. A move only counts once a fix is at

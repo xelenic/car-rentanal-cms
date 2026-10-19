@@ -157,6 +157,16 @@ void main() {
       expect(find.text('Add Photo of Bank Slip'), findsOneWidget);
     });
 
+    testWidgets('has no Credited Amount field — only Balance counts toward My Profit', (tester) async {
+      await _openRevenue(tester, _server());
+
+      await tester.tap(find.byKey(const Key('add-revenue')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('revenue-credited-amount')), findsNothing);
+      expect(find.text('Credited Amount (Rs.)'), findsNothing);
+    });
+
     testWidgets('saves it without a slip, shows it in the list, and moves the cards', (tester) async {
       final server = _server();
       await _openRevenue(tester, server);
@@ -167,7 +177,6 @@ void main() {
       await tester.enterText(find.byKey(const Key('revenue-booking-number')), 'ZZZ-BK-777');
       await tester.enterText(find.byKey(const Key('revenue-vehicle')), 'ZZZ Prius — XYZ-999');
       await tester.enterText(find.byKey(const Key('revenue-full-amount')), '5000');
-      await tester.enterText(find.byKey(const Key('revenue-credited-amount')), '3000');
       await tester.enterText(find.byKey(const Key('revenue-balance')), '2000');
       await tester.enterText(find.byKey(const Key('revenue-vehicle-amount')), '2500');
       await tester.tap(find.byKey(const Key('save-revenue')));
@@ -177,12 +186,13 @@ void main() {
       expect(sent.id, isNull);
       expect(sent.fields['hire'], 'ZZZ Ella Trip');
       expect(sent.fields['booking_number'], 'ZZZ-BK-777');
-      expect(sent.fields['credited_amount'], '3000');
+      // Hidden from the form — a new entry always starts at 0.
+      expect(sent.fields['credited_amount'], '0');
       expect(sent.slipFilename, isNull);
 
       expect(find.text('ZZZ Ella Trip added.'), findsOneWidget);
       expect(find.text('ZZZ Ella Trip'), findsOneWidget);
-      // 9,000 + 2,000 balance (the credited amount of 3,000 doesn't count).
+      // 9,000 + 2,000 balance.
       expect(_inCard('card-other-revenue', 'Rs. 11,000.00'), findsOneWidget);
       expect(_inCard('card-other-revenue', '3 entries'), findsOneWidget);
     });
@@ -210,7 +220,6 @@ void main() {
       await tester.enterText(find.byKey(const Key('revenue-booking-number')), 'ZZZ-BK-888');
       await tester.enterText(find.byKey(const Key('revenue-vehicle')), 'ZZZ Van');
       await tester.enterText(find.byKey(const Key('revenue-full-amount')), '1000');
-      await tester.enterText(find.byKey(const Key('revenue-credited-amount')), '1200');
       await tester.enterText(find.byKey(const Key('revenue-balance')), '-200');
       await tester.enterText(find.byKey(const Key('revenue-vehicle-amount')), '500');
       await tester.tap(find.byKey(const Key('save-revenue')));
@@ -256,6 +265,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(server.savedRevenues.single.id, 1);
+      // Hidden from the form, so editing for an unrelated reason doesn't
+      // touch it — still whatever it already had (the fixture's 7,000).
+      expect(server.savedRevenues.single.fields['credited_amount'], '7000');
       expect(find.text('Rs. 7,500.00'), findsOneWidget);
       // 7,500 + 2,000.
       expect(_inCard('card-other-revenue', 'Rs. 9,500.00'), findsOneWidget);

@@ -812,7 +812,7 @@ class _ProfitCard extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                'Hires + other income − my expenses · tap for the working',
+                'Hires + other income + other company revenue − my expenses · tap for the working',
                 style: TextStyle(fontSize: 11.5, color: Colors.white.withValues(alpha: 0.75)),
               ),
             ],

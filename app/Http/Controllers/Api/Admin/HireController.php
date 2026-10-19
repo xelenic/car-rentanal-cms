@@ -61,6 +61,14 @@ class HireController extends Controller
             ->when($request->filled('driver_id'), fn ($query) => $query->where('driver_id', $request->integer('driver_id')))
             ->when($request->filled('vehicle_id'), fn ($query) => $query->where('vehicle_id', $request->integer('vehicle_id')))
             ->when($request->filled('customer_id'), fn ($query) => $query->where('customer_id', $request->integer('customer_id')))
+            ->when(
+                $request->filled('payment_type') && array_key_exists($request->string('payment_type')->toString(), Hire::PAYMENT_TYPES),
+                fn ($query) => $query->where('payment_type', $request->string('payment_type')->toString())
+            )
+            ->when(
+                $request->filled('payment_status') && in_array($request->string('payment_status')->toString(), ['unpaid', 'partial', 'paid'], true),
+                fn ($query) => $query->paymentStatus($request->string('payment_status')->toString())
+            )
             // Date range — by each hire's effective date (its scheduled
             // start_time, or created_at for one never scheduled at all); see
             // Hire::scopeInDateRange().

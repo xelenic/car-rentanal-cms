@@ -1009,6 +1009,8 @@ class FakeServer {
       final driverId = request.url.queryParameters['driver_id'];
       final vehicleId = request.url.queryParameters['vehicle_id'];
       final customerId = request.url.queryParameters['customer_id'];
+      final paymentType = request.url.queryParameters['payment_type'];
+      final paymentStatus = request.url.queryParameters['payment_status'];
       final dateFrom = request.url.queryParameters['date_from'];
       final dateTo = request.url.queryParameters['date_to'];
       final tab = request.url.queryParameters['tab'] ?? 'all';
@@ -1016,13 +1018,15 @@ class FakeServer {
 
       // Every filter except the tab itself, mirroring Api\Admin\HireController::index()'s
       // own $preTab — so every tab's count reflects the same search/driver/
-      // vehicle/customer/date filters, just split by status.
+      // vehicle/customer/payment/date filters, just split by status.
       final preTab = allHires
           .where((h) => search.isEmpty || '${h['customer']?['name']} ${h['description']}'.toLowerCase().contains(search))
           .where((h) => !upcoming || h['is_upcoming'] == true)
           .where((h) => driverId == null || '${(h['driver'] as Map<String, dynamic>?)?['id']}' == driverId)
           .where((h) => vehicleId == null || '${(h['vehicle'] as Map<String, dynamic>?)?['id']}' == vehicleId)
           .where((h) => customerId == null || '${(h['customer'] as Map<String, dynamic>?)?['id']}' == customerId)
+          .where((h) => paymentType == null || h['payment_type'] == paymentType)
+          .where((h) => paymentStatus == null || h['payment_status'] == paymentStatus)
           .where((h) => dateFrom == null || ((h['start_time'] as String?)?.compareTo(dateFrom) ?? -1) >= 0)
           .where((h) => dateTo == null || ((h['start_time'] as String?)?.compareTo('$dateTo 23:59:59') ?? 1) <= 0)
           .toList();

@@ -32,7 +32,6 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
   late final _bookingNumber = TextEditingController(text: widget.revenue?.bookingNumber ?? '');
   late final _vehicle = TextEditingController(text: widget.revenue?.vehicle ?? '');
   late final _fullAmount = TextEditingController(text: widget.revenue == null ? '' : _plain(widget.revenue!.fullAmount));
-  late final _creditedAmount = TextEditingController(text: widget.revenue == null ? '' : _plain(widget.revenue!.creditedAmount));
   late final _balance = TextEditingController(text: widget.revenue == null ? '' : _plain(widget.revenue!.balance));
   late final _vehicleAmount = TextEditingController(text: widget.revenue == null ? '' : _plain(widget.revenue!.vehicleAmount));
 
@@ -57,7 +56,6 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
     _bookingNumber.dispose();
     _vehicle.dispose();
     _fullAmount.dispose();
-    _creditedAmount.dispose();
     _balance.dispose();
     _vehicleAmount.dispose();
     super.dispose();
@@ -134,7 +132,10 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
         bookingNumber: _bookingNumber.text.trim(),
         vehicle: _vehicle.text.trim(),
         fullAmount: _fullAmount.text.trim(),
-        creditedAmount: _creditedAmount.text.trim(),
+        // Hidden from the form — a new entry starts at 0 (unused by any
+        // calculation; see MyExpenseReport, which counts Balance instead),
+        // and an existing one keeps whatever it already had, untouched.
+        creditedAmount: widget.revenue == null ? '0' : _plain(widget.revenue!.creditedAmount),
         balance: _balance.text.trim(),
         vehicleAmount: _vehicleAmount.text.trim(),
         date: _date,
@@ -232,15 +233,6 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
               decoration: const InputDecoration(labelText: 'Full Amount (Rs.)'),
-              validator: _amountValidator,
-            ),
-            const SizedBox(height: 14),
-            TextFormField(
-              key: const Key('revenue-credited-amount'),
-              controller: _creditedAmount,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-              decoration: const InputDecoration(labelText: 'Credited Amount (Rs.)'),
               validator: _amountValidator,
             ),
             const SizedBox(height: 14),

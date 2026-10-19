@@ -249,8 +249,58 @@ void main() {
       expect(find.byKey(const Key('filter-driver')), findsOneWidget);
       expect(find.byKey(const Key('filter-vehicle')), findsOneWidget);
       expect(find.byKey(const Key('filter-customer')), findsOneWidget);
+      expect(find.byKey(const Key('filter-payment-type')), findsOneWidget);
+      expect(find.byKey(const Key('filter-payment-status')), findsOneWidget);
       expect(find.byKey(const Key('filter-date-from')), findsOneWidget);
       expect(find.byKey(const Key('filter-date-to')), findsOneWidget);
+    });
+
+    testWidgets('filtering by payment type sends payment_type and narrows the list', (tester) async {
+      final server = FakeServer(
+        allHires: [
+          hireJson(id: 1, customer: 'ZZZ Cash Hire', paymentType: 'cash'),
+          hireJson(id: 2, customer: 'ZZZ Credit Hire', paymentType: 'credit'),
+        ],
+      );
+      await _show(tester, server);
+
+      await tester.tap(find.byKey(const Key('hire-filters')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter-payment-type')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Credit').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter-apply')));
+      await tester.pumpAndSettle();
+
+      final requests = server.requestsTo('/api/admin/hires');
+      expect(requests.last.url.queryParameters['payment_type'], 'credit');
+      expect(find.text('ZZZ Credit Hire'), findsOneWidget);
+      expect(find.text('ZZZ Cash Hire'), findsNothing);
+    });
+
+    testWidgets('filtering by payment status sends payment_status and narrows the list', (tester) async {
+      final server = FakeServer(
+        allHires: [
+          hireJson(id: 1, customer: 'ZZZ Partial Hire', paymentType: 'credit', full: 1000, paidAmount: 400),
+          hireJson(id: 2, customer: 'ZZZ Fully Paid Hire', paymentType: 'credit', full: 1000, paidAmount: 1000),
+        ],
+      );
+      await _show(tester, server);
+
+      await tester.tap(find.byKey(const Key('hire-filters')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter-payment-status')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Partially Paid').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter-apply')));
+      await tester.pumpAndSettle();
+
+      final requests = server.requestsTo('/api/admin/hires');
+      expect(requests.last.url.queryParameters['payment_status'], 'partial');
+      expect(find.text('ZZZ Partial Hire'), findsOneWidget);
+      expect(find.text('ZZZ Fully Paid Hire'), findsNothing);
     });
 
     testWidgets('filtering by driver sends driver_id and narrows the list', (tester) async {
