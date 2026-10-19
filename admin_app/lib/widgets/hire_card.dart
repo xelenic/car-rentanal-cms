@@ -53,12 +53,12 @@ class HireCard extends StatelessWidget {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  const Icon(Icons.local_offer_outlined, size: 14, color: AppColors.textMuted),
+                  Icon(Icons.local_offer_outlined, size: 14, color: AppColors.textMuted),
                   const SizedBox(width: 4),
-                  Text(hire.tourTypeLabel, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+                  Text(hire.tourTypeLabel, style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
                   if (hire.isUpcoming) ...[
                     const SizedBox(width: 8),
-                    const Pill(label: 'Upcoming', color: AppColors.info),
+                    Pill(label: 'Upcoming', color: AppColors.info),
                   ],
                 ],
               ),
@@ -85,7 +85,7 @@ class HireCard extends StatelessWidget {
                 children: [
                   Text(
                     _currency.format(hire.hireFullValue),
-                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.textPrimary),
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.textPrimary),
                   ),
                   const Spacer(),
                   if (hire.isCredit) _PaymentBadge(hire: hire),
@@ -98,19 +98,19 @@ class HireCard extends StatelessWidget {
     );
   }
 
-  Widget _line(IconData icon, String text, {Color color = AppColors.textSecondary, int maxLines = 1}) {
+  Widget _line(IconData icon, String text, {Color? color, int maxLines = 1}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 1),
-          child: Icon(icon, size: 14, color: color == AppColors.textSecondary ? AppColors.textMuted : color),
+          child: Icon(icon, size: 14, color: color ?? AppColors.textMuted),
         ),
         const SizedBox(width: 4),
         Expanded(
           child: Text(
             text,
-            style: TextStyle(fontSize: 12.5, color: color),
+            style: TextStyle(fontSize: 12.5, color: color ?? AppColors.textSecondary),
             maxLines: maxLines,
             overflow: TextOverflow.ellipsis,
           ),
@@ -144,11 +144,11 @@ class _PaymentBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (hire.isFullyPaid) {
-      return const Pill(label: 'Fully Paid', color: AppColors.success, icon: Icons.check_circle_rounded);
+      return Pill(label: 'Fully Paid', color: AppColors.success, icon: Icons.check_circle_rounded);
     }
     if (hire.paymentStatus == 'partial') {
-      return const Pill(label: 'Partially Paid', color: AppColors.warning, icon: Icons.pie_chart_rounded);
+      return Pill(label: 'Partially Paid', color: AppColors.warning, icon: Icons.pie_chart_rounded);
     }
-    return const Pill(label: 'Unpaid', color: AppColors.danger, icon: Icons.error_outline_rounded);
+    return Pill(label: 'Unpaid', color: AppColors.danger, icon: Icons.error_outline_rounded);
   }
 }

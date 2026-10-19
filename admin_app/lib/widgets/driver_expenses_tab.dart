@@ -115,6 +115,22 @@ class _DriverExpensesTabState extends State<DriverExpensesTab> with AutomaticKee
 
   double _round2(double value) => double.parse(value.toStringAsFixed(2));
 
+  Future<void> _add() async {
+    final created = await showModalBottomSheet<DriverExpense>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => DriverExpenseEditSheet.add(driverId: widget.driverId),
+    );
+    if (created == null || !mounted) return;
+
+    setState(() {
+      _expenses = [created, ..._expenses];
+      _summary = DriverExpenseListSummary(count: _summary.count + 1, total: _round2(_summary.total + created.amount));
+    });
+  }
+
   Future<void> _edit(DriverExpense expense) async {
     final updated = await showModalBottomSheet<DriverExpense>(
       context: context,
@@ -173,38 +189,49 @@ class _DriverExpensesTabState extends State<DriverExpensesTab> with AutomaticKee
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Column(
-      children: [
-        Container(
-          color: AppColors.surface,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          child: Row(
-            children: [
-              IconButton(
-                key: const Key('driver-expenses-month-prev'),
-                tooltip: 'Previous month',
-                icon: const Icon(Icons.chevron_left_rounded),
-                onPressed: () => _stepMonth(-1),
-              ),
-              Expanded(
-                child: Text(
-                  _monthLabel.format(DateTime(_year, _month)),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5),
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: (widget.user?.canCreateHires ?? false)
+          ? FloatingActionButton.extended(
+              key: const Key('add-expense'),
+              onPressed: _add,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Expense'),
+            )
+          : null,
+      body: Column(
+        children: [
+          Container(
+            color: AppColors.surface,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Row(
+              children: [
+                IconButton(
+                  key: const Key('driver-expenses-month-prev'),
+                  tooltip: 'Previous month',
+                  icon: const Icon(Icons.chevron_left_rounded),
+                  onPressed: () => _stepMonth(-1),
                 ),
-              ),
-              IconButton(
-                key: const Key('driver-expenses-month-next'),
-                tooltip: 'Next month',
-                icon: const Icon(Icons.chevron_right_rounded),
-                onPressed: () => _stepMonth(1),
-              ),
-            ],
+                Expanded(
+                  child: Text(
+                    _monthLabel.format(DateTime(_year, _month)),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5),
+                  ),
+                ),
+                IconButton(
+                  key: const Key('driver-expenses-month-next'),
+                  tooltip: 'Next month',
+                  icon: const Icon(Icons.chevron_right_rounded),
+                  onPressed: () => _stepMonth(1),
+                ),
+              ],
+            ),
           ),
-        ),
-        const Divider(height: 1),
-        Expanded(child: _buildBody()),
-      ],
+          const Divider(height: 1),
+          Expanded(child: _buildBody()),
+        ],
+      ),
     );
   }
 
@@ -229,12 +256,12 @@ class _DriverExpensesTabState extends State<DriverExpensesTab> with AutomaticKee
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
           children: [
             Text(
               '${countOf(_summary.count, 'expense')} · ${formatRsShort(_summary.total)} total',
               key: const Key('driver-expenses-summary'),
-              style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 12),
             if (_expenses.isEmpty)

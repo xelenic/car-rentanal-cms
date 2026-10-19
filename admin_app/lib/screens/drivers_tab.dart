@@ -249,7 +249,7 @@ class _DriverTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 alignment: Alignment.center,
-                child: const Icon(Icons.badge_outlined, color: AppColors.primary),
+                child: Icon(Icons.badge_outlined, color: AppColors.primary),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -260,12 +260,12 @@ class _DriverTile extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       driver.contactNumber,
-                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+              Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
             ],
           ),
         ),

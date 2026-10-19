@@ -46,14 +46,14 @@ class ProfitBreakdownSheet extends StatelessWidget {
               positive: true,
             ),
             const SizedBox(height: 10),
-            const Text('Less: My Expenses', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+            Text('Less: My Expenses', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
             const SizedBox(height: 4),
             if (summary.byCategory.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(left: 10, top: 2),
                 child: Text(
                   'None recorded for ${summary.label}.',
-                  style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+                  style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
                 ),
               )
             else
@@ -87,7 +87,7 @@ class ProfitBreakdownSheet extends StatelessWidget {
               '+ Other Income (${formatRsExact(summary.otherIncomeTotal)}) '
               '+ Other Company Revenue (${formatRsExact(summary.otherCompanyRevenueTotal)}) '
               '− My Expenses (${formatRsExact(summary.total)}) = ${formatRsExact(summary.myProfit)}.',
-              style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
             ),
           ],
         ),

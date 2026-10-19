@@ -97,7 +97,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/admin/drivers/{driver}', [AdminDriverController::class, 'update']);
     Route::delete('/admin/drivers/{driver}', [AdminDriverController::class, 'destroy']);
     Route::get('/admin/drivers/{driver}/summary', [AdminDriverController::class, 'summary']);
+    Route::get('/admin/drivers/{driver}/deposit', [AdminDriverController::class, 'deposit']);
     Route::get('/admin/drivers/{driver}/expenses', [AdminDriverController::class, 'expenses']);
+    Route::post('/admin/drivers/{driver}/expenses', [AdminHireExpenseController::class, 'store']);
     Route::put('/admin/expenses/{hireExpense}', [AdminHireExpenseController::class, 'update']);
     Route::delete('/admin/expenses/{hireExpense}', [AdminHireExpenseController::class, 'destroy']);
 

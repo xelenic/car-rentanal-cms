@@ -11,7 +11,7 @@ use Spatie\Permission\Models\Permission;
 
 uses(RefreshDatabase::class);
 
-function apiHireExpenseAdmin(array $permissions = ['hires.view', 'hires.update', 'hires.delete']): User
+function apiHireExpenseAdmin(array $permissions = ['hires.view', 'hires.create', 'hires.update', 'hires.delete']): User
 {
     foreach ($permissions as $permission) {
         Permission::findOrCreate($permission, 'web');
@@ -34,6 +34,55 @@ function apiHireExpenseDriver(string $name = 'ZZZ Nimal'): Driver
         'password' => bcrypt('testpass123'),
     ]);
 }
+
+describe('creating', function () {
+    it('needs hires.create', function () {
+        $driver = apiHireExpenseDriver();
+        apiHireExpenseAdmin(['hires.view']);
+
+        $this->postJson("/api/admin/drivers/{$driver->id}/expenses", ['category' => 'fuel', 'amount' => 500])
+            ->assertForbidden();
+        expect(HireExpense::where('driver_id', $driver->id)->count())->toBe(0);
+    });
+
+    it('logs a new expense directly against the driver, not tied to any hire', function () {
+        $driver = apiHireExpenseDriver();
+        apiHireExpenseAdmin();
+
+        $response = $this->postJson("/api/admin/drivers/{$driver->id}/expenses", ['category' => 'fuel', 'amount' => 750.25])
+            ->assertCreated();
+
+        $response->assertJsonPath('data.category', 'fuel')
+            ->assertJsonPath('data.amount', 750.25);
+
+        $expense = HireExpense::where('driver_id', $driver->id)->first();
+        expect($expense)->not->toBeNull()
+            ->and($expense->hire_id)->toBeNull()
+            ->and((float) $expense->amount)->toBe(750.25);
+    });
+
+    it('rejects an unknown category', function () {
+        $driver = apiHireExpenseDriver();
+        apiHireExpenseAdmin();
+
+        $this->postJson("/api/admin/drivers/{$driver->id}/expenses", ['category' => 'not-a-real-category', 'amount' => 500])
+            ->assertUnprocessable()->assertJsonValidationErrors('category');
+    });
+
+    it('rejects an amount of zero or less', function () {
+        $driver = apiHireExpenseDriver();
+        apiHireExpenseAdmin();
+
+        $this->postJson("/api/admin/drivers/{$driver->id}/expenses", ['category' => 'fuel', 'amount' => 0])
+            ->assertUnprocessable()->assertJsonValidationErrors('amount');
+    });
+
+    it('is 404 for a driver that does not exist', function () {
+        apiHireExpenseAdmin();
+
+        $this->postJson('/api/admin/drivers/999/expenses', ['category' => 'fuel', 'amount' => 500])->assertNotFound();
+    });
+});
 
 describe('editing', function () {
     it('needs hires.update', function () {

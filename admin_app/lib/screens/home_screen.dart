@@ -4,6 +4,7 @@ import '../models/admin_user.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/initials_avatar.dart';
+import 'appearance_screen.dart';
 import 'customers_tab.dart';
 import 'drivers_tab.dart';
 import 'hires_screen.dart';
@@ -104,6 +105,14 @@ class _HomeScreenState extends State<HomeScreen> {
           color: const Color(0xFFE11D48),
           builder: (_) => MyExpensesScreen(user: user),
         ),
+      // Always offered — a personal display preference, not gated on any
+      // permission.
+      _Shortcut(
+        title: 'Settings',
+        icon: Icons.palette_outlined,
+        color: const Color(0xFF8D6E63),
+        builder: (_) => const AppearanceScreen(),
+      ),
     ];
   }
 
@@ -150,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ? 'Could not sign you in. Check your connection and restart the app.'
                   : 'You do not have access to any section yet. Ask an admin to grant you a permission.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: AppColors.textSecondary),
             ),
           ),
         ),
@@ -209,21 +218,21 @@ class _ProfileHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Welcome back',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
               ),
               const SizedBox(height: 2),
               Text(
                 user.name,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w700),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w700),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 2),
               Text(
                 user.email,
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5),
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -273,7 +282,7 @@ class _ShortcutCard extends StatelessWidget {
               Text(
                 shortcut.title,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 15.5),
+                style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 15.5),
               ),
             ],
           ),

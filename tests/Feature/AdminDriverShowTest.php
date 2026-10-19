@@ -330,7 +330,49 @@ describe('Make Payroll (Salary tab)', function () {
     });
 });
 
-describe('Change as Arrears Loan (Salary tab)', function () {
+describe('Deposit tab', function () {
+    it('shows the deposit breakdown and balance for the period', function () {
+        driverShowAdmin();
+        $driver = driverShowDriver();
+        test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        driverShowHire([
+            'driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00',
+            'hire_full_value' => 1000, 'our_hire_value' => 100,
+        ]);
+
+        $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=deposit');
+
+        $response->assertOk()->assertViewHas('tab', 'deposit');
+        $response->assertSee('Deposit Amount');
+        $response->assertSee('Balance');
+        $response->assertSee('Net Payable Salary');
+    });
+
+    it('says so when there is no deposit activity for the period', function () {
+        driverShowAdmin();
+        $driver = driverShowDriver();
+
+        $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=deposit');
+
+        $response->assertOk();
+        $response->assertSee('No deposit activity for September 2026.');
+    });
+
+    it('shows a balance badge on the Deposit nav tab regardless of which tab is active', function () {
+        driverShowAdmin();
+        $driver = driverShowDriver();
+        test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00', 'hire_full_value' => 1000, 'our_hire_value' => 100]);
+
+        // Default tab is Earnings, but the nav itself (and so the balance
+        // badge on the Deposit link) renders on every tab, not just Deposit's own.
+        $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9');
+        $response->assertViewHas('tab', 'earnings');
+        $response->assertSeeInOrder(['tab-deposit', 'Rs. 1,000.00'], false);
+    });
+});
+
+describe('Change as Arrears Loan (Deposit tab)', function () {
     it('shows the button only when there is a deficit, and only to payroll.manage', function () {
         $driver = driverShowDriver();
         test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
@@ -340,10 +382,10 @@ describe('Change as Arrears Loan (Salary tab)', function () {
         driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00', 'hire_full_value' => 1000, 'our_hire_value' => 100]);
 
         driverShowAdmin(['drivers.view']);
-        $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=salary')->assertDontSee('Change as Arrears Loan');
+        $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=deposit')->assertDontSee('Change as Arrears Loan');
 
         driverShowAdmin(['drivers.view', 'payroll.manage']);
-        $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=salary')->assertSee('Change as Arrears Loan');
+        $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=deposit')->assertSee('Change as Arrears Loan');
     });
 
     it('hides the button when there is no deficit', function () {
@@ -356,7 +398,7 @@ describe('Change as Arrears Loan (Salary tab)', function () {
             'hire_full_value' => 1000, 'our_hire_value' => 500, 'payment_type' => 'credit',
         ]);
 
-        $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=salary')->assertDontSee('Change as Arrears Loan');
+        $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=deposit')->assertDontSee('Change as Arrears Loan');
     });
 
     it('needs payroll.manage to convert a deficit', function () {
@@ -369,7 +411,7 @@ describe('Change as Arrears Loan (Salary tab)', function () {
         expect(DriverArrearsLoan::count())->toBe(0);
     });
 
-    it('converts the deficit into an arrears loan and redirects back to the Salary tab', function () {
+    it('converts the deficit into an arrears loan and redirects back to the Deposit tab', function () {
         $driver = driverShowDriver();
         driverShowAdmin(['drivers.view', 'payroll.manage']);
         test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
@@ -379,7 +421,7 @@ describe('Change as Arrears Loan (Salary tab)', function () {
             'year' => 2026, 'month' => 9, 'deduction_type' => 'full', 'redirect_to' => 'show',
         ]);
 
-        $response->assertRedirect(route('admin.drivers.show', ['driver' => $driver->id, 'tab' => 'salary', 'year' => 2026, 'month' => 9]));
+        $response->assertRedirect(route('admin.drivers.show', ['driver' => $driver->id, 'tab' => 'deposit', 'year' => 2026, 'month' => 9]));
         $loan = DriverArrearsLoan::where('driver_id', $driver->id)->first();
         expect($loan)->not->toBeNull()
             ->and($loan->deduction_type)->toBe('full');

@@ -475,9 +475,9 @@ class _HireFormScreenState extends State<HireFormScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 18),
+                  Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 18),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(_submitError!, style: const TextStyle(color: AppColors.danger, fontSize: 13))),
+                  Expanded(child: Text(_submitError!, style: TextStyle(color: AppColors.danger, fontSize: 13))),
                 ],
               ),
             ),
@@ -509,7 +509,7 @@ class _HireFormScreenState extends State<HireFormScreen> {
 
           const _SectionLabel('Status'),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'For a hire that already happened and was never entered, set its real '
             'state directly — this never has to start out as Pending.',
             style: TextStyle(color: AppColors.textMuted, fontSize: 12),
@@ -822,7 +822,7 @@ class _HireFormScreenState extends State<HireFormScreen> {
               ),
               if (controllers.length > 1)
                 IconButton(
-                  icon: const Icon(Icons.remove_circle_outline_rounded, color: AppColors.danger, size: 20),
+                  icon: Icon(Icons.remove_circle_outline_rounded, color: AppColors.danger, size: 20),
                   onPressed: () => onRemove(i),
                 ),
             ],
@@ -853,12 +853,12 @@ class _HireFormScreenState extends State<HireFormScreen> {
                 children: [
                   Text(
                     'Day ${dayIndex + 1}',
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.primary),
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.primary),
                   ),
                   const Spacer(),
                   if (_dayLocations.length > 1)
                     IconButton(
-                      icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger, size: 20),
+                      icon: Icon(Icons.delete_outline_rounded, color: AppColors.danger, size: 20),
                       onPressed: () => setState(() {
                         for (final c in _dayLocations[dayIndex]) {
                           c.dispose();
@@ -904,7 +904,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text.toUpperCase(),
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11.5,
         fontWeight: FontWeight.w800,
         color: AppColors.textMuted,

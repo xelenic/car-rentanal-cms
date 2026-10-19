@@ -236,7 +236,7 @@ class DriverController extends Controller implements HasMiddleware
             ->get();
 
         $tab = $request->string('tab')->toString();
-        $tab = in_array($tab, ['earnings', 'expenses', 'salary'], true) ? $tab : 'earnings';
+        $tab = in_array($tab, ['earnings', 'expenses', 'salary', 'deposit'], true) ? $tab : 'earnings';
 
         return view('admin.drivers.show', [
             'driver' => $driver,

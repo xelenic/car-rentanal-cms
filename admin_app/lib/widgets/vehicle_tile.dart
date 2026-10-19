@@ -30,7 +30,7 @@ class VehicleTile extends StatelessWidget {
                   color: AppColors.surfaceElevated,
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: const Icon(Icons.directions_car_filled_rounded, size: 32, color: AppColors.primary),
+                child: Icon(Icons.directions_car_filled_rounded, size: 32, color: AppColors.primary),
               ),
               const SizedBox(height: 12),
               Text(

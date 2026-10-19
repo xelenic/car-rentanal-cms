@@ -58,6 +58,54 @@ void main() {
     expect(find.byKey(const Key('delete-expense-10')), findsNothing);
   });
 
+  group('adding', () {
+    testWidgets('shows the Add Expense button to someone with hires.create, hidden otherwise', (tester) async {
+      await _openExpenses(tester, _serverWithOneExpense());
+      expect(find.byKey(const Key('add-expense')), findsOneWidget);
+
+      final server = _serverWithOneExpense()..canCreateHires = false;
+      await _openExpenses(tester, server);
+      expect(find.byKey(const Key('add-expense')), findsNothing);
+    });
+
+    testWidgets('logs a new expense and updates the list and total', (tester) async {
+      final server = _serverWithOneExpense();
+      await _openExpenses(tester, server);
+
+      await tester.tap(find.byKey(const Key('add-expense')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('edit-expense-category')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Vehicle Repair').last);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('edit-expense-amount')), '800');
+      await tester.tap(find.byKey(const Key('save-expense-edit')));
+      await tester.pumpAndSettle();
+
+      expect(server.createdDriverExpenses.single.driverId, 1);
+      expect(server.createdDriverExpenses.single.body['category'], 'repair');
+      expect(server.createdDriverExpenses.single.body['amount'], 800.0);
+      expect(find.text('Vehicle Repair'), findsOneWidget);
+      expect(find.text('Rs. 800.00'), findsOneWidget); // the new card's own amount
+      expect(find.textContaining('2 expenses'), findsOneWidget);
+      expect(find.textContaining('Rs. 2,300 total'), findsOneWidget); // 1500 existing + 800 new
+    });
+
+    testWidgets('rejects an amount of zero or less', (tester) async {
+      await _openExpenses(tester, _serverWithOneExpense());
+
+      await tester.tap(find.byKey(const Key('add-expense')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('edit-expense-amount')), '0');
+      await tester.tap(find.byKey(const Key('save-expense-edit')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Enter an amount greater than 0.'), findsOneWidget);
+    });
+  });
+
   group('editing', () {
     testWidgets('saves a changed category and amount, and updates the card and total', (tester) async {
       final server = _serverWithOneExpense()..canUpdateHires = true;

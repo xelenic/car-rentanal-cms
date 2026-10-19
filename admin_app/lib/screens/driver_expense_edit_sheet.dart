@@ -4,13 +4,19 @@ import '../models/driver_expense.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 
-/// A small form — category and amount, the only two fields an admin can
-/// correct on a driver-logged expense — opened as a bottom sheet from the
-/// Expenses tab. Returns the updated [DriverExpense] on success.
+/// A small form — category and amount, the only two fields involved —
+/// opened as a bottom sheet from the Expenses tab. Given an [expense], edits
+/// it; given a [driverId] instead, logs a brand new one against that driver
+/// (not tied to any hire). Returns the saved [DriverExpense] on success.
 class DriverExpenseEditSheet extends StatefulWidget {
-  const DriverExpenseEditSheet({super.key, required this.expense});
+  const DriverExpenseEditSheet({super.key, required this.expense}) : driverId = null;
 
-  final DriverExpense expense;
+  const DriverExpenseEditSheet.add({super.key, required this.driverId}) : expense = null;
+
+  final DriverExpense? expense;
+  final int? driverId;
+
+  bool get isEditing => expense != null;
 
   @override
   State<DriverExpenseEditSheet> createState() => _DriverExpenseEditSheetState();
@@ -18,8 +24,10 @@ class DriverExpenseEditSheet extends StatefulWidget {
 
 class _DriverExpenseEditSheetState extends State<DriverExpenseEditSheet> {
   final _formKey = GlobalKey<FormState>();
-  late String _category = widget.expense.category;
-  late final _amountController = TextEditingController(text: _formatAmount(widget.expense.amount));
+  late String _category = widget.expense?.category ?? driverExpenseCategories.keys.first;
+  late final _amountController = TextEditingController(
+    text: widget.expense != null ? _formatAmount(widget.expense!.amount) : '',
+  );
 
   bool _saving = false;
   String? _error;
@@ -41,12 +49,11 @@ class _DriverExpenseEditSheetState extends State<DriverExpenseEditSheet> {
     });
 
     try {
-      final updated = await ApiClient.instance.updateDriverExpense(
-        widget.expense.id,
-        category: _category,
-        amount: double.parse(_amountController.text.trim()),
-      );
-      if (mounted) Navigator.of(context).pop(updated);
+      final amount = double.parse(_amountController.text.trim());
+      final saved = widget.isEditing
+          ? await ApiClient.instance.updateDriverExpense(widget.expense!.id, category: _category, amount: amount)
+          : await ApiClient.instance.createDriverExpense(widget.driverId!, category: _category, amount: amount);
+      if (mounted) Navigator.of(context).pop(saved);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
@@ -66,7 +73,7 @@ class _DriverExpenseEditSheetState extends State<DriverExpenseEditSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Edit Expense', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+            Text(widget.isEditing ? 'Edit Expense' : 'Add Expense', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               key: const Key('edit-expense-category'),
@@ -93,7 +100,7 @@ class _DriverExpenseEditSheetState extends State<DriverExpenseEditSheet> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 10),
-              Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 13)),
+              Text(_error!, style: TextStyle(color: AppColors.danger, fontSize: 13)),
             ],
             const SizedBox(height: 18),
             SizedBox(
@@ -107,7 +114,7 @@ class _DriverExpenseEditSheetState extends State<DriverExpenseEditSheet> {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
                       )
-                    : const Text('Save'),
+                    : Text(widget.isEditing ? 'Save' : 'Add'),
               ),
             ),
           ],

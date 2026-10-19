@@ -106,7 +106,23 @@
         </div>
     </div>
 
-    @php $periodQuery = ['year' => $selectedYear, 'month' => $selectedMonth]; @endphp
+    @php
+        $periodQuery = ['year' => $selectedYear, 'month' => $selectedMonth];
+
+        $arrearsLoanTotal = round((float) $arrearsLoans->sum('amount'), 2);
+        // Balance: plain cash-flow figure — deposit owed minus what's
+        // physically been transferred so far. Floored at 0 for
+        // display: a driver who transferred more than they owed
+        // doesn't have a negative balance, there's just nothing left.
+        $balance = round($periodSalary['deposit_amount'] - $transferredTotal, 2);
+        $balanceDisplay = max($balance, 0.0);
+        $netPayableBase = $periodSalary['net_salary_payable'];
+        $finalNetPayable = round($netPayableBase - $balance, 2);
+        // The deficit still available to convert into a NEW arrears
+        // loan — nets out anything already converted, so the button
+        // below can't create duplicate loans for the same shortfall.
+        $unresolvedDeficit = round($netPayableBase - ($periodSalary['deposit_amount'] - $transferredTotal - $arrearsLoanTotal), 2);
+    @endphp
 
     <ul class="nav nav-tabs mb-2" id="driver-period-tabs">
         <li class="nav-item">
@@ -127,15 +143,23 @@
                 Salary
             </a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link {{ $tab === 'deposit' ? 'active' : '' }}" id="tab-deposit" href="{{ route('admin.drivers.show', ['driver' => $driver, 'tab' => 'deposit'] + $periodQuery) }}">
+                Deposit
+                @if ($balanceDisplay > 0)
+                    <span class="badge rounded-pill bg-light text-dark border ms-1">Rs. {{ number_format($balanceDisplay, 2) }}</span>
+                @endif
+            </a>
+        </li>
     </ul>
 
     <div class="card border-0 mb-2">
         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
             <span class="fw-semibold" style="font-size: .85rem;">
-                {{ ['expenses' => 'Expenses', 'salary' => 'Salary'][$tab] ?? 'Earnings' }} &middot; {{ $periodLabel }}
-                @if ($tab !== 'expenses' && $periodPayroll?->status === 'paid')
+                {{ ['expenses' => 'Expenses', 'salary' => 'Salary', 'deposit' => 'Deposit'][$tab] ?? 'Earnings' }} &middot; {{ $periodLabel }}
+                @if (in_array($tab, ['earnings', 'salary'], true) && $periodPayroll?->status === 'paid')
                     <span class="badge rounded-pill bg-success-subtle text-success-emphasis ms-1">Paid</span>
-                @elseif ($tab !== 'expenses' && $periodPayroll?->status === 'finalized')
+                @elseif (in_array($tab, ['earnings', 'salary'], true) && $periodPayroll?->status === 'finalized')
                     <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis ms-1">Finalized &middot; awaiting payment</span>
                 @endif
             </span>
@@ -297,22 +321,7 @@
                     </tbody>
                 </table>
             </div>
-        @else
-            @php
-                $arrearsLoanTotal = round((float) $arrearsLoans->sum('amount'), 2);
-                // Balance: plain cash-flow figure — deposit owed minus what's
-                // physically been transferred so far. Floored at 0 for
-                // display: a driver who transferred more than they owed
-                // doesn't have a negative balance, there's just nothing left.
-                $balance = round($periodSalary['deposit_amount'] - $transferredTotal, 2);
-                $balanceDisplay = max($balance, 0.0);
-                $netPayableBase = $periodSalary['net_salary_payable'];
-                $finalNetPayable = round($netPayableBase - $balance, 2);
-                // The deficit still available to convert into a NEW arrears
-                // loan — nets out anything already converted, so the button
-                // below can't create duplicate loans for the same shortfall.
-                $unresolvedDeficit = round($netPayableBase - ($periodSalary['deposit_amount'] - $transferredTotal - $arrearsLoanTotal), 2);
-            @endphp
+        @elseif ($tab === 'salary')
             <div class="p-3">
                 <div class="row row-cols-2 row-cols-md-3 g-2 mb-3">
                     <div class="col">
@@ -380,67 +389,6 @@
                             <span class="fw-semibold" style="font-size: .9rem;">Net Salary Payable</span>
                             <span class="fw-bold {{ $periodSalary['net_salary_payable'] < 0 ? 'text-danger' : 'text-success' }}" style="font-size: 1.1rem;">Rs. {{ number_format($periodSalary['net_salary_payable'], 2) }}</span>
                         </div>
-                    </div>
-                @endif
-
-                @if ($periodSalary['deposit_amount'] != 0 || $transferredTotal > 0)
-                    <div class="border-top pt-3 mt-3">
-                        <div class="fw-semibold mb-2" style="font-size: .9rem;">Deposit</div>
-                        <div class="d-flex align-items-center justify-content-between mb-2">
-                            <span class="text-muted" style="font-size: .82rem;">Total Hire Value</span>
-                            <span class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSalary['hire_full_value_total'], 2) }}</span>
-                        </div>
-                        <div class="d-flex align-items-center justify-content-between mb-2">
-                            <span class="text-muted" style="font-size: .82rem;">Cash Payments</span>
-                            <span class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSalary['hire_full_value_by_payment_type']['cash'] ?? 0, 2) }}</span>
-                        </div>
-                        <div class="d-flex align-items-center justify-content-between mb-2">
-                            <span class="text-muted" style="font-size: .82rem;">Credit Payments</span>
-                            <span class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSalary['hire_full_value_by_payment_type']['credit'] ?? 0, 2) }}</span>
-                        </div>
-                        <div class="d-flex align-items-center justify-content-between mb-2 border-top pt-2">
-                            <span class="text-muted" style="font-size: .82rem;">Deposit Amount</span>
-                            <span class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSalary['deposit_amount'], 2) }}</span>
-                        </div>
-                        @if ($transferredTotal > 0)
-                            <div class="d-flex align-items-center justify-content-between mb-2">
-                                <span class="text-muted" style="font-size: .82rem;">Already Transferred</span>
-                                <span class="fw-semibold text-danger" style="font-size: .85rem;">-Rs. {{ number_format($transferredTotal, 2) }}</span>
-                            </div>
-                        @endif
-                        <div class="d-flex align-items-center justify-content-between border-top pt-2">
-                            <span class="fw-semibold" style="font-size: .9rem;">Balance</span>
-                            <span class="fw-bold text-success" style="font-size: 1.1rem;">Rs. {{ number_format($balanceDisplay, 2) }}</span>
-                        </div>
-
-                        <div class="d-flex align-items-center justify-content-between mt-3 pt-3 border-top">
-                            <span class="fw-semibold" style="font-size: .9rem;">Net Payable Salary</span>
-                            <span class="fw-bold {{ $finalNetPayable < 0 ? 'text-danger' : 'text-success' }}" style="font-size: 1.1rem;">
-                                {{ $finalNetPayable < 0 ? '-' : '' }}Rs. {{ number_format(abs($finalNetPayable), 2) }}
-                            </span>
-                        </div>
-                        <div class="text-muted mt-1" style="font-size: .75rem;">
-                            Net Salary Payable (Rs. {{ number_format($netPayableBase, 2) }}) - Deposit Balance (Rs. {{ number_format($balanceDisplay, 2) }})
-                            = {{ $finalNetPayable < 0 ? '-' : '' }}Rs. {{ number_format(abs($finalNetPayable), 2) }}.
-                        </div>
-
-                        @if ($arrearsLoans->isNotEmpty())
-                            <div class="mt-2">
-                                @foreach ($arrearsLoans as $loan)
-                                    <button type="button" class="btn btn-link btn-sm p-0 d-block" style="font-size: .72rem;" data-bs-toggle="modal" data-bs-target="#modal-arrears-schedule-{{ $loan->id }}">
-                                        <i class="bi bi-receipt me-1"></i>Arrears Loan: Rs. {{ number_format($loan->amount, 2) }} &middot; {{ $loan->deduction_type_label }}
-                                    </button>
-                                @endforeach
-                            </div>
-                        @endif
-
-                        @can('payroll.manage')
-                            @if ($unresolvedDeficit < 0)
-                                <button type="button" class="btn btn-sm btn-outline-danger mt-2" data-bs-toggle="modal" data-bs-target="#modal-arrears-{{ $driver->id }}">
-                                    <i class="bi bi-arrow-repeat me-1"></i> Change as Arrears Loan
-                                </button>
-                            @endif
-                        @endcan
                     </div>
                 @endif
 
@@ -594,11 +542,81 @@
                     @endif
                 </div>
             </div>
+        @elseif ($tab === 'deposit')
+            <div class="p-3">
+                @if ($periodSalary['deposit_amount'] != 0 || $transferredTotal > 0)
+                    <div class="row row-cols-2 row-cols-md-3 g-2 mb-3">
+                        <div class="col">
+                            <div class="text-muted" style="font-size: .7rem;">Total Hire Value</div>
+                            <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSalary['hire_full_value_total'], 2) }}</div>
+                        </div>
+                        <div class="col">
+                            <div class="text-muted" style="font-size: .7rem;">Cash Payments</div>
+                            <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSalary['hire_full_value_by_payment_type']['cash'] ?? 0, 2) }}</div>
+                        </div>
+                        <div class="col">
+                            <div class="text-muted" style="font-size: .7rem;">Credit Payments</div>
+                            <div class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSalary['hire_full_value_by_payment_type']['credit'] ?? 0, 2) }}</div>
+                        </div>
+                    </div>
+
+                    <div class="border-top pt-3">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="text-muted" style="font-size: .82rem;">Deposit Amount</span>
+                            <span class="fw-semibold" style="font-size: .85rem;">Rs. {{ number_format($periodSalary['deposit_amount'], 2) }}</span>
+                        </div>
+                        @if ($transferredTotal > 0)
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <span class="text-muted" style="font-size: .82rem;">Already Transferred</span>
+                                <span class="fw-semibold text-danger" style="font-size: .85rem;">-Rs. {{ number_format($transferredTotal, 2) }}</span>
+                            </div>
+                        @endif
+                        <div class="d-flex align-items-center justify-content-between border-top pt-2">
+                            <span class="fw-semibold" style="font-size: .9rem;">Balance</span>
+                            <span class="fw-bold text-success" style="font-size: 1.1rem;">Rs. {{ number_format($balanceDisplay, 2) }}</span>
+                        </div>
+
+                        <div class="d-flex align-items-center justify-content-between mt-3 pt-3 border-top">
+                            <span class="fw-semibold" style="font-size: .9rem;">Net Payable Salary</span>
+                            <span class="fw-bold {{ $finalNetPayable < 0 ? 'text-danger' : 'text-success' }}" style="font-size: 1.1rem;">
+                                {{ $finalNetPayable < 0 ? '-' : '' }}Rs. {{ number_format(abs($finalNetPayable), 2) }}
+                            </span>
+                        </div>
+                        <div class="text-muted mt-1" style="font-size: .75rem;">
+                            Net Salary Payable (Rs. {{ number_format($netPayableBase, 2) }}) - Deposit Balance (Rs. {{ number_format($balanceDisplay, 2) }})
+                            = {{ $finalNetPayable < 0 ? '-' : '' }}Rs. {{ number_format(abs($finalNetPayable), 2) }}.
+                        </div>
+
+                        @if ($arrearsLoans->isNotEmpty())
+                            <div class="mt-2">
+                                @foreach ($arrearsLoans as $loan)
+                                    <button type="button" class="btn btn-link btn-sm p-0 d-block" style="font-size: .72rem;" data-bs-toggle="modal" data-bs-target="#modal-arrears-schedule-{{ $loan->id }}">
+                                        <i class="bi bi-receipt me-1"></i>Arrears Loan: Rs. {{ number_format($loan->amount, 2) }} &middot; {{ $loan->deduction_type_label }}
+                                    </button>
+                                @endforeach
+                            </div>
+                        @endif
+
+                        @can('payroll.manage')
+                            @if ($unresolvedDeficit < 0)
+                                <button type="button" class="btn btn-sm btn-outline-danger mt-2" data-bs-toggle="modal" data-bs-target="#modal-arrears-{{ $driver->id }}">
+                                    <i class="bi bi-arrow-repeat me-1"></i> Change as Arrears Loan
+                                </button>
+                            @endif
+                        @endcan
+                    </div>
+                @else
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-piggy-bank fs-3 d-block mb-2"></i>
+                        No deposit activity for {{ $periodLabel }}.
+                    </div>
+                @endif
+            </div>
         @endif
     </div>
 
     @can('payroll.manage')
-        @if ($tab === 'salary' && $unresolvedDeficit < 0)
+        @if (in_array($tab, ['salary', 'deposit'], true) && $unresolvedDeficit < 0)
             <x-modal id="modal-arrears-{{ $driver->id }}" title="Change as Arrears Loan — {{ $driver->name }}">
                 <form id="form-arrears-{{ $driver->id }}" class="arrears-loan-form" method="POST" action="{{ route('admin.drivers.arrears-loan.store', $driver) }}" data-amount="{{ abs($unresolvedDeficit) }}">
                     @csrf
@@ -640,7 +658,7 @@
             </x-modal>
         @endif
 
-        @if ($tab === 'salary')
+        @if (in_array($tab, ['salary', 'deposit'], true))
             @foreach ($arrearsLoans as $loan)
                 <x-modal id="modal-arrears-schedule-{{ $loan->id }}" title="Arrears Loan Schedule — {{ $driver->name }}">
                     <div class="mb-2">

@@ -182,7 +182,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
             IconButton(
               key: const Key('delete-hire'),
               tooltip: 'Delete hire',
-              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+              icon: Icon(Icons.delete_outline_rounded, color: AppColors.danger),
               onPressed: _confirmDelete,
             ),
         ],
@@ -203,9 +203,9 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.wifi_off_rounded, size: 48, color: AppColors.textMuted),
+              Icon(Icons.wifi_off_rounded, size: 48, color: AppColors.textMuted),
               const SizedBox(height: 12),
-              Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textSecondary)),
+              Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary)),
               const SizedBox(height: 16),
               OutlinedButton(onPressed: _load, child: const Text('Retry')),
             ],
@@ -380,11 +380,11 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
                 const _SectionTitle('Payment'),
                 const Spacer(),
                 if (hire.isFullyPaid)
-                  const _Pill(label: 'Fully Paid', color: AppColors.success, icon: Icons.check_circle_rounded)
+                  _Pill(label: 'Fully Paid', color: AppColors.success, icon: Icons.check_circle_rounded)
                 else if (hire.paymentStatus == 'partial')
-                  const _Pill(label: 'Partially Paid', color: AppColors.warning, icon: Icons.pie_chart_rounded)
+                  _Pill(label: 'Partially Paid', color: AppColors.warning, icon: Icons.pie_chart_rounded)
                 else
-                  const _Pill(label: 'Unpaid', color: AppColors.danger, icon: Icons.error_outline_rounded),
+                  _Pill(label: 'Unpaid', color: AppColors.danger, icon: Icons.error_outline_rounded),
               ],
             ),
             const SizedBox(height: 10),
@@ -428,17 +428,17 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
               children: [
                 Text(
                   _currency.format(payment.amount),
-                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                 ),
                 if (payment.paidAt != null)
                   Text(
                     _paymentDateFormat.format(payment.paidAt!),
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                   ),
                 if ((payment.notes ?? '').trim().isNotEmpty)
                   Text(
                     payment.notes!.trim(),
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                   ),
               ],
             ),
@@ -447,7 +447,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
             IconButton(
               key: Key('delete-payment-${payment.id}'),
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
+              icon: Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
               tooltip: 'Remove',
               onPressed: () => _deletePayment(payment),
             ),
@@ -495,7 +495,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
           children: [
             const _SectionTitle('Notes'),
             const SizedBox(height: 6),
-            Text(hire.description!.trim(), style: const TextStyle(fontSize: 13.5, color: AppColors.textPrimary)),
+            Text(hire.description!.trim(), style: TextStyle(fontSize: 13.5, color: AppColors.textPrimary)),
           ],
         ),
       ),
@@ -527,8 +527,8 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 13.5, color: AppColors.textSecondary))),
-          Text(value, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+          Expanded(child: Text(label, style: TextStyle(fontSize: 13.5, color: AppColors.textSecondary))),
+          Text(value, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
         ],
       ),
     );
@@ -542,7 +542,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> {
         children: [
           Icon(icon, size: 16, color: AppColors.textMuted),
           const SizedBox(width: 8),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 13.5, color: AppColors.textPrimary))),
+          Expanded(child: Text(text, style: TextStyle(fontSize: 13.5, color: AppColors.textPrimary))),
         ],
       ),
     );
@@ -558,7 +558,7 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text.toUpperCase(),
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11.5,
         fontWeight: FontWeight.w800,
         color: AppColors.textMuted,

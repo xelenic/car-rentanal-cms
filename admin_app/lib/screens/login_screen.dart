@@ -74,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: AppColors.surfaceElevated,
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.directions_car_filled_rounded,
                           color: AppColors.primary,
                           size: 36,
@@ -82,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    const Text(
+                    Text(
                       'Admin Panel',
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -92,7 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    Text(
                       'Sign in to manage hires on the go.',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
@@ -108,12 +108,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 18),
+                            Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 18),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 _error!,
-                                style: const TextStyle(color: AppColors.danger, fontSize: 13),
+                                style: TextStyle(color: AppColors.danger, fontSize: 13),
                               ),
                             ),
                           ],

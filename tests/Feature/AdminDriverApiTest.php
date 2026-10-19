@@ -1,6 +1,9 @@
 <?php
 
 use App\Models\Driver;
+use App\Models\DriverArrearsLoan;
+use App\Models\DriverArrearsLoanDeduction;
+use App\Models\DriverDepositTransfer;
 use App\Models\DriverPayroll;
 use App\Models\Hire;
 use App\Models\HireExpense;
@@ -381,6 +384,94 @@ describe('the expenses (Expenses tab)', function () {
         signedInForDrivers();
 
         $this->getJson('/api/admin/drivers/999/expenses')->assertNotFound();
+    });
+});
+
+describe('the deposit (Deposit tab)', function () {
+    it('needs drivers.view', function () {
+        $driver = testDriver();
+        signedInForDrivers(['hires.view']);
+
+        $this->getJson("/api/admin/drivers/{$driver->id}/deposit")->assertForbidden();
+    });
+
+    it('breaks down the deposit owed for the given month', function () {
+        signedInForDrivers();
+        $driver = testDriver();
+        // Rs. 1000 collected in cash (owed to the company), driver keeps 20% of the 100 our-hire-value as salary.
+        Hire::create([
+            'tour_type' => 'drop_pickup', 'hire_full_value' => 1000, 'our_hire_value' => 100,
+            'payment_type' => 'cash', 'start_time' => '2026-09-10 10:00:00', 'driver_id' => $driver->id,
+        ]);
+
+        $response = $this->getJson("/api/admin/drivers/{$driver->id}/deposit?year=2026&month=9")->assertOk();
+
+        $response->assertJsonPath('year', 2026)
+            ->assertJsonPath('month', 9)
+            ->assertJsonPath('period_label', 'September 2026')
+            ->assertJsonPath('deposit.hire_full_value_total', 1000)
+            ->assertJsonPath('deposit.cash_total', 1000)
+            ->assertJsonPath('deposit.credit_total', 0)
+            ->assertJsonPath('deposit.deposit_amount', 1000)
+            ->assertJsonPath('deposit.transferred_total', 0)
+            ->assertJsonPath('deposit.balance', 1000)
+            ->assertJsonPath('arrears_loans', []);
+    });
+
+    it('reduces the balance by what has already been transferred', function () {
+        signedInForDrivers();
+        $driver = testDriver();
+        Hire::create([
+            'tour_type' => 'drop_pickup', 'hire_full_value' => 1000, 'our_hire_value' => 100,
+            'payment_type' => 'cash', 'start_time' => '2026-09-10 10:00:00', 'driver_id' => $driver->id,
+        ]);
+        DriverDepositTransfer::create([
+            'driver_id' => $driver->id, 'year' => 2026, 'month' => 9, 'amount' => 400, 'slip_path' => 'deposit-slips/zzz.jpg',
+        ]);
+
+        $response = $this->getJson("/api/admin/drivers/{$driver->id}/deposit?year=2026&month=9")->assertOk();
+
+        $response->assertJsonPath('deposit.transferred_total', 400)
+            ->assertJsonPath('deposit.balance', 600);
+    });
+
+    it('lists this period\'s arrears loans with their monthly deduction schedule', function () {
+        signedInForDrivers();
+        $driver = testDriver();
+        $loan = DriverArrearsLoan::create([
+            'driver_id' => $driver->id, 'source_year' => 2026, 'source_month' => 9,
+            'amount' => 300, 'deduction_type' => 'installments',
+        ]);
+        DriverArrearsLoanDeduction::create([
+            'arrears_loan_id' => $loan->id, 'driver_id' => $driver->id, 'year' => 2026, 'month' => 10, 'amount' => 150,
+        ]);
+        DriverArrearsLoanDeduction::create([
+            'arrears_loan_id' => $loan->id, 'driver_id' => $driver->id, 'year' => 2026, 'month' => 11, 'amount' => 150,
+        ]);
+
+        $response = $this->getJson("/api/admin/drivers/{$driver->id}/deposit?year=2026&month=9")->assertOk();
+
+        $response->assertJsonPath('arrears_loans.0.amount', 300)
+            ->assertJsonPath('arrears_loans.0.deduction_type', 'installments')
+            ->assertJsonCount(2, 'arrears_loans.0.deductions')
+            ->assertJsonPath('arrears_loans.0.deductions.0.month', 10)
+            ->assertJsonPath('arrears_loans.0.deductions.0.amount', 150);
+    });
+
+    it('defaults to the current month when none is given', function () {
+        signedInForDrivers();
+        $driver = testDriver();
+
+        $response = $this->getJson("/api/admin/drivers/{$driver->id}/deposit")->assertOk();
+
+        $response->assertJsonPath('year', (int) now()->format('Y'))
+            ->assertJsonPath('month', (int) now()->format('n'));
+    });
+
+    it('is 404 for a driver that does not exist', function () {
+        signedInForDrivers();
+
+        $this->getJson('/api/admin/drivers/999/deposit')->assertNotFound();
     });
 });
 

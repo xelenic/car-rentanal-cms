@@ -694,7 +694,7 @@ class _HiresStatTile extends StatelessWidget {
                   ),
                   Text(
                     label,
-                    style: const TextStyle(fontSize: 9.5, color: AppColors.textMuted),
+                    style: TextStyle(fontSize: 9.5, color: AppColors.textMuted),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),

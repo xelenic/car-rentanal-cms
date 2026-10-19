@@ -200,7 +200,7 @@ class _HireHistoryTabState extends State<HireHistoryTab> with AutomaticKeepAlive
               '${countOf(_summary.count, 'hire')} · ${formatRsShort(_summary.hireFullValueTotal)} total · '
               '${formatRsShort(_summary.ourHireValueTotal)} our value · ${formatRsShort(_summary.commissionTotal)} commission',
               key: const Key('hire-history-summary'),
-              style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 12),
             if (_hires.isEmpty)

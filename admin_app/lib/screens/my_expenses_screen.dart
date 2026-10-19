@@ -691,7 +691,7 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
                             : 'Total of the ${countOf(_expenses.length, 'expense')} shown: ${formatRsExact(_filteredTotal)}'),
                     key: const Key('filtered-total'),
                     textAlign: TextAlign.end,
-                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
                   ),
                 ),
             ],
@@ -863,7 +863,7 @@ class _StatCard extends StatelessWidget {
                   child: Text(
                     label,
                     maxLines: 2,
-                    style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary, height: 1.2),
+                    style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary, height: 1.2),
                   ),
                 ),
               ],
@@ -875,7 +875,7 @@ class _StatCard extends StatelessWidget {
               child: Text(value, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
             ),
             const SizedBox(height: 2),
-            Text(caption, maxLines: 2, style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted, height: 1.2)),
+            Text(caption, maxLines: 2, style: TextStyle(fontSize: 10.5, color: AppColors.textMuted, height: 1.2)),
           ],
         ),
       ),
@@ -937,7 +937,7 @@ class _EntryTile extends StatelessWidget {
     required this.showMenu,
     this.pillLabel,
     this.notes,
-    this.amountColor = AppColors.textPrimary,
+    this.amountColor,
     this.onTap,
     this.onEdit,
     this.onDelete,
@@ -950,7 +950,7 @@ class _EntryTile extends StatelessWidget {
   final String dateLabel;
   final String? notes;
   final double amount;
-  final Color amountColor;
+  final Color? amountColor;
   final bool showMenu;
   final VoidCallback? onTap;
   final VoidCallback? onEdit;
@@ -980,7 +980,7 @@ class _EntryTile extends StatelessWidget {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         if (pillLabel != null) Pill(label: pillLabel!, color: AppColors.primary),
-                        Text(dateLabel, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                        Text(dateLabel, style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
                       ],
                     ),
                     if (notes != null) ...[
@@ -989,7 +989,7 @@ class _EntryTile extends StatelessWidget {
                         notes!,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                        style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
                       ),
                     ],
                   ],
@@ -1000,19 +1000,19 @@ class _EntryTile extends StatelessWidget {
                 padding: EdgeInsets.only(top: showMenu ? 10 : 0, right: showMenu ? 0 : 8),
                 child: Text(
                   formatRsExact(amount),
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: amountColor),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: amountColor ?? AppColors.textPrimary),
                 ),
               ),
               if (showMenu)
                 PopupMenuButton<String>(
                   key: Key('$keyPrefix-menu-$id'),
                   tooltip: 'More',
-                  icon: const Icon(Icons.more_vert_rounded, size: 20, color: AppColors.textMuted),
+                  icon: Icon(Icons.more_vert_rounded, size: 20, color: AppColors.textMuted),
                   onSelected: (value) => value == 'edit' ? onEdit?.call() : onDelete?.call(),
                   itemBuilder: (_) => [
                     if (onEdit != null) const PopupMenuItem(value: 'edit', child: Text('Edit')),
                     if (onDelete != null)
-                      const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: AppColors.danger))),
+                      PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: AppColors.danger))),
                   ],
                 ),
             ],
@@ -1069,16 +1069,16 @@ class _RevenueTile extends StatelessWidget {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Pill(label: revenue.bookingNumber, color: AppColors.primary),
-                        Text(revenue.vehicle, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                        Text(dateLabel, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                        if (revenue.slipUrl != null) const Icon(Icons.attach_file_rounded, size: 14, color: AppColors.textMuted),
+                        Text(revenue.vehicle, style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                        Text(dateLabel, style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                        if (revenue.slipUrl != null) Icon(Icons.attach_file_rounded, size: 14, color: AppColors.textMuted),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Full ${formatRsExact(revenue.fullAmount)} · Credited ${formatRsExact(revenue.creditedAmount)} · '
                       'Vehicle ${formatRsExact(revenue.vehicleAmount)}',
-                      style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                      style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
                     ),
                   ],
                 ),
@@ -1099,12 +1099,12 @@ class _RevenueTile extends StatelessWidget {
                 PopupMenuButton<String>(
                   key: Key('revenue-menu-${revenue.id}'),
                   tooltip: 'More',
-                  icon: const Icon(Icons.more_vert_rounded, size: 20, color: AppColors.textMuted),
+                  icon: Icon(Icons.more_vert_rounded, size: 20, color: AppColors.textMuted),
                   onSelected: (value) => value == 'edit' ? onEdit?.call() : onDelete?.call(),
                   itemBuilder: (_) => [
                     if (onEdit != null) const PopupMenuItem(value: 'edit', child: Text('Edit')),
                     if (onDelete != null)
-                      const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: AppColors.danger))),
+                      PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: AppColors.danger))),
                   ],
                 ),
             ],

@@ -16,7 +16,7 @@ Future<void> _show(WidgetTester tester, FakeServer server) async {
 }
 
 void main() {
-  testWidgets('shows all six shortcuts to a fully-permissioned user', (tester) async {
+  testWidgets('shows all seven shortcuts to a fully-permissioned user', (tester) async {
     await _show(tester, FakeServer());
 
     for (final key in [
@@ -26,6 +26,7 @@ void main() {
       'shortcut-drivers',
       'shortcut-customers',
       'shortcut-expenses',
+      'shortcut-settings',
     ]) {
       expect(find.byKey(Key(key)), findsOneWidget, reason: key);
     }
@@ -46,7 +47,7 @@ void main() {
     expect(find.byKey(const Key('shortcut-expenses')), findsOneWidget);
   });
 
-  testWidgets('Hires is always offered, even with every other permission off', (tester) async {
+  testWidgets('Hires and Settings are always offered, even with every other permission off', (tester) async {
     final server = FakeServer()
       ..canViewVehicles = false
       ..canViewDrivers = false
@@ -55,6 +56,17 @@ void main() {
     await _show(tester, server);
 
     expect(find.byKey(const Key('shortcut-hires')), findsOneWidget);
+    expect(find.byKey(const Key('shortcut-settings')), findsOneWidget);
+  });
+
+  testWidgets('tapping Settings pushes the Appearance page', (tester) async {
+    await _show(tester, FakeServer());
+
+    await tester.tap(find.byKey(const Key('shortcut-settings')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Appearance'), findsWidgets); // this page's own AppBar title
+    expect(find.text('Indigo'), findsOneWidget);
   });
 
   testWidgets('tapping Vehicles pushes a standalone Vehicles page', (tester) async {
@@ -129,7 +141,7 @@ void main() {
     expect(find.text('Admin Panel'), findsOneWidget); // the login screen
   });
 
-  testWidgets('a user with every other permission off still sees just Hires, not an empty shell', (tester) async {
+  testWidgets('a user with every other permission off still sees Hires and Settings, not an empty shell', (tester) async {
     final server = FakeServer()
       ..canViewVehicles = false
       ..canViewDrivers = false
@@ -138,9 +150,11 @@ void main() {
     await _show(tester, server);
 
     // Hires is still always offered (hires.view is required just to sign
-    // in), so a real "no access at all" state is unreachable through
-    // permissions alone — the grid always has at least this one shortcut.
+    // in), and Settings is a personal preference, not gated on any
+    // permission — so a real "no access at all" state is unreachable
+    // through permissions alone.
     expect(find.byKey(const Key('shortcut-hires')), findsOneWidget);
+    expect(find.byKey(const Key('shortcut-settings')), findsOneWidget);
     expect(find.byKey(const Key('shortcut-overview')), findsNothing);
     expect(find.byKey(const Key('shortcut-vehicles')), findsNothing);
     expect(find.byKey(const Key('logout')), findsOneWidget); // still a way out

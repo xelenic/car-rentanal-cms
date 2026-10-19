@@ -9,16 +9,32 @@ void main() {
   runApp(const AdminApp());
 }
 
-class AdminApp extends StatelessWidget {
+class AdminApp extends StatefulWidget {
   const AdminApp({super.key});
 
   @override
+  State<AdminApp> createState() => _AdminAppState();
+}
+
+class _AdminAppState extends State<AdminApp> {
+  @override
+  void initState() {
+    super.initState();
+    ThemeController.instance.load();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Car Rental CMS — Admin',
-      debugShowCheckedModeBanner: false,
-      theme: buildAdminAppTheme(),
-      home: const _SplashGate(),
+    return AnimatedBuilder(
+      animation: ThemeController.instance,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'Car Rental CMS — Admin',
+          debugShowCheckedModeBanner: false,
+          theme: buildAdminAppTheme(),
+          home: const _SplashGate(),
+        );
+      },
     );
   }
 }

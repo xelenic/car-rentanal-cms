@@ -90,6 +90,10 @@ class FakeServer {
   /// driver and every month asked — [defaultDriverSummaryJson] when not set.
   Map<String, dynamic>? driverSummary;
 
+  /// The raw JSON GET /admin/drivers/{id}/deposit answers with, for every
+  /// driver and every month asked — [defaultDriverDepositJson] when not set.
+  Map<String, dynamic>? driverDeposit;
+
   bool canViewVehicles;
   bool canCreateVehicles;
   bool canUpdateVehicles;
@@ -193,6 +197,7 @@ class FakeServer {
   final List<int> deletedDrivers = [];
   final List<({int id, Map<String, dynamic> body})> savedDriverExpenses = [];
   final List<int> deletedDriverExpenses = [];
+  final List<({int driverId, Map<String, dynamic> body})> createdDriverExpenses = [];
   final List<Map<String, dynamic>> createdCustomers = [];
   final List<({int id, Map<String, dynamic> body})> updatedCustomers = [];
   final List<int> deletedCustomers = [];
@@ -834,6 +839,35 @@ class FakeServer {
       });
     }
 
+    if (driverExpensesMatch != null && request.method == 'POST') {
+      final driverId = int.parse(driverExpensesMatch.group(1)!);
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      final category = body['category'] as String?;
+      final amount = num.tryParse('${body['amount']}');
+
+      if (category == null || !_driverExpenseCategoryLabels.containsKey(category)) {
+        return _json({'message': 'The category field is invalid.', 'errors': {'category': ['The category field is invalid.']}}, 422);
+      }
+      if (amount == null || amount <= 0) {
+        return _json({'message': 'The amount must be greater than 0.', 'errors': {'amount': ['The amount must be greater than 0.']}}, 422);
+      }
+
+      createdDriverExpenses.add((driverId: driverId, body: body));
+      final expense = driverExpenseJson(
+        id: 9000 + createdDriverExpenses.length,
+        category: category,
+        amount: amount,
+        createdAt: DateTime.now().toIso8601String(),
+      );
+      driverExpenses.putIfAbsent(driverId, () => []).insert(0, expense);
+      return _json({'data': expense}, 201);
+    }
+
+    final driverDepositMatch = RegExp(r'^/admin/drivers/(\d+)/deposit$').firstMatch(path);
+    if (driverDepositMatch != null && request.method == 'GET') {
+      return _json(driverDeposit ?? defaultDriverDepositJson());
+    }
+
     final driverExpenseOne = RegExp(r'^/admin/expenses/(\d+)$').firstMatch(path);
     if (driverExpenseOne != null && (request.method == 'PUT' || request.method == 'DELETE')) {
       final id = int.parse(driverExpenseOne.group(1)!);
@@ -1433,6 +1467,64 @@ Map<String, dynamic> defaultDriverSummaryJson({
     'payroll_status': payrollStatus,
   };
 }
+
+/// GET /admin/drivers/{id}/deposit's shape with no deposit activity at all —
+/// the Deposit tab's empty-state baseline. A test that wants specific
+/// numbers passes FakeServer(driverDeposit: defaultDriverDepositJson(...))
+/// with the relevant named arguments instead.
+Map<String, dynamic> defaultDriverDepositJson({
+  int year = 2026,
+  int month = 9,
+  num hireFullValueTotal = 0,
+  num cashTotal = 0,
+  num creditTotal = 0,
+  num depositAmount = 0,
+  num transferredTotal = 0,
+  num balance = 0,
+  num netSalaryPayable = 0,
+  num finalNetPayable = 0,
+  num unresolvedDeficit = 0,
+  List<Map<String, dynamic>>? arrearsLoans,
+}) {
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
+  return {
+    'year': year,
+    'month': month,
+    'period_label': '${monthNames[month - 1]} $year',
+    'deposit': {
+      'hire_full_value_total': hireFullValueTotal,
+      'cash_total': cashTotal,
+      'credit_total': creditTotal,
+      'deposit_amount': depositAmount,
+      'transferred_total': transferredTotal,
+      'balance': balance,
+      'net_salary_payable': netSalaryPayable,
+      'final_net_payable': finalNetPayable,
+      'unresolved_deficit': unresolvedDeficit,
+    },
+    'arrears_loans': arrearsLoans ?? [],
+  };
+}
+
+/// One arrears loan in GET /admin/drivers/{id}/deposit's shape.
+Map<String, dynamic> driverArrearsLoanJson({
+  required int id,
+  num amount = 500,
+  String deductionType = 'full',
+  String deductionTypeLabel = 'Full amount next month',
+  List<Map<String, dynamic>>? deductions,
+}) =>
+    {
+      'id': id,
+      'amount': amount,
+      'deduction_type': deductionType,
+      'deduction_type_label': deductionTypeLabel,
+      'deductions': deductions ?? [],
+    };
 
 /// One Vehicle Cards entry in the API's shape.
 Map<String, dynamic> dashboardVehicleCardJson({

@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\DriverResource;
 use App\Http\Resources\DriverExpenseResource;
 use App\Models\Driver;
+use App\Models\DriverArrearsLoan;
+use App\Models\DriverDepositTransfer;
 use App\Models\DriverPayroll;
 use App\Models\HireExpense;
 use App\Models\User;
@@ -148,6 +150,73 @@ class DriverController extends Controller
                 'count' => (int) $summaryRow->count,
                 'total' => round((float) $summaryRow->total, 2),
             ],
+        ]);
+    }
+
+    /**
+     * This driver's Deposit tab — the same cash-deposit breakdown and
+     * arrears-loan schedule as the web panel's own Deposit tab (see
+     * resources/views/admin/drivers/show.blade.php and
+     * ArrearsLoanController::currentUnresolvedDeficit() for the formula
+     * this mirrors). Read-only here — converting a deficit into an arrears
+     * loan and running payroll stay web-panel-only actions.
+     */
+    public function deposit(Request $request, Driver $driver): JsonResponse
+    {
+        $this->authorizeView($request);
+
+        $year = $request->filled('year') ? $request->integer('year') : (int) now()->format('Y');
+        $month = $request->filled('month') ? $request->integer('month') : (int) now()->format('n');
+
+        $salary = DriverSalaryCalculator::calculate($driver, $year, $month);
+
+        $transferredTotal = round((float) DriverDepositTransfer::query()
+            ->where('driver_id', $driver->id)
+            ->where('year', $year)
+            ->where('month', $month)
+            ->sum('amount'), 2);
+
+        $arrearsLoans = DriverArrearsLoan::query()
+            ->where('driver_id', $driver->id)
+            ->where('source_year', $year)
+            ->where('source_month', $month)
+            ->with('deductions')
+            ->latest()
+            ->get();
+
+        $arrearsLoanTotal = round((float) $arrearsLoans->sum('amount'), 2);
+        $balance = round($salary['deposit_amount'] - $transferredTotal, 2);
+        $balanceDisplay = max($balance, 0.0);
+        $netPayableBase = $salary['net_salary_payable'];
+        $finalNetPayable = round($netPayableBase - $balance, 2);
+        $unresolvedDeficit = round($netPayableBase - ($salary['deposit_amount'] - $transferredTotal - $arrearsLoanTotal), 2);
+
+        return response()->json([
+            'year' => $year,
+            'month' => $month,
+            'period_label' => Carbon::create($year, $month, 1)->format('F Y'),
+            'deposit' => [
+                'hire_full_value_total' => round((float) $salary['hire_full_value_total'], 2),
+                'cash_total' => round((float) ($salary['hire_full_value_by_payment_type']['cash'] ?? 0), 2),
+                'credit_total' => round((float) ($salary['hire_full_value_by_payment_type']['credit'] ?? 0), 2),
+                'deposit_amount' => round((float) $salary['deposit_amount'], 2),
+                'transferred_total' => $transferredTotal,
+                'balance' => $balanceDisplay,
+                'net_salary_payable' => round((float) $netPayableBase, 2),
+                'final_net_payable' => $finalNetPayable,
+                'unresolved_deficit' => $unresolvedDeficit,
+            ],
+            'arrears_loans' => $arrearsLoans->map(fn (DriverArrearsLoan $loan) => [
+                'id' => $loan->id,
+                'amount' => round((float) $loan->amount, 2),
+                'deduction_type' => $loan->deduction_type,
+                'deduction_type_label' => $loan->deduction_type_label,
+                'deductions' => $loan->deductions->map(fn ($deduction) => [
+                    'year' => $deduction->year,
+                    'month' => $deduction->month,
+                    'amount' => round((float) $deduction->amount, 2),
+                ])->values(),
+            ])->values(),
         ]);
     }
 

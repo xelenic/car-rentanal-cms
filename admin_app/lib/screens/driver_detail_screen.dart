@@ -7,6 +7,7 @@ import '../models/driver_summary.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 import '../util/format.dart';
+import '../widgets/driver_deposit_tab.dart';
 import '../widgets/driver_expenses_tab.dart';
 import '../widgets/hire_history_tab.dart';
 import '../widgets/state_views.dart';
@@ -27,7 +28,7 @@ class DriverDetailScreen extends StatefulWidget {
 }
 
 class _DriverDetailScreenState extends State<DriverDetailScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 4, vsync: this);
+  late final TabController _tabs = TabController(length: 5, vsync: this);
   late Driver _driver = widget.driver;
 
   bool get _canEdit => widget.user?.canUpdateDrivers ?? false;
@@ -100,7 +101,7 @@ class _DriverDetailScreenState extends State<DriverDetailScreen> with SingleTick
               itemBuilder: (_) => [
                 if (_canEdit) const PopupMenuItem(value: 'edit', child: Text('Edit')),
                 if (_canDelete)
-                  const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: AppColors.danger))),
+                  PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: AppColors.danger))),
               ],
             ),
         ],
@@ -116,11 +117,13 @@ class _DriverDetailScreenState extends State<DriverDetailScreen> with SingleTick
               indicatorColor: AppColors.primary,
               dividerColor: AppColors.border,
               labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+              labelPadding: const EdgeInsets.symmetric(horizontal: 4),
               tabs: const [
                 Tab(key: Key('tab-overview'), text: 'Overview'),
                 Tab(key: Key('tab-details'), text: 'Details'),
                 Tab(key: Key('tab-hires'), text: 'Hires'),
                 Tab(key: Key('tab-expenses'), text: 'Expenses'),
+                Tab(key: Key('tab-deposit'), text: 'Deposit'),
               ],
             ),
           ),
@@ -132,6 +135,7 @@ class _DriverDetailScreenState extends State<DriverDetailScreen> with SingleTick
                 _buildDetails(),
                 HireHistoryTab(driverId: _driver.id, user: widget.user),
                 DriverExpensesTab(driverId: _driver.id, user: widget.user),
+                DriverDepositTab(driverId: _driver.id),
               ],
             ),
           ),
@@ -409,7 +413,7 @@ class _DriverStatTile extends StatelessWidget {
                   ),
                   Text(
                     label,
-                    style: const TextStyle(fontSize: 9.5, color: AppColors.textMuted),
+                    style: TextStyle(fontSize: 9.5, color: AppColors.textMuted),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -453,7 +457,7 @@ class _Field extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+                  Text(label, style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
                   const SizedBox(height: 2),
                   Text(value, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
                 ],

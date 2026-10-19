@@ -127,7 +127,7 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
                     ),
                   )
                 : (_hasCoordinates
-                    ? const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 20)
+                    ? Icon(Icons.check_circle_rounded, color: AppColors.success, size: 20)
                     : null),
           ),
         );
@@ -154,12 +154,12 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       child: Row(
                         children: [
-                          const Icon(Icons.place_outlined, size: 16, color: AppColors.textMuted),
+                          Icon(Icons.place_outlined, size: 16, color: AppColors.textMuted),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               option.description,
-                              style: const TextStyle(fontSize: 13.5, color: AppColors.textPrimary),
+                              style: TextStyle(fontSize: 13.5, color: AppColors.textPrimary),
                             ),
                           ),
                         ],

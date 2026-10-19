@@ -146,7 +146,7 @@ class _SectionLabel extends StatelessWidget {
       children: [
         Icon(icon, color: AppColors.primary, size: 18),
         const SizedBox(width: 8),
-        Text(label, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 15)),
+        Text(label, style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 15)),
       ],
     );
   }
@@ -266,13 +266,13 @@ class _StatCard extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               'Rs. ${data.value.toStringAsFixed(2)}',
-              style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w800, fontSize: 14.5),
+              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w800, fontSize: 14.5),
             ),
           ),
           const SizedBox(height: 2),
           Text(
             data.label,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 10.5, fontWeight: FontWeight.w600),
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 10.5, fontWeight: FontWeight.w600),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -343,7 +343,7 @@ class _VehicleCardTile extends StatelessWidget {
               Expanded(
                 child: Text(
                   card.model,
-                  style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 14),
+                  style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 14),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -372,10 +372,10 @@ class _VehicleCardTile extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 9.5)),
+                        Text(label, style: TextStyle(color: AppColors.textMuted, fontSize: 9.5)),
                         Text(
                           'Rs. ${value.toStringAsFixed(2)}',
-                          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 11.5),
+                          style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 11.5),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),

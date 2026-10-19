@@ -70,7 +70,7 @@ class DriverExpenseCard extends StatelessWidget {
                         ),
                         Text(
                           formatRsExact(expense.amount),
-                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: AppColors.danger),
+                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: AppColors.danger),
                         ),
                       ],
                     ),
@@ -78,19 +78,19 @@ class DriverExpenseCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         _dateFormat.format(expense.createdAt!),
-                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                       ),
                     ],
                     if (expense.hireTourTypeLabel != null) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(Icons.local_offer_outlined, size: 13, color: AppColors.textMuted),
+                          Icon(Icons.local_offer_outlined, size: 13, color: AppColors.textMuted),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
                               expense.hireTourTypeLabel!,
-                              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -127,7 +127,7 @@ class DriverExpenseCard extends StatelessWidget {
                             IconButton(
                               key: Key('delete-expense-${expense.id}'),
                               visualDensity: VisualDensity.compact,
-                              icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
+                              icon: Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
                               tooltip: 'Delete',
                               onPressed: onDelete,
                             ),

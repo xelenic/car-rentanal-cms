@@ -181,7 +181,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> with SingleTi
               itemBuilder: (_) => [
                 if (_canEdit) const PopupMenuItem(value: 'edit', child: Text('Edit')),
                 if (_canDelete)
-                  const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: AppColors.danger))),
+                  PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: AppColors.danger))),
               ],
             ),
         ],
@@ -276,7 +276,7 @@ class _VehicleHeader extends StatelessWidget {
             children: [
               Text(
                 '${countOf(vehicle.seats, 'seat')} · ${countOf(vehicle.pax, 'passenger')}',
-                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
               Pill(label: vehicle.condition, color: conditionColor(vehicle.condition)),
               if (stats.counts.running > 0)
@@ -293,7 +293,7 @@ class _VehicleHeader extends StatelessWidget {
               vehicle.description!,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
             ),
           ],
           const SizedBox(height: 12),
@@ -322,7 +322,7 @@ class _VehicleHeader extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'This month · ${countOf(stats.monthHireCount, 'hire')} · ${formatRs(stats.monthHireFullValueTotal)}',
-              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
             ),
           ],
         ],
@@ -337,7 +337,7 @@ class _VehicleHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(label, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+        Text(label, style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
         const SizedBox(height: 2),
         FittedBox(
           fit: BoxFit.scaleDown,
@@ -553,13 +553,13 @@ class _PeriodBar extends StatelessWidget {
       child: Align(
         alignment: Alignment.centerLeft,
         child: InputChip(
-          avatar: const Icon(Icons.event_rounded, size: 16, color: AppColors.primary),
+          avatar: Icon(Icons.event_rounded, size: 16, color: AppColors.primary),
           label: Text(period.label),
           onDeleted: onClear,
           deleteButtonTooltipMessage: 'Show all time',
           backgroundColor: AppColors.surfaceElevated,
-          side: const BorderSide(color: AppColors.primary),
-          labelStyle: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 12.5),
+          side: BorderSide(color: AppColors.primary),
+          labelStyle: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 12.5),
         ),
       ),
     );
@@ -654,11 +654,11 @@ class _PeriodSheetState extends State<_PeriodSheet> {
               child: Center(child: CircularProgressIndicator()),
             )
           else if (_error != null) ...[
-            Text(_error!, style: const TextStyle(color: AppColors.textSecondary)),
+            Text(_error!, style: TextStyle(color: AppColors.textSecondary)),
             const SizedBox(height: 12),
             OutlinedButton(onPressed: _load, child: const Text('Retry')),
           ] else if (_options!.years.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
               child: Text(
                 'This vehicle has no hires yet, so there is nothing to filter.',

@@ -106,7 +106,7 @@ class ArrearsLoanController extends Controller implements HasMiddleware
         if (($data['redirect_to'] ?? null) === 'show') {
             return redirect()->route('admin.drivers.show', array_filter([
                 'driver' => $driver->id,
-                'tab' => 'salary',
+                'tab' => 'deposit',
                 'year' => $data['year'] ?? null,
                 'month' => $data['month'] ?? null,
             ]));

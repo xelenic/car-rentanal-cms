@@ -101,12 +101,12 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.camera_alt_outlined, color: AppColors.primary),
+                leading: Icon(Icons.camera_alt_outlined, color: AppColors.primary),
                 title: const Text('Take Photo'),
                 onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library_outlined, color: AppColors.primary),
+                leading: Icon(Icons.photo_library_outlined, color: AppColors.primary),
                 title: const Text('Choose from Gallery'),
                 onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
               ),
@@ -181,9 +181,9 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 18),
+                    Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 18),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 13))),
+                    Expanded(child: Text(_error!, style: TextStyle(color: AppColors.danger, fontSize: 13))),
                   ],
                 ),
               ),
@@ -326,7 +326,7 @@ class _SlipPicker extends StatelessWidget {
           Image.network(
             existingUrl!,
             fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => const ColoredBox(
+            errorBuilder: (context, error, stackTrace) => ColoredBox(
               color: AppColors.surfaceElevated,
               child: Center(child: Icon(Icons.broken_image_outlined, color: AppColors.textMuted)),
             ),
@@ -356,7 +356,7 @@ class _SlipPicker extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.add_a_photo_outlined, color: AppColors.primary, size: 26),
+          Icon(Icons.add_a_photo_outlined, color: AppColors.primary, size: 26),
           const SizedBox(height: 6),
           Text('Add Photo of Bank Slip', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
           const SizedBox(height: 2),

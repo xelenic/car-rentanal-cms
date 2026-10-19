@@ -100,7 +100,7 @@ class _ClaimPaymentSheetState extends State<ClaimPaymentSheet> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 6),
-              Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 13)),
+              Text(_error!, style: TextStyle(color: AppColors.danger, fontSize: 13)),
             ],
             const SizedBox(height: 10),
             SizedBox(

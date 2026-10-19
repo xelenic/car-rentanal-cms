@@ -249,7 +249,7 @@ class _CustomerTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 alignment: Alignment.center,
-                child: const Icon(Icons.person_outline_rounded, color: AppColors.primary),
+                child: Icon(Icons.person_outline_rounded, color: AppColors.primary),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -258,11 +258,11 @@ class _CustomerTile extends StatelessWidget {
                   children: [
                     Text(customer.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
                     const SizedBox(height: 2),
-                    Text(customer.phone, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                    Text(customer.phone, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+              Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
             ],
           ),
         ),

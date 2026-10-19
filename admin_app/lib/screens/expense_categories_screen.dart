@@ -204,7 +204,7 @@ class _ExpenseCategoriesScreenState extends State<ExpenseCategoriesScreen> {
               ),
             ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Renaming a category renames it on every expense filed under it. '
             'A category can only be deleted once nothing is filed under it.',
             style: TextStyle(fontSize: 12, color: AppColors.textMuted),
@@ -220,7 +220,7 @@ class _ExpenseCategoriesScreenState extends State<ExpenseCategoriesScreen> {
       title: Text(category.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
       subtitle: Text(
         countOf(category.expensesCount, 'expense'),
-        style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+        style: TextStyle(fontSize: 12, color: AppColors.textMuted),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,

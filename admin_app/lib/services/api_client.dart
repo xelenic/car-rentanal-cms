@@ -9,6 +9,7 @@ import '../models/admin_user.dart';
 import '../models/customer.dart';
 import '../models/dashboard_summary.dart';
 import '../models/driver.dart';
+import '../models/driver_deposit.dart';
 import '../models/driver_expense.dart';
 import '../models/driver_summary.dart';
 import '../models/hire.dart';
@@ -809,6 +810,41 @@ class ApiClient {
 
     if (response.statusCode == 200) {
       return DriverExpensePage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// This driver's Deposit tab: one month's cash-deposit breakdown and any
+  /// arrears loans against it — defaults to the current month, same as
+  /// fetchDriverSummary().
+  Future<DriverDeposit> fetchDriverDeposit(int driverId, {int? year, int? month}) async {
+    final uri = Uri.parse('$baseUrl/admin/drivers/$driverId/deposit').replace(
+      queryParameters: {
+        if (year != null) 'year': '$year',
+        if (month != null) 'month': '$month',
+      },
+    );
+    final response = await _http.get(uri, headers: await _headers(auth: true));
+
+    if (response.statusCode == 200) {
+      return DriverDeposit.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+
+    throw ApiException(_extractError(response));
+  }
+
+  /// Logs a new expense directly against this driver, not tied to any hire.
+  Future<DriverExpense> createDriverExpense(int driverId, {required String category, required double amount}) async {
+    final response = await _http.post(
+      Uri.parse('$baseUrl/admin/drivers/$driverId/expenses'),
+      headers: await _headers(auth: true),
+      body: jsonEncode({'category': category, 'amount': amount}),
+    );
+
+    if (response.statusCode == 201) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return DriverExpense.fromJson(data['data'] as Map<String, dynamic>);
     }
 
     throw ApiException(_extractError(response));

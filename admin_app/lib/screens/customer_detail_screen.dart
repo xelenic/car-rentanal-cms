@@ -94,7 +94,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> with Single
               itemBuilder: (_) => [
                 if (_canEdit) const PopupMenuItem(value: 'edit', child: Text('Edit')),
                 if (_canDelete)
-                  const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: AppColors.danger))),
+                  PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: AppColors.danger))),
               ],
             ),
         ],
@@ -177,7 +177,7 @@ class _Field extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+                  Text(label, style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
                   const SizedBox(height: 2),
                   Text(value, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
                 ],

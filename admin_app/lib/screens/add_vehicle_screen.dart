@@ -103,9 +103,9 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 18),
+                    Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 18),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 13))),
+                    Expanded(child: Text(_error!, style: TextStyle(color: AppColors.danger, fontSize: 13))),
                   ],
                 ),
               ),
