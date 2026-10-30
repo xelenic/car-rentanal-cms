@@ -198,8 +198,18 @@
             @endforeach
         </div>
 
+        @php
+            $expensesByCategory = collect($profitBreakdown['expenses_by_category'])
+                ->filter(fn ($amount) => $amount > 0)
+                ->sortDesc();
+            $expensesChartRows = $expensesByCategory->map(fn ($amount, $key) => [
+                'label' => \App\Models\HireExpense::CATEGORIES[$key] ?? ucfirst($key),
+                'amount' => $amount,
+            ])->values();
+        @endphp
+
         <div class="row g-3 mb-3">
-            <div class="col-md-5">
+            <div class="col-lg-5 col-xl-4">
                 <div class="card border-0 h-100">
                     <div class="card-header bg-transparent border-0 dashboard-section-header">
                         <span class="dashboard-section-icon" style="background: #eaf2fc; color: #2a78d6;"><i class="bi bi-pie-chart-fill"></i></span>
@@ -215,6 +225,31 @@
                         @else
                             <div class="dashboard-donut-container">
                                 <canvas id="dashboardPaymentTypeChart"></canvas>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-7 col-xl-8">
+                <div class="card border-0 h-100">
+                    <div class="card-header bg-transparent border-0 dashboard-section-header">
+                        <span class="dashboard-section-icon" style="background: #fdecec; color: #c23b3b;"><i class="bi bi-receipt"></i></span>
+                        <span class="fw-semibold">Expenses by Category</span>
+                        <span class="text-muted dashboard-section-period">&middot; {{ $periodLabel }}</span>
+                        <span class="fw-semibold text-danger ms-auto dashboard-section-total">
+                            Rs. {{ number_format($profitBreakdown['expenses_total'], 2) }}
+                        </span>
+                    </div>
+                    <div class="card-body d-flex align-items-center">
+                        @if ($expensesByCategory->isEmpty())
+                            <div class="text-center text-muted py-4 w-100">
+                                <i class="bi bi-receipt fs-4 d-block mb-2"></i>
+                                No deductible expenses recorded this month.
+                            </div>
+                        @else
+                            <div class="dashboard-bar-container">
+                                <canvas id="dashboardExpensesChart"></canvas>
                             </div>
                         @endif
                     </div>
@@ -308,6 +343,86 @@
             @endpush
         @endif
 
+        @if ($expensesByCategory->isNotEmpty())
+            @push('scripts')
+                <script>
+                    (function () {
+                        const canvas = document.getElementById('dashboardExpensesChart');
+                        if (!canvas) return;
+
+                        const rows = @json($expensesChartRows);
+
+                        const money = (value) => 'Rs. ' + Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                        // One series, one color — these bars rank categories by
+                        // magnitude, they don't carry separate identities, so a
+                        // categorical palette would be noise rather than signal.
+                        const valueLabelsPlugin = {
+                            id: 'valueLabels',
+                            afterDatasetsDraw(chart) {
+                                const { ctx } = chart;
+                                const meta = chart.getDatasetMeta(0);
+                                ctx.save();
+                                ctx.font = '600 11px Inter, system-ui, sans-serif';
+                                ctx.fillStyle = '#52514e';
+                                ctx.textBaseline = 'middle';
+                                meta.data.forEach((bar, i) => {
+                                    ctx.textAlign = 'left';
+                                    ctx.fillText(money(rows[i].amount), bar.x + 8, bar.y);
+                                });
+                                ctx.restore();
+                            },
+                        };
+
+                        new Chart(canvas, {
+                            type: 'bar',
+                            data: {
+                                labels: rows.map((r) => r.label),
+                                datasets: [{
+                                    data: rows.map((r) => r.amount),
+                                    backgroundColor: '#c23b3b',
+                                    borderRadius: 4,
+                                    barThickness: 16,
+                                }],
+                            },
+                            options: {
+                                indexAxis: 'y',
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                layout: { padding: { right: 90 } },
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        backgroundColor: '#0b0b0b',
+                                        padding: 10,
+                                        titleFont: { size: 12, weight: '600' },
+                                        bodyFont: { size: 12 },
+                                        callbacks: {
+                                            label: (ctx) => ' ' + money(ctx.parsed.x),
+                                        },
+                                    },
+                                },
+                                scales: {
+                                    x: {
+                                        beginAtZero: true,
+                                        grid: { color: '#e1e0d9', drawTicks: false },
+                                        border: { display: false },
+                                        ticks: { display: false },
+                                    },
+                                    y: {
+                                        grid: { display: false },
+                                        border: { display: false },
+                                        ticks: { color: '#52514e', font: { size: 11, weight: '600' } },
+                                    },
+                                },
+                            },
+                            plugins: [valueLabelsPlugin],
+                        });
+                    })();
+                </script>
+            @endpush
+        @endif
+
         @can('vehicles.view')
             @php
                 $vehicleMetricList = fn ($vc) => [
@@ -337,9 +452,12 @@
                 <div class="row row-cols-1 row-cols-md-2 g-2 mb-2">
                     @foreach ($vehicleCards as $vc)
                         <div class="col">
-                            <div class="card border-0 h-100 dashboard-card-hover">
-                                <div class="card-header bg-transparent border-0 pb-0 d-flex align-items-center justify-content-between">
-                                    <span class="fw-semibold">{{ $vc['vehicle']->model }}</span>
+                            <div class="card border-0 h-100 dashboard-card-hover" style="border-left: 4px solid {{ $vc['vehicle']->display_color }}; background: {{ $vc['vehicle']->display_color }}33;">
+                                <div class="card-header border-0 pb-0 d-flex align-items-center justify-content-between" style="background: transparent;">
+                                    <span class="fw-semibold d-flex align-items-center gap-2">
+                                        <span class="dashboard-vehicle-dot" style="background: {{ $vc['vehicle']->display_color }};"></span>
+                                        {{ $vc['vehicle']->model }}
+                                    </span>
                                     <span class="badge text-bg-light border">{{ $vc['vehicle']->condition }}</span>
                                 </div>
                                 <div class="card-body pt-2">
@@ -368,6 +486,7 @@
             @push('styles')
                 <style>
                     .dashboard-vehicle-metric-icon { font-size: .8rem; margin-top: 2px; }
+                    .dashboard-vehicle-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
                 </style>
             @endpush
         @endcan
@@ -591,6 +710,7 @@
                     align-items: center; justify-content: center; font-size: .78rem; flex-shrink: 0;
                 }
                 .dashboard-section-period { font-size: .72rem; }
+                .dashboard-section-total { font-size: .85rem; }
 
                 /* A gentle lift on hover for every stat/secondary card —
                    not just the profit-breakdown one — so the page reads
@@ -608,6 +728,7 @@
                 .dashboard-secondary-value { font-size: .85rem; }
 
                 .dashboard-donut-container { position: relative; height: 180px; width: 100%; }
+                .dashboard-bar-container { position: relative; height: 180px; width: 100%; }
 
                 .dashboard-deposit-row { color: inherit; padding: .35rem .5rem; border-radius: 8px; transition: background .15s ease; }
                 .dashboard-deposit-row:hover { background: #f4f3ef; }

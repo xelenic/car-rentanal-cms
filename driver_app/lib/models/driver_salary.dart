@@ -133,6 +133,7 @@ class DriverSalary {
   final double paidAmount;
   final DateTime? paidAt;
   final double amountDue;
+  final double depositAmount;
   final DepositSummary deposit;
 
   DriverSalary({
@@ -155,17 +156,13 @@ class DriverSalary {
     required this.paidAmount,
     required this.paidAt,
     required this.amountDue,
+    required this.depositAmount,
     required this.deposit,
   });
 
   double get cashHireFullValue => hireFullValueByPaymentType['cash'] ?? 0;
 
   double get creditHireFullValue => hireFullValueByPaymentType['credit'] ?? 0;
-
-  /// Cash the driver is holding that should be handed over to the company:
-  /// total hire value minus whatever was already settled by credit, minus
-  /// expenses the driver already paid out of pocket this month.
-  double get depositAmount => hireFullValueTotal - creditHireFullValue - expensesTotal;
 
   factory DriverSalary.fromJson(Map<String, dynamic> json) {
     final rawCategories = json['expenses_by_category'] as Map<String, dynamic>;
@@ -198,6 +195,10 @@ class DriverSalary {
       paidAmount: (json['paid_amount'] as num? ?? 0).toDouble(),
       paidAt: json['paid_at'] != null ? DateTime.tryParse(json['paid_at'] as String) : null,
       amountDue: (json['amount_due'] as num? ?? (isPaid ? 0 : netSalaryPayable)).toDouble(),
+      // Read straight off the server rather than recomputed here — it now
+      // accounts for more than expensesTotal alone (see
+      // DriverSalaryCalculator::$depositDeductionTotal on the backend).
+      depositAmount: (json['deposit_amount'] as num? ?? 0).toDouble(),
       deposit: rawDeposit != null
           ? DepositSummary.fromJson(rawDeposit)
           : DepositSummary(

@@ -63,6 +63,11 @@ class HireController extends Controller implements HasMiddleware
             ->when($request->filled('driver_id'), fn ($query) => $query->where('driver_id', $request->integer('driver_id')))
             ->when($request->filled('vehicle_id'), fn ($query) => $query->where('vehicle_id', $request->integer('vehicle_id')))
             ->when($request->filled('customer_id'), fn ($query) => $query->where('customer_id', $request->integer('customer_id')))
+            // A deep link straight to one hire — from the driver/vehicle
+            // pages' own hire rows, since there is no separate hire detail
+            // page; this narrows the list to just it so its Edit modal (see
+            // the auto-open script below) is guaranteed to be on page one.
+            ->when($request->filled('hire_id'), fn ($query) => $query->where('id', $request->integer('hire_id')))
             ->when(
                 in_array($request->string('payment_type')->toString(), array_keys(Hire::PAYMENT_TYPES), true),
                 fn ($query) => $query->where('payment_type', $request->string('payment_type')->toString()),
@@ -83,6 +88,7 @@ class HireController extends Controller implements HasMiddleware
             'selectedDriverId' => $request->filled('driver_id') ? $request->integer('driver_id') : null,
             'selectedVehicleId' => $request->filled('vehicle_id') ? $request->integer('vehicle_id') : null,
             'selectedCustomerId' => $request->filled('customer_id') ? $request->integer('customer_id') : null,
+            'selectedHireId' => $request->filled('hire_id') ? $request->integer('hire_id') : null,
             'selectedPaymentType' => $request->string('payment_type')->toString() ?: null,
             'dateFrom' => $request->string('date_from')->toString() ?: null,
             'dateTo' => $request->string('date_to')->toString() ?: null,
@@ -120,7 +126,10 @@ class HireController extends Controller implements HasMiddleware
 
         $hire = $this->hires->create($data);
 
-        return redirect()->route('admin.hires.index')->with('status', "Hire #{$hire->id} was created.");
+        // Back to wherever the form was submitted from — the index page's
+        // own search/filter/date-range query string, not a bare redirect to
+        // the unfiltered list, which would otherwise reset it.
+        return redirect()->back()->with('status', "Hire #{$hire->id} was created.");
     }
 
     public function update(Request $request, Hire $hire): RedirectResponse
@@ -129,14 +138,14 @@ class HireController extends Controller implements HasMiddleware
 
         $hire = $this->hires->update($hire, $data);
 
-        return redirect()->route('admin.hires.index')->with('status', "Hire #{$hire->id} was updated.");
+        return redirect()->back()->with('status', "Hire #{$hire->id} was updated.");
     }
 
     public function destroy(Hire $hire): RedirectResponse
     {
         $hire->delete();
 
-        return redirect()->route('admin.hires.index')->with('status', "Hire #{$hire->id} was deleted.");
+        return redirect()->back()->with('status', "Hire #{$hire->id} was deleted.");
     }
 
     /**

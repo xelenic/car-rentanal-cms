@@ -7,10 +7,17 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['model', 'condition', 'description', 'seats', 'pax'])]
+#[Fillable(['model', 'condition', 'description', 'seats', 'pax', 'color'])]
 class Vehicle extends Model
 {
     public const CONDITIONS = ['New', 'Excellent', 'Good', 'Fair', 'Poor'];
+
+    /**
+     * The card-accent colors a vehicle gets when nobody has picked one by
+     * hand — the same hues already used elsewhere on the Dashboard, cycled
+     * by id so every vehicle still reads as visually distinct out of the box.
+     */
+    public const DEFAULT_COLORS = ['#2a78d6', '#c95a26', '#c2477a', '#b3810a', '#158f66', '#c23b3b'];
 
     /** The validation rules for adding or editing a vehicle — shared by the web panel and the admin app's API. */
     public static function rules(): array
@@ -21,7 +28,16 @@ class Vehicle extends Model
             'description' => ['nullable', 'string'],
             'seats' => ['required', 'integer', 'min:1', 'max:100'],
             'pax' => ['required', 'integer', 'min:1', 'max:100'],
+            // Optional — the admin app doesn't send one, and a vehicle
+            // without a pick falls back to displayColor()'s own cycle.
+            'color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
         ];
+    }
+
+    /** This vehicle's card color — what was picked by hand, else a stable default from the id. */
+    public function getDisplayColorAttribute(): string
+    {
+        return $this->color ?: self::DEFAULT_COLORS[$this->id % count(self::DEFAULT_COLORS)];
     }
 
     protected function casts(): array

@@ -221,6 +221,111 @@ describe('the date range filter', function () {
     });
 });
 
+describe('the hire_id deep link', function () {
+    it('narrows the list to just that one hire', function () {
+        hiresAdmin();
+        $driver = filterDriver();
+        $shown = filterHire(['driver_id' => $driver->id]);
+        $other = filterHire(['driver_id' => $driver->id]);
+
+        $response = $this->get('/admin/hires?hire_id='.$shown->id);
+
+        $response->assertSee('Hire #'.$shown->id);
+        $response->assertDontSee('Hire #'.$other->id);
+    });
+
+    it('shows a badge saying only this hire is on show', function () {
+        hiresAdmin();
+        $hire = filterHire();
+
+        $response = $this->get('/admin/hires?hire_id='.$hire->id);
+
+        $response->assertSee('Showing Hire #'.$hire->id.' only');
+    });
+
+    it('auto-opens that hire\'s Edit modal', function () {
+        hiresAdmin(['hires.view', 'hires.update']);
+        $hire = filterHire();
+
+        $response = $this->get('/admin/hires?hire_id='.$hire->id);
+
+        $response->assertSee("modal-edit-{$hire->id}", false);
+        $response->assertSee('new bootstrap.Modal(modalEl).show();', false);
+    });
+
+    it('combines with driver_id, as the driver page\'s own hire links send it', function () {
+        hiresAdmin();
+        $driver = filterDriver();
+        $hire = filterHire(['driver_id' => $driver->id]);
+        $otherDriverHire = filterHire(['driver_id' => filterDriver('ZZZ Kamal')->id]);
+
+        $response = $this->get('/admin/hires?driver_id='.$driver->id.'&hire_id='.$hire->id);
+
+        $response->assertSee('Hire #'.$hire->id);
+        $response->assertDontSee('Hire #'.$otherDriverHire->id);
+    });
+});
+
+describe('keeping the filter after editing, deleting or paying a hire', function () {
+    /** A full edit payload for a drop_pickup hire — whatever the web form itself sends. */
+    function filterHireEditBody(Hire $hire, array $changes = []): array
+    {
+        return $changes + [
+            'tour_type' => 'drop_pickup',
+            'customer_id' => $hire->customer_id,
+            'hire_full_value' => 5000, 'our_hire_value' => 3500, 'payment_type' => 'cash',
+            'from_location_name' => 'ZZZ From', 'to_location_name' => 'ZZZ To',
+        ];
+    }
+
+    it('redirects back to the filtered URL after an update, not the bare list', function () {
+        hiresAdmin(['hires.view', 'hires.update']);
+        $nimal = filterDriver('ZZZ Nimal');
+        $hire = filterHire(['driver_id' => $nimal->id, 'customer_id' => filterCustomer()->id]);
+        $filteredUrl = '/admin/hires?driver_id='.$nimal->id;
+
+        $response = $this->from($filteredUrl)
+            ->put('/admin/hires/'.$hire->id, filterHireEditBody($hire, ['description' => 'ZZZ edited']));
+
+        $response->assertRedirect($filteredUrl);
+    });
+
+    it('redirects back to the filtered URL after a delete', function () {
+        hiresAdmin(['hires.view', 'hires.delete']);
+        $nimal = filterDriver('ZZZ Nimal');
+        $hire = filterHire(['driver_id' => $nimal->id]);
+        $filteredUrl = '/admin/hires?driver_id='.$nimal->id;
+
+        $response = $this->from($filteredUrl)->delete('/admin/hires/'.$hire->id);
+
+        $response->assertRedirect($filteredUrl);
+        expect(Hire::find($hire->id))->toBeNull();
+    });
+
+    it('redirects back to the filtered URL after recording a payment', function () {
+        hiresAdmin(['hires.view', 'hires.update']);
+        $nimal = filterDriver('ZZZ Nimal');
+        $hire = filterHire(['driver_id' => $nimal->id, 'payment_type' => 'credit', 'hire_full_value' => 1000, 'our_hire_value' => 800]);
+        $filteredUrl = '/admin/hires?driver_id='.$nimal->id;
+
+        $response = $this->from($filteredUrl)->post("/admin/hires/{$hire->id}/payments", ['amount' => 500]);
+
+        $response->assertRedirect($filteredUrl);
+    });
+
+    it('redirects back to the filtered URL after removing a payment', function () {
+        hiresAdmin(['hires.view', 'hires.update']);
+        $nimal = filterDriver('ZZZ Nimal');
+        $hire = filterHire(['driver_id' => $nimal->id, 'payment_type' => 'credit', 'hire_full_value' => 1000, 'our_hire_value' => 800]);
+        $payment = $hire->payments()->create(['amount' => 500, 'paid_at' => now()->toDateString()]);
+        $filteredUrl = '/admin/hires?driver_id='.$nimal->id;
+
+        $response = $this->from($filteredUrl)->delete("/admin/hires/{$hire->id}/payments/{$payment->id}");
+
+        $response->assertRedirect($filteredUrl);
+    });
+});
+
 it('combines every new filter together', function () {
     hiresAdmin();
     $nimal = filterDriver('ZZZ Nimal');

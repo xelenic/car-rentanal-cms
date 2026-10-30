@@ -33,9 +33,9 @@ const _types = <_VehicleMaintenanceType>[
   ),
 ];
 
-/// Hub for the three Vehicle Repair sub-types. None of these are counted as
-/// a deductible expense or affect the driver's salary — they're purely a
-/// vehicle maintenance log.
+/// Hub for the three Vehicle Repair sub-types. Their cost comes off the
+/// deposit the driver owes (cash they already spent), but never off their
+/// salary — these aren't a per-hire operating cost.
 class VehicleRepairScreen extends StatelessWidget {
   const VehicleRepairScreen({super.key});
 

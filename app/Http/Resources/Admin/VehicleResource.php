@@ -21,6 +21,7 @@ class VehicleResource extends JsonResource
             'seats' => $this->seats,
             'pax' => $this->pax,
             'description' => $this->description,
+            'color' => $this->display_color,
             'stats' => $this->when(isset($this->all_count), fn () => $this->stats()),
         ];
     }

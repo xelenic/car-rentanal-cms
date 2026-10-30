@@ -127,7 +127,7 @@
     <ul class="nav nav-tabs mb-2" id="driver-period-tabs">
         <li class="nav-item">
             <a class="nav-link {{ $tab === 'earnings' ? 'active' : '' }}" id="tab-earnings" href="{{ route('admin.drivers.show', ['driver' => $driver] + $periodQuery) }}">
-                Earnings
+                Hires
             </a>
         </li>
         <li class="nav-item">
@@ -156,7 +156,7 @@
     <div class="card border-0 mb-2">
         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
             <span class="fw-semibold" style="font-size: .85rem;">
-                {{ ['expenses' => 'Expenses', 'salary' => 'Salary', 'deposit' => 'Deposit'][$tab] ?? 'Earnings' }} &middot; {{ $periodLabel }}
+                {{ ['expenses' => 'Expenses', 'salary' => 'Salary', 'deposit' => 'Deposit'][$tab] ?? 'Hires' }} &middot; {{ $periodLabel }}
                 @if (in_array($tab, ['earnings', 'salary'], true) && $periodPayroll?->status === 'paid')
                     <span class="badge rounded-pill bg-success-subtle text-success-emphasis ms-1">Paid</span>
                 @elseif (in_array($tab, ['earnings', 'salary'], true) && $periodPayroll?->status === 'finalized')
@@ -213,7 +213,7 @@
             </div>
 
             <div class="table-responsive">
-                <table class="table align-middle mb-0">
+                <table class="table align-middle mb-0 {{ auth()->user()->can('hires.view') ? 'driver-hires-table' : '' }}">
                     <thead>
                         <tr>
                             <th>Date</th>
@@ -223,11 +223,17 @@
                             <th>Full Value</th>
                             <th>Commission</th>
                             <th>Status</th>
+                            @canany(['hires.view', 'hires.update', 'hires.delete'])
+                                <th class="text-end">Actions</th>
+                            @endcanany
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($periodHires as $hire)
-                            <tr>
+                            @php
+                                $hireDetailUrl = route('admin.hires.index', ['driver_id' => $driver->id, 'hire_id' => $hire->id]);
+                            @endphp
+                            <tr @can('hires.view') onclick="window.location='{{ $hireDetailUrl }}';" @endcan>
                                 <td class="text-muted" style="font-size: .8rem;">{{ $hire->effective_month_date?->format('M j, Y') ?? '—' }}</td>
                                 <td style="font-size: .8rem;">{{ $hire->customer->name ?? '—' }}</td>
                                 <td class="text-muted" style="font-size: .8rem;">{{ $hire->vehicle->model ?? '—' }}</td>
@@ -235,10 +241,30 @@
                                 <td class="text-muted" style="font-size: .8rem;">Rs. {{ number_format($hire->hire_full_value, 2) }}</td>
                                 <td class="fw-semibold" style="color: #1baf7a; font-size: .8rem;">Rs. {{ number_format($hire->commission, 2) }}</td>
                                 <td><span class="badge rounded-pill bg-light text-dark border">{{ $hire->status_label }}</span></td>
+                                @canany(['hires.view', 'hires.update', 'hires.delete'])
+                                    <td class="text-end" onclick="event.stopPropagation();">
+                                        <div class="d-inline-flex gap-1">
+                                            @can('hires.view')
+                                                <a href="{{ $hireDetailUrl }}" class="btn btn-sm btn-light border btn-icon" title="View / Edit">
+                                                    <i class="bi bi-pencil"></i>
+                                                </a>
+                                            @endcan
+                                            @can('hires.delete')
+                                                <form method="POST" action="{{ route('admin.hires.destroy', $hire) }}" onsubmit="return confirm('Delete Hire #{{ $hire->id }}?');">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn btn-sm btn-light border btn-icon text-danger" title="Delete">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </form>
+                                            @endcan
+                                        </div>
+                                    </td>
+                                @endcanany
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">No hires for {{ $periodLabel }}.</td>
+                                <td colspan="8" class="text-center text-muted py-4">No hires for {{ $periodLabel }}.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -728,6 +754,11 @@
         #driver-period-tabs .nav-link { color: var(--text-muted); font-weight: 500; }
         #driver-period-tabs .nav-link:hover { color: var(--text-dark); }
         #driver-period-tabs .nav-link.active { color: var(--primary); font-weight: 600; }
+
+        /* A hire row here opens that hire on the Hires page (its own Edit
+           modal — the closest thing this app has to a hire detail view). */
+        .driver-hires-table tbody tr { cursor: pointer; }
+        .driver-hires-table tbody tr:hover { background: var(--primary-light); }
     </style>
 @endpush
 

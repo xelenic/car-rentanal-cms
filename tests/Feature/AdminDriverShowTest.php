@@ -121,6 +121,50 @@ it('lists only the selected driver\'s hires for the selected month', function ()
     $response->assertSee('ZZZ Prius');
 });
 
+describe('the Earnings tab\'s hire rows', function () {
+    it('links each hire to its own page on the Hires list, scoped to just it', function () {
+        driverShowAdmin(['drivers.view', 'hires.view']);
+        $driver = driverShowDriver();
+        $hire = driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-15 10:00:00']);
+
+        $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9');
+
+        $response->assertSee(route('admin.hires.index', ['driver_id' => $driver->id, 'hire_id' => $hire->id]));
+    });
+
+    it('offers no hire link or actions to someone without any hires permission', function () {
+        driverShowAdmin(['drivers.view']);
+        $driver = driverShowDriver();
+        $hire = driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-15 10:00:00']);
+
+        $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9');
+
+        $response->assertDontSee(route('admin.hires.index', ['driver_id' => $driver->id, 'hire_id' => $hire->id]));
+    });
+
+    it('offers Delete to someone with hires.delete, hidden otherwise', function () {
+        driverShowAdmin(['drivers.view', 'hires.delete']);
+        $driver = driverShowDriver();
+        $hire = driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-15 10:00:00']);
+
+        $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9');
+
+        $response->assertSee(route('admin.hires.destroy', $hire), false);
+    });
+
+    it('deletes a hire and redirects back to the same driver tab and period', function () {
+        driverShowAdmin(['drivers.view', 'hires.delete']);
+        $driver = driverShowDriver();
+        $hire = driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-15 10:00:00']);
+        $backUrl = '/admin/drivers/'.$driver->id.'?year=2026&month=9';
+
+        $response = $this->from($backUrl)->delete(route('admin.hires.destroy', $hire));
+
+        $response->assertRedirect($backUrl);
+        expect(Hire::find($hire->id))->toBeNull();
+    });
+});
+
 it('matches an unscheduled hire into the month it was recorded', function () {
     driverShowAdmin();
     $driver = driverShowDriver();

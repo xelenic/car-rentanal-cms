@@ -10,6 +10,7 @@ use App\Models\Hire;
 use App\Models\HireExpense;
 use App\Models\SalaryAdvanceDeduction;
 use App\Models\Vehicle;
+use App\Models\VehicleMaintenanceRecord;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 
 /**
@@ -23,6 +24,13 @@ class DriverSalaryCalculator
      * driver's salary cut is calculated.
      */
     public const DEDUCTIBLE_CATEGORIES = ['fuel', 'highway', 'food', 'room', 'parking'];
+
+    /**
+     * Besides DEDUCTIBLE_CATEGORIES above, this one extra HireExpense
+     * category also comes off the deposit — see the deposit_amount comment
+     * below for why it's deposit-only, never salary.
+     */
+    private const DEPOSIT_ONLY_EXPENSE_CATEGORIES = ['others'];
 
     public const SALARY_PERCENTAGE = 20;
 
@@ -87,7 +95,7 @@ class DriverSalaryCalculator
                         }
                     });
             })
-            ->whereIn('category', self::DEDUCTIBLE_CATEGORIES)
+            ->whereIn('category', [...self::DEDUCTIBLE_CATEGORIES, ...self::DEPOSIT_ONLY_EXPENSE_CATEGORIES])
             ->get()
             ->groupBy('category')
             ->map(fn ($group) => round((float) $group->sum('amount'), 2));
@@ -96,6 +104,29 @@ class DriverSalaryCalculator
             collect(self::DEDUCTIBLE_CATEGORIES)->sum(fn ($category) => $expensesByCategory->get($category, 0.0)),
             2
         );
+
+        // "Others" hire expenses and vehicle-level costs (service, repair,
+        // parts, revenue license — logged from the driver app's Vehicle
+        // Repair / Revenue License options, never tied to a specific hire)
+        // come off the deposit the same way fuel etc. above do: cash the
+        // driver already laid out of their own pocket. Deliberately kept
+        // out of $expensesTotal above, though — they must never shrink
+        // net_before_salary/salary, only how much deposit is still owed.
+        $depositOnlyExpenseTotal = round(
+            collect(self::DEPOSIT_ONLY_EXPENSE_CATEGORIES)->sum(fn ($category) => $expensesByCategory->get($category, 0.0)),
+            2
+        );
+
+        $vehicleMaintenanceQuery = VehicleMaintenanceRecord::query()
+            ->whereYear('created_at', $year)
+            ->whereMonth('created_at', $month);
+
+        if ($driverId !== null) {
+            $vehicleMaintenanceQuery->where('driver_id', $driverId);
+        }
+
+        $vehicleMaintenanceTotal = round((float) $vehicleMaintenanceQuery->sum('cost'), 2);
+        $depositDeductionTotal = round($expensesTotal + $depositOnlyExpenseTotal + $vehicleMaintenanceTotal, 2);
 
         $netBeforeSalary = round($ourHireValueTotal - $expensesTotal, 2);
         $salary = round($netBeforeSalary * (self::SALARY_PERCENTAGE / 100), 2);
@@ -163,10 +194,13 @@ class DriverSalaryCalculator
 
         // Cash the driver is holding that should be handed over to the
         // company: total hire value minus whatever was already settled by
-        // credit, minus expenses the driver already paid out of pocket.
-        // Mirrors the driver app's own DriverSalary.depositAmount getter.
+        // credit, minus every expense the driver already paid out of
+        // pocket — fuel/highway/food/room/parking, "Others", and vehicle
+        // maintenance/revenue-license costs alike (see $depositDeductionTotal
+        // above). The driver app reads this field straight off the API
+        // response rather than recomputing it, so it always matches here.
         $creditTotal = $hireFullValueByPaymentType->get('credit', 0.0);
-        $depositAmount = round($hireFullValueTotal - $creditTotal - $expensesTotal, 2);
+        $depositAmount = round($hireFullValueTotal - $creditTotal - $depositDeductionTotal, 2);
 
         return [
             'year' => $year,
@@ -181,6 +215,12 @@ class DriverSalaryCalculator
             'expenses_by_category' => collect(self::DEDUCTIBLE_CATEGORIES)->mapWithKeys(
                 fn ($category) => [$category => $expensesByCategory->get($category, 0.0)]
             )->all(),
+            // The deposit-only pieces behind deposit_amount, broken out for
+            // anyone showing the driver why it's what it is — none of these
+            // three affect net_before_salary/salary above.
+            'deposit_only_expense_total' => $depositOnlyExpenseTotal,
+            'vehicle_maintenance_total' => $vehicleMaintenanceTotal,
+            'deposit_deduction_total' => $depositDeductionTotal,
             'net_before_salary' => $netBeforeSalary,
             'salary_percentage' => self::SALARY_PERCENTAGE,
             'salary' => $salary,

@@ -40,7 +40,9 @@ class HirePaymentController extends Controller implements HasMiddleware
 
         $fullyPaid = round($hire->fresh()->balance_remaining, 2) <= 0;
 
-        return redirect()->route('admin.hires.index')->with(
+        // Back to the index page's own filtered query string, not a bare
+        // redirect that would reset it — see HireController's store/update/destroy.
+        return redirect()->back()->with(
             'status',
             "Rs. ".number_format($data['amount'], 2)." payment recorded for Hire #{$hire->id}."
                 .($fullyPaid ? ' It is now fully paid.' : '')
@@ -53,6 +55,6 @@ class HirePaymentController extends Controller implements HasMiddleware
 
         $payment->delete();
 
-        return redirect()->route('admin.hires.index')->with('status', "Payment removed from Hire #{$hire->id}.");
+        return redirect()->back()->with('status', "Payment removed from Hire #{$hire->id}.");
     }
 }

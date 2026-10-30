@@ -99,13 +99,17 @@
                     <span class="text-muted small">to</span>
                     <input type="date" name="date_to" value="{{ $dateTo }}" class="form-control" style="width: 145px;" onchange="this.form.submit()" title="To">
                 </div>
-                @if ($selectedDriverId || $selectedVehicleId || $selectedCustomerId || $selectedPaymentType || $dateFrom || $dateTo || $search)
+                @if ($selectedDriverId || $selectedVehicleId || $selectedCustomerId || $selectedPaymentType || $dateFrom || $dateTo || $search || $selectedHireId)
                     <a href="{{ route('admin.hires.index', $showUpcoming ? ['upcoming' => 1] : []) }}" class="btn btn-light border" title="Clear filters">
                         <i class="bi bi-x-lg"></i>
                     </a>
                 @endif
             </form>
-            @if ($showUpcoming)
+            @if ($selectedHireId)
+                <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">
+                    <i class="bi bi-eye me-1"></i> Showing Hire #{{ $selectedHireId }} only
+                </span>
+            @elseif ($showUpcoming)
                 <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">
                     <i class="bi bi-calendar-event me-1"></i> Upcoming only — soonest first
                 </span>
@@ -788,6 +792,16 @@
                 updateCustomerFields('edit-{{ $hire->id }}');
             });
         @endforeach
+
+        // Deep-linked from a driver's or vehicle's own page ("?hire_id=…")
+        // — there being no separate hire detail page, open straight into
+        // this hire's Edit modal instead, which shows everything about it.
+        @if ($selectedHireId)
+            document.addEventListener('DOMContentLoaded', function () {
+                const modalEl = document.getElementById('modal-edit-{{ $selectedHireId }}');
+                if (modalEl) new bootstrap.Modal(modalEl).show();
+            });
+        @endif
     </script>
     <script>
         window.__hireTrackMaps = window.__hireTrackMaps || {};

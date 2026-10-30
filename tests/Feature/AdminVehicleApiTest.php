@@ -267,6 +267,52 @@ describe('adding a vehicle', function () {
     ]);
 });
 
+describe('the card color', function () {
+    it('falls back to a default from the palette when nobody picks one', function () {
+        signedInAdmin();
+
+        $response = $this->postJson('/api/admin/vehicles', [
+            'model' => 'ZZZ No Color', 'condition' => 'Good', 'seats' => 4, 'pax' => 4,
+        ])->assertCreated();
+
+        $color = $response->json('data.color');
+        expect($color)->toMatch('/^#[0-9A-Fa-f]{6}$/');
+        expect(Vehicle::where('model', 'ZZZ No Color')->first()->color)->toBeNull();
+    });
+
+    it('keeps a hand-picked color and returns it as-is', function () {
+        signedInAdmin();
+
+        $response = $this->postJson('/api/admin/vehicles', [
+            'model' => 'ZZZ Red Van', 'condition' => 'Good', 'seats' => 4, 'pax' => 4, 'color' => '#ab12cd',
+        ])->assertCreated();
+
+        $response->assertJsonPath('data.color', '#ab12cd');
+        expect(Vehicle::where('model', 'ZZZ Red Van')->first()->color)->toBe('#ab12cd');
+    });
+
+    it('can be changed on an existing vehicle', function () {
+        signedInAdmin();
+        $vehicle = fleetVehicle('ZZZ Recolor Me');
+
+        $this->putJson("/api/admin/vehicles/{$vehicle->id}", [
+            'model' => $vehicle->model, 'condition' => $vehicle->condition, 'seats' => $vehicle->seats, 'pax' => $vehicle->pax,
+            'color' => '#112233',
+        ])->assertOk()->assertJsonPath('data.color', '#112233');
+
+        expect($vehicle->fresh()->color)->toBe('#112233');
+    });
+
+    it('rejects a value that is not a hex color', function () {
+        signedInAdmin();
+
+        $this->postJson('/api/admin/vehicles', [
+            'model' => 'ZZZ Bad Color', 'condition' => 'Good', 'seats' => 4, 'pax' => 4, 'color' => 'blue',
+        ])->assertUnprocessable()->assertJsonValidationErrors('color');
+        expect(Vehicle::where('model', 'ZZZ Bad Color')->exists())->toBeFalse();
+    });
+});
+
 describe('updating a vehicle', function () {
     it('saves changes and answers with the updated card', function () {
         signedInAdmin();

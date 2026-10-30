@@ -418,6 +418,59 @@ describe('the deposit (Deposit tab)', function () {
             ->assertJsonPath('arrears_loans', []);
     });
 
+    it('deducts "Others" hire expenses and vehicle maintenance costs from the deposit, but never from salary', function () {
+        signedInForDrivers();
+        $driver = testDriver();
+        $vehicle = \App\Models\Vehicle::create(['model' => 'ZZZ Van', 'condition' => 'Good', 'seats' => 4, 'pax' => 4]);
+        Hire::create([
+            'tour_type' => 'drop_pickup', 'hire_full_value' => 1000, 'our_hire_value' => 100,
+            'payment_type' => 'cash', 'start_time' => '2026-09-10 10:00:00', 'driver_id' => $driver->id,
+        ]);
+        $this->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        HireExpense::create(['driver_id' => $driver->id, 'category' => 'others', 'amount' => 150]);
+        \App\Models\VehicleMaintenanceRecord::create([
+            'vehicle_id' => $vehicle->id, 'driver_id' => $driver->id, 'type' => 'repair', 'cost' => 300, 'bill_path' => 'zzz-1.jpg',
+        ]);
+        \App\Models\VehicleMaintenanceRecord::create([
+            'vehicle_id' => $vehicle->id, 'driver_id' => $driver->id, 'type' => 'revenue_license', 'cost' => 50, 'bill_path' => 'zzz-2.jpg',
+        ]);
+
+        $response = $this->getJson("/api/admin/drivers/{$driver->id}/deposit?year=2026&month=9")->assertOk();
+
+        // 1,000 hire value − 500 (150 others + 300 repair + 50 revenue license).
+        $response->assertJsonPath('deposit.deposit_amount', 500)
+            ->assertJsonPath('deposit.balance', 500);
+
+        $salary = $this->getJson("/api/admin/drivers/{$driver->id}/summary?year=2026&month=9")->assertOk();
+        // Salary stays on the un-deducted 100 our-hire-value — 20% of it, Rs. 20.
+        $salary->assertJsonPath('summary.salary_payable', 20);
+    });
+
+    it('leaves another driver\'s or another month\'s maintenance costs out of this deposit', function () {
+        signedInForDrivers();
+        $driver = testDriver('ZZZ Nimal');
+        $someoneElse = testDriver('ZZZ Kamal', ['email' => 'zzz.kamal@example.test']);
+        $vehicle = \App\Models\Vehicle::create(['model' => 'ZZZ Van', 'condition' => 'Good', 'seats' => 4, 'pax' => 4]);
+        Hire::create([
+            'tour_type' => 'drop_pickup', 'hire_full_value' => 1000, 'our_hire_value' => 100,
+            'payment_type' => 'cash', 'start_time' => '2026-09-10 10:00:00', 'driver_id' => $driver->id,
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        \App\Models\VehicleMaintenanceRecord::create([
+            'vehicle_id' => $vehicle->id, 'driver_id' => $someoneElse->id, 'type' => 'repair', 'cost' => 999, 'bill_path' => 'zzz-3.jpg',
+        ]);
+        $this->travelTo(Carbon::parse('2026-08-16 12:00:00'));
+        \App\Models\VehicleMaintenanceRecord::create([
+            'vehicle_id' => $vehicle->id, 'driver_id' => $driver->id, 'type' => 'repair', 'cost' => 999, 'bill_path' => 'zzz-4.jpg',
+        ]);
+        $this->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+
+        $response = $this->getJson("/api/admin/drivers/{$driver->id}/deposit?year=2026&month=9")->assertOk();
+
+        $response->assertJsonPath('deposit.deposit_amount', 1000);
+    });
+
     it('reduces the balance by what has already been transferred', function () {
         signedInForDrivers();
         $driver = testDriver();

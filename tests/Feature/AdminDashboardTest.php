@@ -103,6 +103,27 @@ describe('Vehicle Cards', function () {
         $response->assertSeeInOrder(['ZZZ Axio', 'Rs. 4,000.00', 'Rs. 3,000.00']);
     });
 
+    it('colors each card with the vehicle\'s own card color', function () {
+        dashboardAdmin();
+        $prius = dashboardVehicle(['model' => 'ZZZ Prius', 'color' => '#ab12cd']);
+
+        $response = $this->get('/admin');
+
+        $response->assertSee('border-left: 4px solid #ab12cd', false);
+    });
+
+    it('falls back to a default color when none is set, so every card still differs', function () {
+        dashboardAdmin();
+        $prius = dashboardVehicle(['model' => 'ZZZ Prius']);
+        $axio = dashboardVehicle(['model' => 'ZZZ Axio']);
+
+        $response = $this->get('/admin');
+
+        expect($prius->display_color)->not->toBe($axio->display_color);
+        $response->assertSee('border-left: 4px solid '.$prius->display_color, false);
+        $response->assertSee('border-left: 4px solid '.$axio->display_color, false);
+    });
+
     it('does not mix one vehicle\'s hires into another\'s card', function () {
         dashboardAdmin();
         $prius = dashboardVehicle(['model' => 'ZZZ Prius']);

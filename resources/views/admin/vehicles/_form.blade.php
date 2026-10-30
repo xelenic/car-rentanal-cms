@@ -49,6 +49,19 @@
         @endif
     </div>
 
+    <div class="col-md-6">
+        <label for="{{ $idPrefix }}-color" class="form-label">Card Color</label>
+        @php $colorValue = $isActive ? old('color') : ($vehicle?->display_color ?? \App\Models\Vehicle::DEFAULT_COLORS[0]); @endphp
+        <div class="d-flex align-items-center gap-2">
+            <input id="{{ $idPrefix }}-color" type="color" name="color" value="{{ $colorValue }}"
+                class="form-control form-control-color @if ($formErrors->has('color')) is-invalid @endif" title="Pick this vehicle's card color">
+            <span class="text-muted" style="font-size: .8rem;">Shown on this vehicle's Dashboard card.</span>
+        </div>
+        @if ($formErrors->has('color'))
+            <div class="invalid-feedback d-block">{{ $formErrors->first('color') }}</div>
+        @endif
+    </div>
+
     <div class="col-12">
         <label for="{{ $idPrefix }}-description" class="form-label">Description</label>
         <textarea id="{{ $idPrefix }}-description" name="description" class="form-control @if ($formErrors->has('description')) is-invalid @endif" rows="3" placeholder="Additional details about this vehicle...">{{ $isActive ? old('description') : $vehicle?->description }}</textarea>

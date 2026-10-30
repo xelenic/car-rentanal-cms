@@ -92,7 +92,7 @@
                         <tr>
                             <td>
                                 <div class="d-flex align-items-center gap-2">
-                                    <div class="stat-icon" style="width: 28px; height: 28px; font-size: .85rem; background: #eef2ff; color: #4f46e5;">
+                                    <div class="stat-icon" style="width: 28px; height: 28px; font-size: .85rem; background: {{ $vehicle->display_color }}1a; color: {{ $vehicle->display_color }};">
                                         <i class="bi bi-car-front"></i>
                                     </div>
                                     <span class="fw-semibold" style="font-size: .8rem;">{{ $vehicle->model }}</span>
