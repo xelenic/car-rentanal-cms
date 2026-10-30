@@ -2,6 +2,11 @@ import 'hire_map_point.dart';
 
 class Hire {
   final int id;
+
+  /// The customer who booked this hire — null for an older hire that
+  /// predates one being linked, or one entered with no customer on record.
+  final String? customerName;
+  final String? customerPhone;
   final String tourType;
   final String tourTypeLabel;
   final String? fromLocation;
@@ -48,6 +53,8 @@ class Hire {
 
   Hire({
     required this.id,
+    this.customerName,
+    this.customerPhone,
     required this.tourType,
     required this.tourTypeLabel,
     this.fromLocation,
@@ -84,6 +91,8 @@ class Hire {
 
     return Hire(
       id: json['id'] as int,
+      customerName: json['customer_name'] as String?,
+      customerPhone: json['customer_phone'] as String?,
       tourType: json['tour_type'] as String,
       tourTypeLabel: json['tour_type_label'] as String,
       fromLocation: json['from_location'] as String?,
@@ -143,6 +152,8 @@ class Hire {
   }) {
     return Hire(
       id: id,
+      customerName: customerName,
+      customerPhone: customerPhone,
       tourType: tourType,
       tourTypeLabel: tourTypeLabel,
       fromLocation: fromLocation,

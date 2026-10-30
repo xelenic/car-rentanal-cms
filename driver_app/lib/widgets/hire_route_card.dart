@@ -27,12 +27,17 @@ class HireRouteCard extends StatelessWidget {
       return hire.cancelledAt != null ? 'Cancelled ${format.format(hire.cancelledAt!.toLocal())}' : 'Cancelled';
     }
     if (hire.isCompleted) {
-      final when = hire.trackingStoppedAt ?? hire.startTime;
-      return when != null ? 'Completed ${format.format(when.toLocal())}' : null;
+      // tracking_stopped_at is a real instant (.toLocal() is right); the
+      // start_time fallback is a clock time the admin typed, so it isn't.
+      final stoppedAt = hire.trackingStoppedAt;
+      if (stoppedAt != null) return 'Completed ${format.format(stoppedAt.toLocal())}';
+      final start = hire.startTime;
+      return start != null ? 'Completed ${format.format(start)}' : null;
     }
     if (hire.startTime == null) return null;
 
-    return 'Scheduled ${format.format(hire.startTime!.toLocal())}';
+    // A clock time the admin typed, not a real instant — no .toLocal().
+    return 'Scheduled ${format.format(hire.startTime!)}';
   }
 
   @override

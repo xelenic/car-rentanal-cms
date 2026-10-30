@@ -122,6 +122,36 @@ void main() {
     });
   });
 
+  group('a schedule parsed from the real API response', () {
+    // start_time is a clock time the admin typed, not a real instant — the
+    // backend stores it as typed and labels it UTC whatever the zone
+    // actually is (see Hire._parseClockTime's note in the admin app).
+    // Hire.fromJson doesn't convert it, so an explicit "+00:00" offset here
+    // always parses to an isUtc DateTime holding exactly what was typed, on
+    // any host — unlike the DateTime(...) literals the tests above build by
+    // hand (host-local, so a stray .toLocal() on them is a silent no-op).
+    // This is what actually caught the reported bug: a hire the admin
+    // scheduled for 3:03 PM showed as 9:33 PM on the phone.
+    Hire hireFromApi({required String startTime, String status = 'pending'}) => Hire.fromJson({
+          'id': 7,
+          'tour_type': 'drop_pickup',
+          'tour_type_label': 'Drop and Pickup',
+          'from_location': 'Colombo Fort',
+          'to_location': 'Ella',
+          'hire_full_value': 100,
+          'payment_type': 'cash',
+          'payment_type_label': 'Cash',
+          'status': status,
+          'start_time': startTime,
+        });
+
+    testWidgets('shows the schedule exactly as the admin entered it, not shifted by the phone\'s zone', (tester) async {
+      await tester.pumpWidget(_app(HireRouteCard(hire: hireFromApi(startTime: '2026-09-27T15:03:00+00:00'))));
+
+      expect(find.text('Scheduled Sep 27, 3:03 PM'), findsOneWidget);
+    });
+  });
+
   group('the payment badge', () {
     testWidgets('a cash hire never shows one, even with a balance somehow set', (tester) async {
       await tester.pumpWidget(_app(HireRouteCard(hire: _hire(paymentType: 'cash', paymentStatus: 'unpaid', balanceRemaining: 100))));

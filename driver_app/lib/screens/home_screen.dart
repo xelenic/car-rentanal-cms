@@ -561,9 +561,9 @@ class _PendingHireTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheduled = hire.startTime != null
-        ? DateFormat('MMM d, h:mm a').format(hire.startTime!.toLocal())
-        : null;
+    // start_time is a clock time the admin typed, not a real instant — no
+    // .toLocal() (see the same note on HireDetailScreen's Start/End rows).
+    final scheduled = hire.startTime != null ? DateFormat('MMM d, h:mm a').format(hire.startTime!) : null;
 
     return Material(
       color: Colors.transparent,

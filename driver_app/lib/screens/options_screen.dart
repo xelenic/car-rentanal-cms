@@ -7,6 +7,7 @@ import 'expense_entry_screen.dart';
 import 'placeholder_screen.dart';
 import 'salary_advance_screen.dart';
 import 'salary_screen.dart';
+import 'vehicle_maintenance_entry_screen.dart';
 import 'vehicle_repair_screen.dart';
 
 class _OptionItem {
@@ -35,6 +36,7 @@ final _options = <_OptionItem>[
   _OptionItem('Loan Arrears', Icons.account_balance_outlined, Color(0xFF7E57C2)),
   _OptionItem('Payslips & Current Collection', Icons.receipt_long_outlined, Color(0xFF26A69A)),
   _OptionItem('Vehicle Repair', Icons.car_repair_outlined, Color(0xFFEF5350)),
+  _OptionItem('Revenue License', Icons.card_membership_outlined, Color(0xFF66BB6A)),
   _OptionItem('Appearance', Icons.palette_outlined, Color(0xFF8D6E63)),
 ];
 
@@ -75,6 +77,13 @@ class OptionsScreen extends StatelessWidget {
                     }
                     if (option.label == 'Vehicle Repair') {
                       return const VehicleRepairScreen();
+                    }
+                    if (option.label == 'Revenue License') {
+                      return VehicleMaintenanceEntryScreen(
+                        type: 'revenue_license',
+                        title: 'Revenue License',
+                        icon: option.icon,
+                      );
                     }
                     if (option.label == 'Appearance') {
                       return const AppearanceScreen();

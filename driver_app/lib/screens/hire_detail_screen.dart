@@ -43,7 +43,9 @@ List<TrackPoint> _decimateTrackPoints(List<TrackPoint> points, int max) {
 /// scheduled date hasn't arrived — used by both the tracking error banner
 /// and the bottom complete bar so the wording matches everywhere.
 String _scheduledMessage(Hire hire) {
-  final formatted = DateFormat('MMM d, y  h:mm a').format(hire.startTime!.toLocal());
+  // start_time is a clock time the admin typed, not a real instant — see the
+  // note on _InfoRow(label: 'Start', ...) below for why there's no .toLocal().
+  final formatted = DateFormat('MMM d, y  h:mm a').format(hire.startTime!);
   return 'Scheduled for $formatted — can\'t start until then.';
 }
 
@@ -60,6 +62,10 @@ class HireDetailScreen extends StatefulWidget {
   /// Opens a Google Maps link. Only tests replace it (the default hands the
   /// link to the Maps app or the browser).
   final Future<bool> Function(Uri url)? launchMapsUrl;
+
+  /// Opens the phone's dialer for Call Customer. Only tests replace it (the
+  /// default hands a tel: link to the dialer).
+  final Future<bool> Function(Uri url)? launchPhoneUrl;
 
   /// Loads the path recorded so far for a hire that has been started. Only
   /// tests replace it (the default asks the server).
@@ -83,6 +89,7 @@ class HireDetailScreen extends StatefulWidget {
     this.pickupStore,
     this.positionStream,
     this.launchMapsUrl,
+    this.launchPhoneUrl,
     this.loadTracking,
     this.planRoute,
     this.cancelHire,
@@ -535,6 +542,25 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
     }
   }
 
+  /// Opens the phone's dialer with the customer's number pre-filled — a tap
+  /// still has to be placed (the driver confirms), same as tapping the
+  /// number anywhere else on the phone.
+  Future<void> _callCustomer(String phone) async {
+    final url = Uri(scheme: 'tel', path: phone);
+
+    try {
+      final launched = widget.launchPhoneUrl != null
+          ? await widget.launchPhoneUrl!(url)
+          : await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open the dialer.')));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open the dialer: $e')));
+    }
+  }
+
   /// Starts the hire: the customer is on board. (There is no Stop any more — a
   /// hire that can't go on is cancelled, and one that is finished is completed.)
   Future<void> _startTracking() async {
@@ -840,7 +866,33 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
             onOpen: _openShortcut,
             onExpense: _openExpense,
           ),
-          const SizedBox(height: 12),
+          if (hire.customerName != null || hire.customerPhone != null) ...[
+            _SectionCard(
+              title: 'Customer',
+              children: [
+                _InfoRow(label: 'Name', value: hire.customerName ?? '—'),
+                if (hire.customerPhone != null) _InfoRow(label: 'Phone', value: hire.customerPhone!),
+                if (hire.customerPhone != null) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      key: const Key('call-customer'),
+                      onPressed: () => _callCustomer(hire.customerPhone!),
+                      icon: const Icon(Icons.call_rounded, size: 18),
+                      label: const Text('Call Customer'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.neonDeep,
+                        side: BorderSide(color: AppColors.neon),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
           _SectionCard(
             title: 'Tour',
             children: [
@@ -856,10 +908,13 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
                   label: hire.tourType == 'multi_day' ? 'Locations' : 'Stay Locations',
                   value: hire.stayLocations.join(', '),
                 ),
-              if (hire.startTime != null)
-                _InfoRow(label: 'Start', value: dateFormat.format(hire.startTime!.toLocal())),
-              if (hire.endTime != null)
-                _InfoRow(label: 'End', value: dateFormat.format(hire.endTime!.toLocal())),
+              // start_time/end_time are clock times the admin typed (e.g.
+              // "3:03 PM"), not real instants — the backend stores them as
+              // typed and labels them UTC whatever the zone actually is.
+              // No .toLocal() here: that would shift the displayed time by
+              // the phone's UTC offset instead of showing what was entered.
+              if (hire.startTime != null) _InfoRow(label: 'Start', value: dateFormat.format(hire.startTime!)),
+              if (hire.endTime != null) _InfoRow(label: 'End', value: dateFormat.format(hire.endTime!)),
               // One button per place — pickup and end (and any stops) are
               // separate; the one the driver is heading for now is filled in.
               if (mapTargets.isNotEmpty) ...[

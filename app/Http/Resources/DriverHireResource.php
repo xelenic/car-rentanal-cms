@@ -12,6 +12,8 @@ class DriverHireResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'customer_name' => $this->customer?->name,
+            'customer_phone' => $this->customer?->phone,
             'tour_type' => $this->tour_type,
             'tour_type_label' => Hire::TOUR_TYPES[$this->tour_type] ?? $this->tour_type,
             'from_location' => $this->fromLocation?->location?->name,

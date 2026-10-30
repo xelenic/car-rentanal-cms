@@ -55,9 +55,9 @@ class ProfitCalculator
     }
 
     /**
-     * Vehicle service/repair/parts costs actually logged in the given month
-     * (see VehicleMaintenanceController) — a real cash cost, not a category
-     * that reduces driver salary.
+     * Vehicle service/repair/parts/revenue-license costs actually logged in
+     * the given month (see VehicleMaintenanceController) — a real cash
+     * cost, not a category that reduces driver salary.
      */
     public static function repairCostTotalFor(int $year, int $month): float
     {

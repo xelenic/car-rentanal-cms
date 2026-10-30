@@ -525,65 +525,6 @@ class _MyExpensesScreenState extends State<MyExpensesScreen> {
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 96),
           children: [
             _ProfitCard(summary: summary, onTap: _showProfitBreakdown),
-            const SizedBox(height: 10),
-            // The four that add up to My Profit, two to a row and each row the same height.
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: _StatCard(
-                      key: const Key('card-profit-before'),
-                      label: 'Profit From Hires',
-                      value: formatRsExact(summary.profitBeforeExpenses),
-                      caption: "Dashboard's Total Profit",
-                      icon: Icons.trending_up_rounded,
-                      color: const Color(0xFF2A78D6),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _StatCard(
-                      key: const Key('card-other-income'),
-                      label: 'Other Income',
-                      value: formatRsExact(summary.otherIncomeTotal),
-                      caption: countOf(summary.otherIncomeCount, 'entry', 'entries'),
-                      icon: Icons.payments_outlined,
-                      color: AppColors.success,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: _StatCard(
-                      key: const Key('card-other-revenue'),
-                      label: 'Other Company Revenue',
-                      value: formatRsExact(summary.otherCompanyRevenueTotal),
-                      caption: countOf(summary.otherCompanyRevenueCount, 'entry', 'entries'),
-                      icon: Icons.apartment_rounded,
-                      color: const Color(0xFF0D9488),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _StatCard(
-                      key: const Key('card-total'),
-                      label: 'Total My Expenses',
-                      value: formatRsExact(summary.total),
-                      caption: countOf(summary.recordCount, 'record'),
-                      icon: Icons.wallet_rounded,
-                      color: const Color(0xFFC95A26),
-                    ),
-                  ),
-                ],
-              ),
-            ),
             const SizedBox(height: 14),
             TextField(
               key: const Key('expense-search'),
@@ -815,6 +756,54 @@ class _ProfitCard extends StatelessWidget {
                 'Hires + other income + other company revenue − my expenses · tap for the working',
                 style: TextStyle(fontSize: 11.5, color: Colors.white.withValues(alpha: 0.75)),
               ),
+              const SizedBox(height: 14),
+              Container(height: 1, color: Colors.white.withValues(alpha: 0.18)),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _MiniStat(
+                      key: const Key('card-profit-before'),
+                      label: 'Profit From Hires',
+                      value: formatRsExact(summary.profitBeforeExpenses),
+                      caption: "Dashboard's Total Profit",
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _MiniStat(
+                      key: const Key('card-other-income'),
+                      label: 'Other Income',
+                      value: formatRsExact(summary.otherIncomeTotal),
+                      caption: countOf(summary.otherIncomeCount, 'entry', 'entries'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _MiniStat(
+                      key: const Key('card-other-revenue'),
+                      label: 'Other Company Revenue',
+                      value: formatRsExact(summary.otherCompanyRevenueTotal),
+                      caption: countOf(summary.otherCompanyRevenueCount, 'entry', 'entries'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _MiniStat(
+                      key: const Key('card-total'),
+                      label: 'Total My Expenses',
+                      value: formatRsExact(summary.total),
+                      caption: countOf(summary.recordCount, 'record'),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -823,62 +812,38 @@ class _ProfitCard extends StatelessWidget {
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    super.key,
-    required this.label,
-    required this.value,
-    required this.caption,
-    required this.icon,
-    required this.color,
-  });
+/// One of the four figures that add up to My Profit, shown inside its own
+/// card in white-on-blue instead of as its own separate card.
+class _MiniStat extends StatelessWidget {
+  const _MiniStat({super.key, required this.label, required this.value, required this.caption});
 
   final String label;
   final String value;
   final String caption;
-  final IconData icon;
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, size: 16, color: color),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    label,
-                    maxLines: 2,
-                    style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary, height: 1.2),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(value, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-            ),
-            const SizedBox(height: 2),
-            Text(caption, maxLines: 2, style: TextStyle(fontSize: 10.5, color: AppColors.textMuted, height: 1.2)),
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          maxLines: 2,
+          style: TextStyle(fontSize: 10.5, color: Colors.white.withValues(alpha: 0.75), height: 1.2),
         ),
-      ),
+        const SizedBox(height: 3),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(value, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: Colors.white)),
+        ),
+        const SizedBox(height: 1),
+        Text(
+          caption,
+          maxLines: 2,
+          style: TextStyle(fontSize: 9.5, color: Colors.white.withValues(alpha: 0.65), height: 1.2),
+        ),
+      ],
     );
   }
 }

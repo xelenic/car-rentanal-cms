@@ -47,7 +47,12 @@ HireTab hireTabOf(Hire hire, {DateTime? now}) {
   if (hire.isCancelled) return HireTab.cancelled;
   if (hire.isCompleted) return HireTab.completed;
 
-  final start = hire.startTime?.toLocal();
+  // start_time is a clock time the admin typed (e.g. "3:03 PM"), not a real
+  // instant — the backend stores it as typed and labels it UTC whatever the
+  // zone (see Hire._parseClockTime's own note in the admin app). Converting
+  // it with .toLocal() would shift it by the phone's UTC offset and can push
+  // a hire into the wrong day here.
+  final start = hire.startTime;
   final today = _dayOf(now ?? DateTime.now());
 
   if (start != null && _dayOf(start).isAfter(today)) return HireTab.scheduled;

@@ -7,11 +7,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A vehicle service / repair / parts record logged by a driver. Deliberately
- * separate from HireExpense: it's about the vehicle, not a specific hire,
- * and must never be counted as a deductible expense or affect the driver's
- * salary calculation (see DriverSalaryCalculator, which never touches this
- * table).
+ * A vehicle service / repair / parts / revenue license record logged by a
+ * driver. Deliberately separate from HireExpense: it's about the vehicle,
+ * not a specific hire, and must never be counted as a deductible expense or
+ * affect the driver's salary calculation (see DriverSalaryCalculator, which
+ * never touches this table).
  */
 #[Fillable(['vehicle_id', 'driver_id', 'type', 'mileage', 'cost', 'description', 'bill_path'])]
 class VehicleMaintenanceRecord extends Model
@@ -20,6 +20,7 @@ class VehicleMaintenanceRecord extends Model
         'service' => 'Vehicle Service',
         'repair' => 'Vehicle Repair',
         'parts' => 'Vehicle Parts',
+        'revenue_license' => 'Revenue License',
     ];
 
     protected function casts(): array

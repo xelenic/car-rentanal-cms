@@ -128,6 +128,47 @@ void main() {
     });
   });
 
+  group('a start_time parsed from the real API response', () {
+    // The backend stores start_time as the admin typed it (a clock time, not
+    // a real instant) and labels it UTC whatever the zone actually is — see
+    // Hire._parseClockTime's note in the admin app. Hire.fromJson doesn't
+    // convert it, so parsing "...+00:00" always yields an isUtc DateTime
+    // whose raw hour/day are exactly what was typed, on any host — unlike
+    // the DateTime(...) literals the other tests in this file build by hand
+    // (host-local, so a stray .toLocal() on them is a silent no-op and
+    // can't catch this). This regression-tests the real bug: converting
+    // with .toLocal() could push the hire into the wrong day/tab.
+    Hire hireFromApi(String isoStartTime) => Hire.fromJson({
+          'id': _nextId++,
+          'tour_type': 'drop_pickup',
+          'tour_type_label': 'Drop and Pickup',
+          'hire_full_value': 100,
+          'payment_type': 'cash',
+          'payment_type_label': 'Cash',
+          'status': 'pending',
+          'start_time': isoStartTime,
+        });
+
+    test('stays on today\'s date exactly as sent, not shifted to another day', () {
+      // "Now" is Sep 25, 2026, 10:00 — a hire sent for 23:30 the same day
+      // must stay in Today, not roll into tomorrow under a positive UTC
+      // offset (e.g. +05:30 would push 23:30 into Sep 26).
+      final hire = hireFromApi('2026-09-25T23:30:00+00:00');
+
+      expect(hire.startTime!.day, 25);
+      expect(_tab(hire), HireTab.today);
+    });
+
+    test('a hire sent for early tomorrow stays Scheduled, not pulled back into today', () {
+      // A negative UTC offset applied by mistake would pull 00:30 back to
+      // the previous day.
+      final hire = hireFromApi('2026-09-26T00:30:00+00:00');
+
+      expect(hire.startTime!.day, 26);
+      expect(_tab(hire), HireTab.scheduled);
+    });
+  });
+
   test('the tabs are in the order the driver asked for, each with a name and an empty message', () {
     expect(HireTab.values.map((t) => t.label), ['Today', 'Scheduled', 'Completed', 'Cancelled']);
     for (final tab in HireTab.values) {
