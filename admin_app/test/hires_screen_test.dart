@@ -37,6 +37,19 @@ void main() {
     expect(find.text('ZZZ Second Customer'), findsOneWidget);
   });
 
+  testWidgets('every card shows its schedule, even one with no start time set', (tester) async {
+    await _show(
+      tester,
+      FakeServer(allHires: [
+        hireJson(id: 1, customer: 'ZZZ Scheduled Hire', startTime: '2026-09-27T15:03:00'),
+        hireJson(id: 2, customer: 'ZZZ Unscheduled Hire'),
+      ]),
+    );
+
+    expect(find.text('Sep 27, 2026 · 3:03 PM'), findsOneWidget);
+    expect(find.text('Not scheduled'), findsOneWidget);
+  });
+
   testWidgets('shows this month\'s profit summary on its own Overview tab', (tester) async {
     await _show(
       tester,

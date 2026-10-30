@@ -66,9 +66,15 @@ class HireCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 _line(Icons.place_outlined, route),
               ],
-              if (hire.startTime != null) ...[
+              const SizedBox(height: 4),
+              _line(
+                Icons.schedule_rounded,
+                hire.startTime != null ? _dateFormat.format(hire.startTime!) : 'Not scheduled',
+                color: hire.startTime == null ? AppColors.textMuted : null,
+              ),
+              if (hire.createdAt != null) ...[
                 const SizedBox(height: 4),
-                _line(Icons.schedule_rounded, _dateFormat.format(hire.startTime!)),
+                _line(Icons.add_circle_outline_rounded, 'Created ${_dateFormat.format(hire.createdAt!)}'),
               ],
               if (hire.driver != null) ...[
                 const SizedBox(height: 4),

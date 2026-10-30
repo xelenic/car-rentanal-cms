@@ -12,6 +12,13 @@ Future<void> _openExpenses(WidgetTester tester, FakeServer server) async {
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 
+  // A test that calls this twice (different permissions, say) must not find
+  // the Expenses page a previous call pushed still sitting on the Navigator
+  // — pumpWidget reuses a structurally-identical tree rather than rebuilding
+  // it, and a pushed route survives that. Tear down fully first.
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump();
+
   await server.install();
   final driver = Driver.fromJson(server.drivers.first);
   await tester.pumpWidget(MaterialApp(
@@ -19,7 +26,7 @@ Future<void> _openExpenses(WidgetTester tester, FakeServer server) async {
   ));
   await tester.pumpAndSettle();
 
-  await tester.tap(find.byKey(const Key('tab-expenses')));
+  await tester.tap(find.byKey(const Key('section-expenses')));
   await tester.pumpAndSettle();
 }
 

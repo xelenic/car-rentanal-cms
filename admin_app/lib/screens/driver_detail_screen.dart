@@ -13,10 +13,20 @@ import '../widgets/hire_history_tab.dart';
 import '../widgets/state_views.dart';
 import 'driver_form_screen.dart';
 
-/// One driver's details, with Edit/Delete as the signed-in user's
-/// permissions allow — an Overview tab (one month's earnings, current month
-/// first) and, on its own tab, their hires for that same kind of month at a
-/// time.
+/// One grid item on a driver's page — tapping it opens that section as its
+/// own standalone page, rather than switching an in-place tab.
+class _DriverSection {
+  const _DriverSection({required this.key, required this.label, required this.icon, required this.color});
+
+  final String key;
+  final String label;
+  final IconData icon;
+  final Color color;
+}
+
+/// One driver's details — a grid menu of sections (Overview, Details, Hires,
+/// Expenses, Deposit), each its own standalone page one tap away, the same
+/// shortcut-grid pattern HomeScreen uses for its own top-level sections.
 class DriverDetailScreen extends StatefulWidget {
   const DriverDetailScreen({super.key, required this.driver, this.user});
 
@@ -27,18 +37,21 @@ class DriverDetailScreen extends StatefulWidget {
   State<DriverDetailScreen> createState() => _DriverDetailScreenState();
 }
 
-class _DriverDetailScreenState extends State<DriverDetailScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 5, vsync: this);
+class _DriverDetailScreenState extends State<DriverDetailScreen> {
   late Driver _driver = widget.driver;
 
   bool get _canEdit => widget.user?.canUpdateDrivers ?? false;
   bool get _canDelete => widget.user?.canDeleteDrivers ?? false;
 
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
-  }
+  /// Built fresh on every build (not cached) so its colors always reflect
+  /// whichever theme is active right now — see AppColors in theme/app_theme.dart.
+  List<_DriverSection> get _sections => [
+        _DriverSection(key: 'overview', label: 'Overview', icon: Icons.dashboard_rounded, color: AppColors.info),
+        _DriverSection(key: 'details', label: 'Details', icon: Icons.contact_page_outlined, color: const Color(0xFF7C3AED)),
+        _DriverSection(key: 'hires', label: 'Hires', icon: Icons.event_note_rounded, color: AppColors.primary),
+        _DriverSection(key: 'expenses', label: 'Expenses', icon: Icons.account_balance_wallet_rounded, color: const Color(0xFFE11D48)),
+        _DriverSection(key: 'deposit', label: 'Deposit', icon: Icons.savings_rounded, color: const Color(0xFF0D9488)),
+      ];
 
   Future<void> _edit() async {
     final updated = await Navigator.of(context).push<Driver>(
@@ -106,42 +119,43 @@ class _DriverDetailScreenState extends State<DriverDetailScreen> with SingleTick
             ),
         ],
       ),
-      body: Column(
-        children: [
-          Container(
-            color: AppColors.surface,
-            child: TabBar(
-              controller: _tabs,
-              labelColor: AppColors.primary,
-              unselectedLabelColor: AppColors.textSecondary,
-              indicatorColor: AppColors.primary,
-              dividerColor: AppColors.border,
-              labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
-              labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-              tabs: const [
-                Tab(key: Key('tab-overview'), text: 'Overview'),
-                Tab(key: Key('tab-details'), text: 'Details'),
-                Tab(key: Key('tab-hires'), text: 'Hires'),
-                Tab(key: Key('tab-expenses'), text: 'Expenses'),
-                Tab(key: Key('tab-deposit'), text: 'Deposit'),
-              ],
-            ),
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabs,
-              children: [
-                _DriverOverviewTab(driverId: _driver.id),
-                _buildDetails(),
-                HireHistoryTab(driverId: _driver.id, user: widget.user),
-                DriverExpensesTab(driverId: _driver.id, user: widget.user),
-                DriverDepositTab(driverId: _driver.id),
-              ],
-            ),
-          ),
-        ],
+      body: GridView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _sections.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 14,
+          crossAxisSpacing: 14,
+          childAspectRatio: 1.05,
+        ),
+        itemBuilder: (context, index) {
+          final section = _sections[index];
+          return _SectionCard(
+            key: Key('section-${section.key}'),
+            section: section,
+            onTap: () => _open(section),
+          );
+        },
       ),
     );
+  }
+
+  void _open(_DriverSection section) {
+    final Widget page = switch (section.key) {
+      'overview' => _DriverOverviewTab(driverId: _driver.id),
+      'details' => _buildDetails(),
+      'hires' => HireHistoryTab(driverId: _driver.id, user: widget.user),
+      'expenses' => DriverExpensesTab(driverId: _driver.id, user: widget.user),
+      'deposit' => DriverDepositTab(driverId: _driver.id),
+      _ => const SizedBox.shrink(),
+    };
+
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => Scaffold(
+        appBar: AppBar(title: Text('${section.label} · ${_driver.name}')),
+        body: page,
+      ),
+    ));
   }
 
   Widget _buildDetails() {
@@ -154,6 +168,57 @@ class _DriverDetailScreenState extends State<DriverDetailScreen> with SingleTick
           _Field(icon: Icons.phone_forwarded_outlined, label: 'Additional phone', value: _driver.additionalPhoneNumber!),
         _Field(icon: Icons.mail_outline_rounded, label: 'Email', value: _driver.email),
       ],
+    );
+  }
+}
+
+/// One grid tile on a driver's page — same look as HomeScreen's own
+/// shortcut cards, so a driver's page reads as "one level deeper" in the
+/// same navigation style, not a different pattern.
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({super.key, required this.section, required this.onTap});
+
+  final _DriverSection section;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: section.color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                alignment: Alignment.center,
+                child: Icon(section.icon, color: section.color, size: 26),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                section.label,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 15.5),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

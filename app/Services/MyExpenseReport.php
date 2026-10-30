@@ -29,6 +29,7 @@ class MyExpenseReport
      *     total: float, record_count: int, by_category: Collection<string, float>,
      *     other_income_total: float, other_income_count: int,
      *     other_company_revenue_total: float, other_company_revenue_count: int,
+     *     other_company_revenue_full_amount_total: float, other_company_revenue_vehicle_amount_total: float,
      *     profit: array<string, mixed>, profit_before_expenses: float, my_profit: float
      * }
      */
@@ -51,6 +52,8 @@ class MyExpenseReport
         // amounts — is what counts as realized income here.
         $monthRevenue = OtherCompanyRevenue::query()->inMonth($year, $month);
         $otherCompanyRevenueTotal = round((float) (clone $monthRevenue)->sum('balance'), 2);
+        $otherCompanyRevenueFullAmountTotal = round((float) (clone $monthRevenue)->sum('full_amount'), 2);
+        $otherCompanyRevenueVehicleAmountTotal = round((float) (clone $monthRevenue)->sum('vehicle_amount'), 2);
 
         $profit = ProfitCalculator::breakdownFor($year, $month);
 
@@ -62,6 +65,8 @@ class MyExpenseReport
             'other_income_count' => (clone $monthIncome)->count(),
             'other_company_revenue_total' => $otherCompanyRevenueTotal,
             'other_company_revenue_count' => (clone $monthRevenue)->count(),
+            'other_company_revenue_full_amount_total' => $otherCompanyRevenueFullAmountTotal,
+            'other_company_revenue_vehicle_amount_total' => $otherCompanyRevenueVehicleAmountTotal,
             'profit' => $profit,
             'profit_before_expenses' => $profit['profit_total'],
             'my_profit' => round($profit['profit_total'] + $otherIncomeTotal + $otherCompanyRevenueTotal - $total, 2),
@@ -93,6 +98,8 @@ class MyExpenseReport
             'other_income_count' => $report['other_income_count'],
             'other_company_revenue_total' => $report['other_company_revenue_total'],
             'other_company_revenue_count' => $report['other_company_revenue_count'],
+            'other_company_revenue_full_amount_total' => $report['other_company_revenue_full_amount_total'],
+            'other_company_revenue_vehicle_amount_total' => $report['other_company_revenue_vehicle_amount_total'],
             'my_profit' => $report['my_profit'],
             'by_category' => $report['by_category']->map(fn (float $total, string $key) => [
                 'key' => $key,

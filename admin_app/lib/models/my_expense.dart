@@ -237,6 +237,8 @@ class ExpenseSummary {
     this.otherIncomeCount = 0,
     this.otherCompanyRevenueTotal = 0,
     this.otherCompanyRevenueCount = 0,
+    this.otherCompanyRevenueFullAmountTotal = 0,
+    this.otherCompanyRevenueVehicleAmountTotal = 0,
     this.myProfit = 0,
     this.byCategory = const [],
     this.breakdown = const ProfitBreakdown(),
@@ -259,6 +261,12 @@ class ExpenseSummary {
   final double otherCompanyRevenueTotal;
   final int otherCompanyRevenueCount;
 
+  /// The month's full/vehicle amounts across all revenue entries — for the
+  /// revenue screen's own summary card. Neither counts toward My Profit on
+  /// its own (only [otherCompanyRevenueTotal], the balance, does).
+  final double otherCompanyRevenueFullAmountTotal;
+  final double otherCompanyRevenueVehicleAmountTotal;
+
   /// [profitBeforeExpenses] + [otherIncomeTotal] − [total].
   final double myProfit;
   final List<CategoryTotal> byCategory;
@@ -276,6 +284,8 @@ class ExpenseSummary {
       otherIncomeCount: _int(json['other_income_count']),
       otherCompanyRevenueTotal: _number(json['other_company_revenue_total']),
       otherCompanyRevenueCount: _int(json['other_company_revenue_count']),
+      otherCompanyRevenueFullAmountTotal: _number(json['other_company_revenue_full_amount_total']),
+      otherCompanyRevenueVehicleAmountTotal: _number(json['other_company_revenue_vehicle_amount_total']),
       myProfit: _number(json['my_profit']),
       byCategory: (json['by_category'] as List<dynamic>? ?? [])
           .map((e) => CategoryTotal.fromJson(e as Map<String, dynamic>))

@@ -296,6 +296,8 @@ class FakeServer {
     final revenueInMonth = revenues.where((r) => _inMonth(r, 'revenue_date', year, month)).toList();
     final revenue =
         otherCompanyRevenueTotal + revenueInMonth.fold<double>(0, (sum, r) => sum + (r['balance'] as num));
+    final revenueFullAmount = revenueInMonth.fold<double>(0, (sum, r) => sum + (r['full_amount'] as num));
+    final revenueVehicleAmount = revenueInMonth.fold<double>(0, (sum, r) => sum + (r['vehicle_amount'] as num));
 
     final byCategory = <String, double>{};
     for (final e in inMonth) {
@@ -314,6 +316,8 @@ class FakeServer {
       'other_income_count': otherIncomeCount + incomeInMonth.length,
       'other_company_revenue_total': revenue,
       'other_company_revenue_count': otherCompanyRevenueCount + revenueInMonth.length,
+      'other_company_revenue_full_amount_total': revenueFullAmount,
+      'other_company_revenue_vehicle_amount_total': revenueVehicleAmount,
       'my_profit': profitBeforeExpenses + income + revenue - total,
       'by_category': [for (final e in sorted) {'key': e.key, 'name': _categoryName(e.key), 'total': e.value}],
       'breakdown': {

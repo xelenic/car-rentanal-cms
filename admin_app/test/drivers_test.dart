@@ -125,6 +125,8 @@ void main() {
   });
 
   group('a driver\'s page', () {
+    // Lands on the section grid — its own AppBar carries the name and the
+    // Edit/Delete menu, same as every section page one level under it.
     Future<void> openDriver(WidgetTester tester, FakeServer server, {bool canUpdateDrivers = false, bool canDeleteDrivers = false}) async {
       server
         ..canUpdateDrivers = canUpdateDrivers
@@ -132,16 +134,21 @@ void main() {
       await _show(tester, server);
       await tester.tap(find.byKey(const Key('driver-card-1')));
       await tester.pumpAndSettle();
-
-      // Overview is the default (leading) tab; these tests want Details.
-      await tester.tap(find.byKey(const Key('tab-details')));
-      await tester.pumpAndSettle();
     }
 
-    testWidgets('shows the driver\'s details', (tester) async {
+    testWidgets('shows the grid with the driver\'s name, and Details for their contact info', (tester) async {
       await openDriver(tester, _roster());
 
-      expect(find.text('ZZZ Test Zebra'), findsWidgets); // title + tile
+      expect(find.text('ZZZ Test Zebra'), findsOneWidget); // this page's own AppBar title
+      expect(find.byKey(const Key('section-overview')), findsOneWidget);
+      expect(find.byKey(const Key('section-details')), findsOneWidget);
+      expect(find.byKey(const Key('section-hires')), findsOneWidget);
+      expect(find.byKey(const Key('section-expenses')), findsOneWidget);
+      expect(find.byKey(const Key('section-deposit')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('section-details')));
+      await tester.pumpAndSettle();
+
       expect(find.text('0771111111'), findsOneWidget);
     });
 
@@ -184,14 +191,16 @@ void main() {
     });
   });
 
-  group('the Overview tab', () {
+  group('the Overview section', () {
     Future<void> openOverview(WidgetTester tester, FakeServer server) async {
       await _show(tester, server);
       await tester.tap(find.byKey(const Key('driver-card-1')));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('section-overview')));
+      await tester.pumpAndSettle();
     }
 
-    testWidgets('is the default tab, showing the month\'s salary and figures', (tester) async {
+    testWidgets('shows the month\'s salary and figures', (tester) async {
       final server = _roster()
         ..driverSummary = defaultDriverSummaryJson(
           year: _now.year,
@@ -212,11 +221,7 @@ void main() {
       expect(find.text('Full Value'), findsOneWidget);
       expect(find.text('Our Hire Value'), findsOneWidget);
       expect(find.text('Commission'), findsOneWidget);
-      // Scoped to the tab body: the Expenses *tab* label also reads "Expenses".
-      expect(
-        find.descendant(of: find.byType(TabBarView), matching: find.text('Expenses')),
-        findsOneWidget,
-      );
+      expect(find.text('Expenses'), findsOneWidget);
     });
 
     testWidgets('shows a payroll status pill once it is finalized or paid', (tester) async {
@@ -240,12 +245,12 @@ void main() {
     });
   });
 
-  group('the Hires tab', () {
+  group('the Hires section', () {
     Future<void> openHiresTab(WidgetTester tester, FakeServer server) async {
       await _show(tester, server);
       await tester.tap(find.byKey(const Key('driver-card-1')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('tab-hires')));
+      await tester.tap(find.byKey(const Key('section-hires')));
       await tester.pumpAndSettle();
     }
 

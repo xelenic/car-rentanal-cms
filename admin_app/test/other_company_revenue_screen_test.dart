@@ -1,5 +1,5 @@
 import 'package:admin_app/models/admin_user.dart';
-import 'package:admin_app/screens/my_expenses_screen.dart';
+import 'package:admin_app/screens/other_company_revenue_list_screen.dart';
 import 'package:admin_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,9 +22,8 @@ AdminUser _user({bool create = true, bool update = true, bool delete = true}) =>
       canDeleteMyExpenses: delete,
     );
 
-/// Two revenue entries this month (together 9,000 balance), one of each last month.
+/// Two revenue entries this month (together 9,000 balance), one last month.
 FakeServer _server() => FakeServer(
-      profitBeforeExpenses: 6400,
       revenues: [
         revenueJson(id: 1, hire: 'ZZZ Colombo to Kandy', bookingNumber: 'ZZZ-BK-001', vehicle: 'ZZZ Aqua', balance: 7000, date: dayOf(_thisMonth, 2)),
         revenueJson(id: 2, hire: 'ZZZ Galle Fort Tour', bookingNumber: 'ZZZ-BK-002', vehicle: 'ZZZ Hiace', balance: 2000, date: dayOf(_thisMonth, 5)),
@@ -38,26 +37,21 @@ Future<void> _show(WidgetTester tester, FakeServer server, {AdminUser? user}) as
   addTearDown(tester.view.reset);
 
   await server.install();
-  await tester.pumpWidget(MaterialApp(theme: buildAdminAppTheme(), home: MyExpensesScreen(user: user ?? _user())));
-  await tester.pumpAndSettle();
-}
-
-Future<void> _openRevenue(WidgetTester tester, FakeServer server, {AdminUser? user}) async {
-  await _show(tester, server, user: user);
-  await tester.tap(find.byKey(const Key('tab-revenue')));
+  await tester.pumpWidget(MaterialApp(
+    theme: buildAdminAppTheme(),
+    home: OtherCompanyRevenueListScreen(user: user ?? _user(), initialYear: _now.year, initialMonth: _now.month),
+  ));
   await tester.pumpAndSettle();
 }
 
 Iterable<Map<String, String>> _revenueQueries(FakeServer server) =>
     server.requestsTo('/api/admin/other-company-revenues').where((r) => r.method == 'GET').map((r) => r.url.queryParameters);
 
-Finder _inCard(String key, String text) => find.descendant(of: find.byKey(Key(key)), matching: find.text(text));
-
 void main() {
-  group('the Revenue tab', () {
+  group('the list', () {
     testWidgets('shows this month\'s revenue, newest first, leaving other months out', (tester) async {
       final server = _server();
-      await _openRevenue(tester, server);
+      await _show(tester, server);
 
       expect(_revenueQueries(server).first, {'year': '${_now.year}', 'month': '${_now.month}', 'page': '1'});
       expect(find.text('ZZZ Galle Fort Tour'), findsOneWidget);
@@ -70,7 +64,7 @@ void main() {
     });
 
     testWidgets('shows the booking number, vehicle and balance for each entry', (tester) async {
-      await _openRevenue(tester, _server());
+      await _show(tester, _server());
 
       expect(find.text('ZZZ-BK-001'), findsOneWidget);
       expect(find.text('ZZZ Aqua'), findsOneWidget);
@@ -78,24 +72,21 @@ void main() {
     });
 
     testWidgets('has its own search hint', (tester) async {
-      await _openRevenue(tester, _server());
+      await _show(tester, _server());
 
       expect(find.text('Search hire, booking # or vehicle…'), findsOneWidget);
     });
 
     testWidgets('an empty month says so', (tester) async {
-      await _openRevenue(tester, FakeServer());
+      await _show(tester, FakeServer());
 
       expect(find.text('No revenue from other companies yet'), findsOneWidget);
       expect(find.text('Nothing recorded for $_thisMonthLabel.'), findsOneWidget);
     });
 
     testWidgets('a failed load shows the server\'s message and retries', (tester) async {
-      final server = _server();
+      final server = _server()..failWith = 500;
       await _show(tester, server);
-      server.failWith = 500;
-      await tester.tap(find.byKey(const Key('tab-revenue')));
-      await tester.pumpAndSettle();
 
       expect(find.text('The server said no.'), findsOneWidget);
 
@@ -106,21 +97,40 @@ void main() {
     });
   });
 
-  group('the cards', () {
-    testWidgets('show Other Company Revenue, folded into My Profit', (tester) async {
+  group('the summary card', () {
+    testWidgets('shows the month\'s full amount, vehicle amount and balance, leaving other months out', (tester) async {
       await _show(tester, _server());
 
-      // 7,000 + 2,000 this month.
-      expect(_inCard('card-other-revenue', 'Rs. 9,000.00'), findsOneWidget);
-      expect(_inCard('card-other-revenue', '2 entries'), findsOneWidget);
-      expect(_inCard('card-my-profit', 'Rs. 15,400.00'), findsOneWidget); // 6,400 + 9,000 - 0
+      expect(find.text('2 entries this month'), findsOneWidget);
+      // Full amount and vehicle amount default to 10,000 and 6,000 per entry; two entries this month.
+      expect(find.descendant(of: find.byKey(const Key('revenue-summary-full')), matching: find.text('Rs. 20,000.00')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('revenue-summary-vehicle')), matching: find.text('Rs. 12,000.00')), findsOneWidget);
+      // 7,000 + 2,000 balance; the third entry's 1,000 is last month and left out.
+      expect(find.descendant(of: find.byKey(const Key('revenue-summary-balance')), matching: find.text('Rs. 9,000.00')), findsOneWidget);
+    });
+
+    testWidgets('is unaffected by a search that narrows the list', (tester) async {
+      await _show(tester, _server());
+
+      await tester.enterText(find.byKey(const Key('expense-search')), 'Galle');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      expect(find.descendant(of: find.byKey(const Key('revenue-summary-balance')), matching: find.text('Rs. 9,000.00')), findsOneWidget);
+    });
+
+    testWidgets('says so when the month has none', (tester) async {
+      await _show(tester, FakeServer());
+
+      expect(find.text('0 entries this month'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('revenue-summary-balance')), matching: find.text('Rs. 0.00')), findsOneWidget);
     });
   });
 
   group('searching revenue', () {
     testWidgets('narrows the list and says what the balance matches come to', (tester) async {
       final server = _server();
-      await _openRevenue(tester, server);
+      await _show(tester, server);
 
       await tester.enterText(find.byKey(const Key('expense-search')), 'Galle');
       await tester.pump(const Duration(milliseconds: 500));
@@ -134,21 +144,21 @@ void main() {
   });
 
   group('adding revenue', () {
-    testWidgets('the button says Add Revenue on this tab', (tester) async {
-      await _openRevenue(tester, _server());
+    testWidgets('the button says Add Revenue', (tester) async {
+      await _show(tester, _server());
 
       expect(find.byKey(const Key('add-revenue')), findsOneWidget);
       expect(find.widgetWithText(FloatingActionButton, 'Add Revenue'), findsOneWidget);
     });
 
     testWidgets('is not offered to someone who may not create', (tester) async {
-      await _openRevenue(tester, _server(), user: _user(create: false));
+      await _show(tester, _server(), user: _user(create: false));
 
       expect(find.byKey(const Key('add-revenue')), findsNothing);
     });
 
     testWidgets('opens a blank form with no bank slip chosen', (tester) async {
-      await _openRevenue(tester, _server());
+      await _show(tester, _server());
 
       await tester.tap(find.byKey(const Key('add-revenue')));
       await tester.pumpAndSettle();
@@ -158,7 +168,7 @@ void main() {
     });
 
     testWidgets('has no Credited Amount field — only Balance counts toward My Profit', (tester) async {
-      await _openRevenue(tester, _server());
+      await _show(tester, _server());
 
       await tester.tap(find.byKey(const Key('add-revenue')));
       await tester.pumpAndSettle();
@@ -167,9 +177,9 @@ void main() {
       expect(find.text('Credited Amount (Rs.)'), findsNothing);
     });
 
-    testWidgets('saves it without a slip, shows it in the list, and moves the cards', (tester) async {
+    testWidgets('saves it without a slip and shows it in the list', (tester) async {
       final server = _server();
-      await _openRevenue(tester, server);
+      await _show(tester, server);
       await tester.tap(find.byKey(const Key('add-revenue')));
       await tester.pumpAndSettle();
 
@@ -192,14 +202,11 @@ void main() {
 
       expect(find.text('ZZZ Ella Trip added.'), findsOneWidget);
       expect(find.text('ZZZ Ella Trip'), findsOneWidget);
-      // 9,000 + 2,000 balance.
-      expect(_inCard('card-other-revenue', 'Rs. 11,000.00'), findsOneWidget);
-      expect(_inCard('card-other-revenue', '3 entries'), findsOneWidget);
     });
 
     testWidgets('will not save an empty form, and says so', (tester) async {
       final server = _server();
-      await _openRevenue(tester, server);
+      await _show(tester, server);
       await tester.tap(find.byKey(const Key('add-revenue')));
       await tester.pumpAndSettle();
 
@@ -212,7 +219,7 @@ void main() {
 
     testWidgets('a negative balance is accepted', (tester) async {
       final server = _server();
-      await _openRevenue(tester, server);
+      await _show(tester, server);
       await tester.tap(find.byKey(const Key('add-revenue')));
       await tester.pumpAndSettle();
 
@@ -232,7 +239,7 @@ void main() {
 
   group('editing and deleting revenue', () {
     testWidgets('tapping one opens the form filled in with what it has', (tester) async {
-      await _openRevenue(tester, _server());
+      await _show(tester, _server());
 
       await tester.tap(find.text('ZZZ Colombo to Kandy'));
       await tester.pumpAndSettle();
@@ -249,14 +256,14 @@ void main() {
     });
 
     testWidgets('no menu at all for someone who may neither edit nor delete', (tester) async {
-      await _openRevenue(tester, _server(), user: _user(update: false, delete: false));
+      await _show(tester, _server(), user: _user(update: false, delete: false));
 
       expect(find.byKey(const Key('revenue-menu-1')), findsNothing);
     });
 
-    testWidgets('saves a change and shows it, moving the cards', (tester) async {
+    testWidgets('saves a change and shows it', (tester) async {
       final server = _server();
-      await _openRevenue(tester, server);
+      await _show(tester, server);
 
       await tester.tap(find.text('ZZZ Colombo to Kandy'));
       await tester.pumpAndSettle();
@@ -269,13 +276,11 @@ void main() {
       // touch it — still whatever it already had (the fixture's 7,000).
       expect(server.savedRevenues.single.fields['credited_amount'], '7000');
       expect(find.text('Rs. 7,500.00'), findsOneWidget);
-      // 7,500 + 2,000.
-      expect(_inCard('card-other-revenue', 'Rs. 9,500.00'), findsOneWidget);
     });
 
-    testWidgets('asks first, then deletes and updates the cards', (tester) async {
+    testWidgets('asks first, then deletes', (tester) async {
       final server = _server();
-      await _openRevenue(tester, server);
+      await _show(tester, server);
 
       await tester.tap(find.byKey(const Key('revenue-menu-2')));
       await tester.pumpAndSettle();
@@ -289,13 +294,11 @@ void main() {
       expect(server.deletedRevenues, [2]);
       expect(find.text('ZZZ Galle Fort Tour deleted.'), findsOneWidget);
       expect(find.text('ZZZ Galle Fort Tour'), findsNothing);
-      // Only 7,000 left.
-      expect(_inCard('card-other-revenue', 'Rs. 7,000.00'), findsOneWidget);
     });
 
     testWidgets('"Keep it" changes nothing', (tester) async {
       final server = _server();
-      await _openRevenue(tester, server);
+      await _show(tester, server);
 
       await tester.tap(find.byKey(const Key('revenue-menu-2')));
       await tester.pumpAndSettle();
@@ -311,7 +314,7 @@ void main() {
 
   group('the bank slip', () {
     testWidgets('a clip icon shows for an entry that has one', (tester) async {
-      await _openRevenue(
+      await _show(
         tester,
         FakeServer(revenues: [
           revenueJson(id: 1, hire: 'ZZZ With Slip', date: dayOf(_thisMonth, 2), slipUrl: 'http://localhost/fake-slip/slip.jpg'),
@@ -330,7 +333,7 @@ void main() {
     });
 
     testWidgets('editing an entry with a slip shows it already attached', (tester) async {
-      await _openRevenue(
+      await _show(
         tester,
         FakeServer(revenues: [
           revenueJson(id: 1, hire: 'ZZZ With Slip', date: dayOf(_thisMonth, 2), slipUrl: 'http://localhost/fake-slip/slip.jpg'),
@@ -348,7 +351,7 @@ void main() {
       final server = FakeServer(revenues: [
         revenueJson(id: 1, hire: 'ZZZ With Slip', date: dayOf(_thisMonth, 2), slipUrl: 'http://localhost/fake-slip/slip.jpg'),
       ]);
-      await _openRevenue(tester, server);
+      await _show(tester, server);
 
       await tester.tap(find.text('ZZZ With Slip'));
       await tester.pumpAndSettle();
