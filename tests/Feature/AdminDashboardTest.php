@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Driver;
+use App\Models\DriverDepositTransfer;
 use App\Models\Hire;
 use App\Models\HireExpense;
 use App\Models\User;
@@ -40,6 +42,17 @@ function dashboardHire(array $attributes = []): Hire
     return Hire::create($attributes + [
         'tour_type' => 'drop_pickup', 'hire_full_value' => 10000, 'our_hire_value' => 7000,
         'payment_type' => 'cash', 'start_time' => '2026-09-10 09:00:00',
+    ]);
+}
+
+function dashboardDriver(string $name = 'ZZZ Test Driver'): Driver
+{
+    return Driver::create([
+        'name' => $name,
+        'license' => 'ZZZ-LIC-'.random_int(1000, 9999),
+        'contact_number' => '0770000'.random_int(100, 999),
+        'email' => strtolower(str_replace(' ', '.', $name)).random_int(1000, 9999).'@example.test',
+        'password' => 'irrelevant-hashed-value',
     ]);
 }
 
@@ -119,6 +132,49 @@ describe('Vehicle Cards', function () {
 
         $response->assertOk();
         $response->assertDontSee('Vehicle Cards');
+    });
+});
+
+describe('the Driver Deposits panel', function () {
+    it('lists every driver with this month\'s deposited amount, richest first', function () {
+        dashboardAdmin();
+        $nimal = dashboardDriver('ZZZ Nimal');
+        $kamal = dashboardDriver('ZZZ Kamal');
+        DriverDepositTransfer::create(['driver_id' => $nimal->id, 'year' => 2026, 'month' => 9, 'amount' => 400, 'slip_path' => 'deposit-slips/zzz-1.jpg']);
+        DriverDepositTransfer::create(['driver_id' => $kamal->id, 'year' => 2026, 'month' => 9, 'amount' => 1200, 'slip_path' => 'deposit-slips/zzz-2.jpg']);
+
+        $response = $this->get('/admin');
+
+        $response->assertSee('Driver Deposits');
+        $response->assertSeeInOrder(['ZZZ Kamal', 'Rs. 1,200.00', 'ZZZ Nimal', 'Rs. 400.00']);
+    });
+
+    it('shows Rs. 0.00 for a driver with no deposit this month, and leaves other months out', function () {
+        dashboardAdmin();
+        $driver = dashboardDriver('ZZZ No Deposit');
+        DriverDepositTransfer::create(['driver_id' => $driver->id, 'year' => 2026, 'month' => 8, 'amount' => 900, 'slip_path' => 'deposit-slips/zzz-3.jpg']);
+
+        $response = $this->get('/admin');
+
+        $response->assertSeeInOrder(['ZZZ No Deposit', 'Rs. 0.00']);
+    });
+
+    it('says so when there are no drivers yet', function () {
+        dashboardAdmin();
+
+        $response = $this->get('/admin');
+
+        $response->assertSee('Driver Deposits');
+        $response->assertSee('No drivers yet');
+    });
+
+    it('is hidden without the drivers.view permission', function () {
+        dashboardAdmin(['vehicles.view']);
+        dashboardDriver();
+
+        $response = $this->get('/admin');
+
+        $response->assertDontSee('Driver Deposits');
     });
 });
 

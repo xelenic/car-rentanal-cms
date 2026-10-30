@@ -59,7 +59,38 @@ class DashboardController extends Controller
             'secondary' => $this->secondaryMetricsFor($now),
             'profitBreakdown' => $this->profitBreakdownFor($now),
             'vehicleCards' => $this->vehicleCardsFor($now),
+            'driverDeposits' => $this->driverDepositsFor($now),
         ]);
+    }
+
+    /**
+     * This month's deposited amount (bank-slip transfers already recorded)
+     * for every driver, richest depositor first — the dashboard's own
+     * right-hand "who's deposited how much" panel. Zero for anyone who
+     * hasn't transferred anything yet this month.
+     *
+     * @return array<int, array{driver: Driver, amount: float}>
+     */
+    private function driverDepositsFor(Carbon $date): array
+    {
+        $year = (int) $date->format('Y');
+        $month = (int) $date->format('n');
+
+        $deposited = DriverDepositTransfer::query()
+            ->where('year', $year)
+            ->where('month', $month)
+            ->selectRaw('driver_id, SUM(amount) as total')
+            ->groupBy('driver_id')
+            ->pluck('total', 'driver_id');
+
+        return Driver::orderBy('name')->get()
+            ->map(fn (Driver $driver) => [
+                'driver' => $driver,
+                'amount' => round((float) ($deposited->get($driver->id) ?? 0), 2),
+            ])
+            ->sortByDesc('amount')
+            ->values()
+            ->all();
     }
 
     /**

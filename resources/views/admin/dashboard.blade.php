@@ -66,34 +66,35 @@
             ];
         @endphp
 
+        <div class="row g-3">
+        <div class="col-lg-8 col-xl-9">
+
         <div class="row row-cols-2 row-cols-md-3 row-cols-xl-6 g-2 mb-2">
             @foreach ($cards as $card)
                 <div class="col">
-                    <div class="card border-0 h-100 {{ isset($card['modal']) ? 'profit-card-clickable' : '' }}"
+                    <div class="card border-0 h-100 dashboard-card-hover {{ isset($card['modal']) ? 'profit-card-clickable' : '' }}"
                         @if (isset($card['modal'])) role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#{{ $card['modal'] }}" @endif>
                         <div class="card-body dashboard-stat-card-body">
                             <div class="d-flex align-items-center gap-2 mb-2">
                                 <div class="stat-icon dashboard-stat-icon" style="background: {{ $card['bg'] }}; color: {{ $card['fg'] }};">
                                     <i class="bi bi-{{ $card['icon'] }}"></i>
                                 </div>
-                                <div class="text-muted small">
+                                <div class="text-muted dashboard-stat-label text-truncate">
                                     {{ $card['label'] }}
-                                    <span class="d-none d-sm-inline">&middot; {{ $periodLabel }}</span>
                                     @isset($card['modal'])
                                         <i class="bi bi-info-circle ms-1" title="Click for the full calculation"></i>
                                     @endisset
                                 </div>
                             </div>
-                            <div class="d-flex align-items-baseline justify-content-between flex-wrap gap-1">
-                                <div class="fs-5 dashboard-stat-value fw-bold {{ $card['value'] < 0 ? 'text-danger' : '' }}">
-                                    {{ $card['value'] < 0 ? '-' : '' }}Rs. {{ number_format(abs($card['value']), 2) }}
-                                </div>
-                                <div class="{{ $card['delta']['class'] }}" style="font-size: .75rem; font-weight: 600;">
-                                    <i class="bi bi-{{ $card['delta']['icon'] }}"></i>
-                                    {{ $card['delta']['label'] }}
-                                </div>
+                            <div class="dashboard-stat-value fw-bold {{ $card['value'] < 0 ? 'text-danger' : '' }}">
+                                {{ $card['value'] < 0 ? '-' : '' }}Rs. {{ number_format(abs($card['value']), 2) }}
                             </div>
-                            <div class="text-muted" style="font-size: .7rem;">vs previous month</div>
+                            <div class="d-flex align-items-center gap-1 dashboard-stat-footer">
+                                <span class="dashboard-stat-delta-badge {{ $card['delta']['class'] }}">
+                                    <i class="bi bi-{{ $card['delta']['icon'] }}"></i>{{ $card['delta']['label'] }}
+                                </span>
+                                <span class="text-muted dashboard-stat-caption">vs last month</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -102,19 +103,7 @@
 
         @push('styles')
             <style>
-                .profit-card-clickable { cursor: pointer; transition: box-shadow .15s ease, transform .15s ease; }
-                .profit-card-clickable:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); transform: translateY(-1px); }
-
-                /* Compact stat cards — on mobile these already sit two per
-                   row; tighten padding/type so the whole stack (5 main +
-                   6 secondary cards) doesn't take forever to scroll past
-                   before reaching the chart. */
-                @media (max-width: 767.98px) {
-                    .dashboard-stat-card-body { padding: .7rem .8rem; }
-                    .dashboard-stat-icon { width: 30px; height: 30px; font-size: .85rem; }
-                    .dashboard-stat-value { font-size: 1rem; }
-                    .dashboard-secondary-card-body.card-body { padding: .5rem .65rem; }
-                }
+                .profit-card-clickable { cursor: pointer; }
             </style>
         @endpush
 
@@ -187,27 +176,137 @@
                 ['label' => 'Repair Cost', 'value' => 'Rs. ' . number_format($secondary['repair_cost_total'], 2), 'icon' => 'tools'],
                 ['label' => 'Avg. Day Hire Rate', 'value' => 'Rs. ' . number_format($secondary['avg_day_hire_rate'], 2), 'icon' => 'speedometer2'],
                 ['label' => 'Salary Advanced', 'value' => 'Rs. ' . number_format($secondary['salary_advanced_total'], 2), 'icon' => 'cash'],
-                ['label' => 'Credit Hires', 'value' => number_format($secondary['credit_hires_count']), 'icon' => 'credit-card'],
-                ['label' => 'Cash Hires', 'value' => number_format($secondary['cash_hires_count']), 'icon' => 'wallet'],
                 ['label' => 'Pending Deposit', 'value' => 'Rs. ' . number_format($secondary['pending_deposit_total'], 2), 'icon' => 'hourglass-split'],
             ];
         @endphp
 
-        <div class="row row-cols-2 row-cols-md-3 row-cols-xl-6 g-2 mb-2">
+        <div class="row row-cols-2 row-cols-md-4 g-2 mb-3">
             @foreach ($smallCards as $card)
                 <div class="col">
-                    <div class="card border-0 h-100">
-                        <div class="card-body dashboard-secondary-card-body d-flex align-items-center gap-2 py-2 px-3">
-                            <i class="bi bi-{{ $card['icon'] }} text-muted"></i>
+                    <div class="card border-0 h-100 dashboard-card-hover">
+                        <div class="card-body dashboard-secondary-card-body d-flex align-items-center gap-2">
+                            <div class="dashboard-secondary-icon">
+                                <i class="bi bi-{{ $card['icon'] }}"></i>
+                            </div>
                             <div>
-                                <div class="text-muted" style="font-size: .68rem;">{{ $card['label'] }}</div>
-                                <div class="fw-semibold" style="font-size: .85rem;">{{ $card['value'] }}</div>
+                                <div class="text-muted dashboard-secondary-label">{{ $card['label'] }}</div>
+                                <div class="fw-semibold dashboard-secondary-value">{{ $card['value'] }}</div>
                             </div>
                         </div>
                     </div>
                 </div>
             @endforeach
         </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-5">
+                <div class="card border-0 h-100">
+                    <div class="card-header bg-transparent border-0 dashboard-section-header">
+                        <span class="dashboard-section-icon" style="background: #eaf2fc; color: #2a78d6;"><i class="bi bi-pie-chart-fill"></i></span>
+                        <span class="fw-semibold">Payment Type</span>
+                        <span class="text-muted dashboard-section-period">&middot; {{ $periodLabel }}</span>
+                    </div>
+                    <div class="card-body d-flex align-items-center">
+                        @if ($secondary['credit_hires_count'] + $secondary['cash_hires_count'] === 0)
+                            <div class="text-center text-muted py-4 w-100">
+                                <i class="bi bi-pie-chart fs-4 d-block mb-2"></i>
+                                No hires yet this month.
+                            </div>
+                        @else
+                            <div class="dashboard-donut-container">
+                                <canvas id="dashboardPaymentTypeChart"></canvas>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @push('scripts')
+            <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+        @endpush
+
+        @if ($secondary['credit_hires_count'] + $secondary['cash_hires_count'] > 0)
+            @push('scripts')
+                <script>
+                    (function () {
+                        const canvas = document.getElementById('dashboardPaymentTypeChart');
+                        if (!canvas) return;
+
+                        const cash = {{ (int) $secondary['cash_hires_count'] }};
+                        const credit = {{ (int) $secondary['credit_hires_count'] }};
+                        const total = cash + credit;
+
+                        // Text stays in neutral ink even inside the center label —
+                        // the two segments themselves carry the color identity.
+                        const centerTextPlugin = {
+                            id: 'centerText',
+                            afterDraw(chart) {
+                                const { ctx, chartArea } = chart;
+                                const x = (chartArea.left + chartArea.right) / 2;
+                                const y = (chartArea.top + chartArea.bottom) / 2;
+                                ctx.save();
+                                ctx.textAlign = 'center';
+                                ctx.textBaseline = 'middle';
+                                ctx.fillStyle = '#1e293b';
+                                ctx.font = '700 20px Inter, system-ui, sans-serif';
+                                ctx.fillText(String(total), x, y - 9);
+                                ctx.fillStyle = '#64748b';
+                                ctx.font = '600 11px Inter, system-ui, sans-serif';
+                                ctx.fillText(total === 1 ? 'hire' : 'hires', x, y + 10);
+                                ctx.restore();
+                            },
+                        };
+
+                        new Chart(canvas, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['Cash', 'Credit'],
+                                datasets: [{
+                                    data: [cash, credit],
+                                    backgroundColor: ['#2a78d6', '#c95a26'],
+                                    borderColor: '#fff',
+                                    borderWidth: 2,
+                                    hoverOffset: 4,
+                                }],
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                cutout: '72%',
+                                plugins: {
+                                    legend: {
+                                        position: 'bottom',
+                                        labels: {
+                                            usePointStyle: true,
+                                            pointStyle: 'circle',
+                                            boxWidth: 8,
+                                            boxHeight: 8,
+                                            color: '#52514e',
+                                            font: { size: 11, weight: '600' },
+                                            padding: 12,
+                                        },
+                                    },
+                                    tooltip: {
+                                        backgroundColor: '#0b0b0b',
+                                        padding: 10,
+                                        titleFont: { size: 12, weight: '600' },
+                                        bodyFont: { size: 12 },
+                                        callbacks: {
+                                            label: (ctx) => {
+                                                const pct = total > 0 ? Math.round((ctx.parsed / total) * 100) : 0;
+                                                return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                            plugins: [centerTextPlugin],
+                        });
+                    })();
+                </script>
+            @endpush
+        @endif
 
         @can('vehicles.view')
             @php
@@ -221,8 +320,10 @@
                 ];
             @endphp
 
-            <div class="d-flex align-items-center justify-content-between mb-2">
-                <span class="fw-semibold">Vehicle Cards &middot; {{ $periodLabel }}</span>
+            <div class="dashboard-section-header mb-2">
+                <span class="dashboard-section-icon" style="background: #fdeee7; color: #c95a26;"><i class="bi bi-car-front-fill"></i></span>
+                <span class="fw-semibold">Vehicle Cards</span>
+                <span class="text-muted dashboard-section-period">&middot; {{ $periodLabel }}</span>
             </div>
 
             @if (count($vehicleCards) === 0)
@@ -236,7 +337,7 @@
                 <div class="row row-cols-1 row-cols-md-2 g-2 mb-2">
                     @foreach ($vehicleCards as $vc)
                         <div class="col">
-                            <div class="card border-0 h-100">
+                            <div class="card border-0 h-100 dashboard-card-hover">
                                 <div class="card-header bg-transparent border-0 pb-0 d-flex align-items-center justify-content-between">
                                     <span class="fw-semibold">{{ $vc['vehicle']->model }}</span>
                                     <span class="badge text-bg-light border">{{ $vc['vehicle']->condition }}</span>
@@ -272,8 +373,10 @@
         @endcan
 
         <div class="card border-0">
-            <div class="card-header d-flex align-items-center justify-content-between">
-                <span class="fw-semibold">Trend &middot; Last {{ $trend->count() }} Months</span>
+            <div class="card-header dashboard-section-header">
+                <span class="dashboard-section-icon" style="background: #fdeef4; color: #c2477a;"><i class="bi bi-graph-up-arrow"></i></span>
+                <span class="fw-semibold">Trend</span>
+                <span class="text-muted dashboard-section-period">&middot; Last {{ $trend->count() }} Months</span>
             </div>
             <div class="card-body">
                 @if ($trend->sum('hire_full_value_total') == 0)
@@ -302,7 +405,6 @@
         @endpush
 
         @push('scripts')
-            <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
             <script>
                 (function () {
                     const canvas = document.getElementById('dashboardTrendChart');
@@ -435,6 +537,111 @@
                     });
                 })();
             </script>
+        @endpush
+
+        </div>
+
+        <div class="col-lg-4 col-xl-3">
+            <div class="card border-0 h-100">
+                <div class="card-header bg-transparent border-0 dashboard-section-header">
+                    <span class="dashboard-section-icon" style="background: #e6f7f1; color: #158f66;"><i class="bi bi-piggy-bank-fill"></i></span>
+                    <span class="fw-semibold">Driver Deposits</span>
+                    <span class="text-muted dashboard-section-period ms-auto">{{ $periodLabel }}</span>
+                </div>
+                <div class="card-body pt-0">
+                    @if (count($driverDeposits) === 0)
+                        <div class="text-center text-muted py-4">
+                            <i class="bi bi-piggy-bank fs-3 d-block mb-2"></i>
+                            No drivers yet.
+                        </div>
+                    @else
+                        <div class="d-flex flex-column gap-1">
+                            @foreach ($driverDeposits as $entry)
+                                <a href="{{ route('admin.drivers.show', $entry['driver']) }}"
+                                    class="d-flex align-items-center justify-content-between text-decoration-none dashboard-deposit-row">
+                                    <span class="text-truncate pe-2 dashboard-deposit-name">{{ $entry['driver']->name }}</span>
+                                    <span class="fw-semibold text-nowrap dashboard-deposit-amount {{ $entry['amount'] <= 0 ? 'text-muted' : 'text-success' }}">
+                                        Rs. {{ number_format($entry['amount'], 2) }}
+                                    </span>
+                                </a>
+                            @endforeach
+                        </div>
+
+                        <div class="d-flex align-items-center justify-content-between border-top pt-2 mt-2">
+                            <span class="fw-semibold dashboard-deposit-name">Total Deposited</span>
+                            <span class="fw-bold text-success dashboard-deposit-total">
+                                Rs. {{ number_format(collect($driverDeposits)->sum('amount'), 2) }}
+                            </span>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+
+        </div>
+
+        @push('styles')
+            <style>
+                /* Section headers — a small colored icon chip beside the
+                   title, the same visual language across every section
+                   card on this page, instead of plain bold text. */
+                .dashboard-section-header { display: flex; align-items: center; gap: .55rem; }
+                .dashboard-section-icon {
+                    width: 26px; height: 26px; border-radius: 8px; display: inline-flex;
+                    align-items: center; justify-content: center; font-size: .78rem; flex-shrink: 0;
+                }
+                .dashboard-section-period { font-size: .72rem; }
+
+                /* A gentle lift on hover for every stat/secondary card —
+                   not just the profit-breakdown one — so the page reads
+                   as interactive rather than static tiles. */
+                .dashboard-card-hover { transition: box-shadow .15s ease, transform .15s ease; }
+                .dashboard-card-hover:hover { box-shadow: 0 4px 14px rgba(0,0,0,.07); transform: translateY(-1px); }
+
+                .dashboard-secondary-card-body { padding: .65rem .85rem; }
+                .dashboard-secondary-icon {
+                    width: 30px; height: 30px; border-radius: 8px; display: inline-flex; flex-shrink: 0;
+                    align-items: center; justify-content: center; background: var(--primary-light); color: var(--primary);
+                    font-size: .85rem;
+                }
+                .dashboard-secondary-label { font-size: .68rem; }
+                .dashboard-secondary-value { font-size: .85rem; }
+
+                .dashboard-donut-container { position: relative; height: 180px; width: 100%; }
+
+                .dashboard-deposit-row { color: inherit; padding: .35rem .5rem; border-radius: 8px; transition: background .15s ease; }
+                .dashboard-deposit-row:hover { background: #f4f3ef; }
+                .dashboard-deposit-name { font-size: .8rem; }
+                .dashboard-deposit-amount { font-size: .8rem; }
+                .dashboard-deposit-total { font-size: .9rem; }
+
+                /* Tighter, more deliberate type scale for the main summary
+                   cards — one clean line each for label, value and the
+                   change-badge, instead of several same-weight numbers
+                   competing for attention. */
+                .dashboard-stat-card-body { padding: .8rem .9rem; }
+                .dashboard-stat-icon { width: 24px; height: 24px; font-size: .68rem; }
+                .dashboard-stat-label { font-size: .66rem; font-weight: 600; letter-spacing: .01em; }
+                .dashboard-stat-value { font-size: .95rem; margin-bottom: .3rem; }
+                .dashboard-stat-footer { min-height: 1.1rem; }
+                .dashboard-stat-delta-badge {
+                    display: inline-flex; align-items: center; gap: 2px;
+                    font-size: .62rem; font-weight: 700; line-height: 1;
+                    padding: .15rem .4rem; border-radius: 999px; white-space: nowrap;
+                }
+                .dashboard-stat-delta-badge.text-success { background: #e6f7f1; color: #158f66 !important; }
+                .dashboard-stat-delta-badge.text-danger { background: #fdecec; color: #c23b3b !important; }
+                .dashboard-stat-delta-badge.text-secondary,
+                .dashboard-stat-delta-badge.text-muted { background: #f1f1ee; color: #6b6a66 !important; }
+                .dashboard-stat-caption { font-size: .62rem; }
+
+                @media (max-width: 767.98px) {
+                    .dashboard-stat-card-body { padding: .6rem .7rem; }
+                    .dashboard-stat-icon { width: 22px; height: 22px; font-size: .62rem; }
+                    .dashboard-stat-value { font-size: .85rem; }
+                    .dashboard-secondary-card-body.card-body { padding: .5rem .65rem; }
+                }
+            </style>
         @endpush
     @else
         <div class="card border-0">

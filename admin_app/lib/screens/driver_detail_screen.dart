@@ -343,28 +343,32 @@ class _DriverOverviewTabState extends State<_DriverOverviewTab> with AutomaticKe
             key: const Key('driver-overview-salary'),
             color: AppColors.primary,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Row(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.payments_outlined, size: 15, color: Colors.white),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Salary Payable · ${countOf(summary.hireCount, 'hire')}',
-                      style: TextStyle(fontSize: 11.5, color: Colors.white.withValues(alpha: 0.85)),
-                    ),
+                  Row(
+                    children: [
+                      const Icon(Icons.payments_outlined, size: 18, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Salary Payable · ${countOf(summary.hireCount, 'hire')}',
+                          style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.85)),
+                        ),
+                      ),
+                      if (summary.payrollStatus != null) _PayrollStatusPill(status: summary.payrollStatus!),
+                    ],
                   ),
-                  if (summary.payrollStatus != null) ...[
-                    _PayrollStatusPill(status: summary.payrollStatus!),
-                    const SizedBox(width: 8),
-                  ],
+                  const SizedBox(height: 12),
                   FittedBox(
                     fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
                     child: Text(
                       formatRsExact(summary.salaryPayable),
                       key: const Key('driver-overview-salary-value'),
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 30,
                         fontWeight: FontWeight.w800,
                         color: loss ? const Color(0xFFFFC9C9) : Colors.white,
                       ),
@@ -374,55 +378,40 @@ class _DriverOverviewTabState extends State<_DriverOverviewTab> with AutomaticKe
               ),
             ),
           ),
-          const SizedBox(height: 6),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _DriverStatTile(
-                    label: 'Full Value',
-                    value: formatRsShort(summary.hireFullValueTotal),
-                    icon: Icons.receipt_long_outlined,
-                    color: const Color(0xFFB3810A),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _DriverStatTile(
-                    label: 'Our Hire Value',
-                    value: formatRsShort(summary.ourHireValueTotal),
-                    icon: Icons.account_balance_outlined,
-                    color: const Color(0xFF2A78D6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _DriverStatTile(
-                    label: 'Commission',
-                    value: formatRsShort(summary.commissionTotal),
-                    icon: Icons.percent_rounded,
-                    color: const Color(0xFF158F66),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _DriverStatTile(
-                    label: 'Expenses',
-                    value: formatRsShort(summary.expensesTotal),
-                    icon: Icons.account_balance_wallet_outlined,
-                    color: AppColors.danger,
-                  ),
-                ),
-              ],
-            ),
+          const SizedBox(height: 16),
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 1.3,
+            children: [
+              _DriverStatTile(
+                label: 'Full Value',
+                value: formatRsShort(summary.hireFullValueTotal),
+                icon: Icons.receipt_long_outlined,
+                color: const Color(0xFFB3810A),
+              ),
+              _DriverStatTile(
+                label: 'Our Hire Value',
+                value: formatRsShort(summary.ourHireValueTotal),
+                icon: Icons.account_balance_outlined,
+                color: const Color(0xFF2A78D6),
+              ),
+              _DriverStatTile(
+                label: 'Commission',
+                value: formatRsShort(summary.commissionTotal),
+                icon: Icons.percent_rounded,
+                color: const Color(0xFF158F66),
+              ),
+              _DriverStatTile(
+                label: 'Expenses',
+                value: formatRsShort(summary.expensesTotal),
+                icon: Icons.account_balance_wallet_outlined,
+                color: AppColors.danger,
+              ),
+            ],
           ),
         ],
       ),
@@ -459,34 +448,37 @@ class _DriverStatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        child: Row(
-          children: [
-            Icon(icon, size: 13, color: color),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(value, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5)),
-                  ),
-                  Text(
-                    label,
-                    style: TextStyle(fontSize: 9.5, color: AppColors.textMuted),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(12)),
+            alignment: Alignment.center,
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const Spacer(),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(value, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted, fontWeight: FontWeight.w600),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
