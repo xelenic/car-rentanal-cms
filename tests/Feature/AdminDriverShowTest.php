@@ -165,6 +165,87 @@ describe('the Earnings tab\'s hire rows', function () {
     });
 });
 
+describe('exporting the Hires tab as CSV', function () {
+    it('needs drivers.view', function () {
+        $driver = driverShowDriver();
+        driverShowAdmin([]);
+
+        $this->get("/admin/drivers/{$driver->id}/hires/export?year=2026&month=9")->assertForbidden();
+    });
+
+    it('downloads a CSV with one row per hire and a Total row', function () {
+        driverShowAdmin();
+        $driver = driverShowDriver();
+        $customer = driverShowCustomer('ZZZ Amal');
+        $vehicle = driverShowVehicle();
+        // The vehicle maintenance record below is dated by created_at, not a
+        // year/month column — travel there so it lands in September.
+        test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+
+        $cashHire = driverShowHire([
+            'driver_id' => $driver->id, 'customer_id' => $customer->id, 'vehicle_id' => $vehicle->id,
+            'start_time' => '2026-09-15 10:00:00', 'hire_full_value' => 10000, 'our_hire_value' => 8000, 'payment_type' => 'cash',
+        ]);
+        HireExpense::create(['driver_id' => $driver->id, 'hire_id' => $cashHire->id, 'category' => 'fuel', 'amount' => 500]);
+        HireExpense::create(['driver_id' => $driver->id, 'hire_id' => $cashHire->id, 'category' => 'parking', 'amount' => 100]);
+        $creditHire = driverShowHire([
+            'driver_id' => $driver->id, 'customer_id' => $customer->id, 'vehicle_id' => $vehicle->id,
+            'start_time' => '2026-09-20 10:00:00', 'hire_full_value' => 4000, 'our_hire_value' => 4000, 'payment_type' => 'credit',
+        ]);
+        \App\Models\DriverDepositTransfer::create(['driver_id' => $driver->id, 'year' => 2026, 'month' => 9, 'amount' => 3000, 'slip_path' => 'zzz.jpg']);
+        \App\Models\VehicleMaintenanceRecord::create([
+            'vehicle_id' => $vehicle->id, 'driver_id' => $driver->id, 'type' => 'repair', 'cost' => 250, 'bill_path' => 'zzz.jpg',
+        ]);
+
+        $response = $this->get("/admin/drivers/{$driver->id}/hires/export?year=2026&month=9");
+
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
+        $rows = array_map('str_getcsv', explode("\n", trim($response->streamedContent())));
+
+        expect($rows[0])->toBe([
+            'Date', 'Hire', 'Full Value of Hire', 'Hire Value', 'Deposit Commission',
+            'Fuel', 'High Way Charges', 'Driver Food', 'Other Chargess', 'Cost Of Hire',
+            'Driver Charges', 'Full Cost Of Hire', 'Full Saving Of Hire',
+            'Driver Payment', 'Deposit', 'Credit Hire', 'Car Repair',
+        ]);
+
+        // Cash hire: full 10,000, our 8,000, commission 2,000; cost 500+100=600;
+        // driver charges (8,000-600)*20%=1,480; full cost 2,080; saving 5,920.
+        // The "Hire" column is blank here — the fixture sets no from/to location.
+        expect($rows[1])->toBe([
+            '15/09/26', '', '10000.00', '8000.00', '2000.00',
+            '500.00', '', '', '100.00', '600.00', '1480.00', '2080.00', '5920.00', '', '', '', '',
+        ]);
+
+        // Credit hire: full 4,000 appears again under Credit Hire.
+        expect($rows[2])->toBe([
+            '20/09/26', '', '4000.00', '4000.00', '0.00',
+            '', '', '', '', '0.00', '800.00', '800.00', '3200.00', '', '', '4000.00', '',
+        ]);
+
+        $total = $rows[3];
+        expect($total[0])->toBe('Total')
+            ->and($total[2])->toBe('14000.00') // full value
+            ->and($total[3])->toBe('12000.00') // our value
+            ->and($total[14])->toBe('3000.00') // Deposit — transferred this month
+            ->and($total[15])->toBe('4000.00') // Credit Hire total
+            ->and($total[16])->toBe('250.00'); // Car Repair — vehicle maintenance total
+    });
+
+    it('leaves another month\'s hires out', function () {
+        driverShowAdmin();
+        $driver = driverShowDriver();
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-08-15 10:00:00', 'hire_full_value' => 9999]);
+
+        $response = $this->get("/admin/drivers/{$driver->id}/hires/export?year=2026&month=9");
+
+        $rows = array_map('str_getcsv', explode("\n", trim($response->streamedContent())));
+        expect($rows)->toHaveCount(2); // header + Total only
+        expect($rows[1][0])->toBe('Total');
+    });
+});
+
 it('matches an unscheduled hire into the month it was recorded', function () {
     driverShowAdmin();
     $driver = driverShowDriver();

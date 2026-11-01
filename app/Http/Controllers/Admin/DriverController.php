@@ -11,6 +11,7 @@ use App\Models\Hire;
 use App\Models\HireExpense;
 use App\Models\User;
 use App\Services\DriverSalaryCalculator;
+use App\Services\HireCsvExport;
 use App\Support\MonthlyPeriods;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,13 +23,14 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DriverController extends Controller implements HasMiddleware
 {
     public static function middleware(): array
     {
         return [
-            new Middleware('permission:drivers.view', only: ['index', 'show']),
+            new Middleware('permission:drivers.view', only: ['index', 'show', 'exportHires']),
             new Middleware('permission:drivers.create', only: ['store']),
             new Middleware('permission:drivers.update', only: ['update']),
             new Middleware('permission:drivers.delete', only: ['destroy']),
@@ -255,6 +257,45 @@ class DriverController extends Controller implements HasMiddleware
             'selectedMonth' => $selectedMonth,
             'summary' => $summary,
             'trend' => $trend,
+        ]);
+    }
+
+    /**
+     * The Hires tab's own CSV download — one row per hire for the given
+     * month (the same $periodHires the tab shows), with the per-hire
+     * breakdown (full value, our value, commission, expense categories,
+     * driver's cut, saving) plus a Total row carrying the month's
+     * non-per-hire figures: salary payable, deposit transferred, credit-hire
+     * total, and vehicle maintenance cost (see DriverSalaryCalculator).
+     */
+    public function exportHires(Request $request, Driver $driver): StreamedResponse
+    {
+        $year = $request->filled('year') ? $request->integer('year') : (int) now()->format('Y');
+        $month = $request->filled('month') ? $request->integer('month') : (int) now()->format('n');
+
+        $hires = Hire::query()
+            ->counted()
+            ->where('driver_id', $driver->id)
+            ->with(['fromLocation.location', 'toLocation.location', 'stayLocations.location', 'package', 'expenses'])
+            ->get()
+            ->filter(fn (Hire $hire) => $hire->effective_month_date?->year === $year && $hire->effective_month_date?->month === $month)
+            ->sortBy(fn (Hire $hire) => $hire->effective_month_date)
+            ->values();
+
+        $salary = DriverSalaryCalculator::calculate($driver, $year, $month);
+
+        $transferredTotal = round((float) DriverDepositTransfer::query()
+            ->where('driver_id', $driver->id)
+            ->where('year', $year)
+            ->where('month', $month)
+            ->sum('amount'), 2);
+
+        $filename = Str::slug($driver->name).'-hires-'.$year.'-'.str_pad((string) $month, 2, '0', STR_PAD_LEFT).'.csv';
+
+        return HireCsvExport::stream($hires, $filename, [
+            'salary_payable' => round((float) $salary['net_salary_payable'], 2),
+            'transferred_total' => $transferredTotal,
+            'vehicle_maintenance_total' => round((float) $salary['vehicle_maintenance_total'], 2),
         ]);
     }
 

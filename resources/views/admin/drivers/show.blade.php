@@ -183,6 +183,12 @@
                         <option value="{{ $selectedMonth }}" selected>{{ \Carbon\Carbon::create()->month($selectedMonth)->format('F') }}</option>
                     @endforelse
                 </select>
+
+                @if ($tab === 'earnings')
+                    <a href="{{ route('admin.drivers.hires.export', ['driver' => $driver] + $periodQuery) }}" class="btn btn-sm btn-light border" title="Export this month's hires as CSV">
+                        <i class="bi bi-download me-1"></i> Export CSV
+                    </a>
+                @endif
             </form>
         </div>
 

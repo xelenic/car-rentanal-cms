@@ -104,6 +104,9 @@
                         <i class="bi bi-x-lg"></i>
                     </a>
                 @endif
+                <a href="{{ route('admin.hires.export', request()->except('page')) }}" class="btn btn-light border" title="Export the filtered hires as CSV">
+                    <i class="bi bi-download me-1"></i> Export CSV
+                </a>
             </form>
             @if ($selectedHireId)
                 <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">

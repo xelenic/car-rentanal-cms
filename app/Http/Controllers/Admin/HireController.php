@@ -8,7 +8,9 @@ use App\Models\Driver;
 use App\Models\Hire;
 use App\Models\Package;
 use App\Models\Vehicle;
+use App\Services\HireCsvExport;
 use App\Services\HireService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,6 +18,7 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Carbon;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class HireController extends Controller implements HasMiddleware
 {
@@ -26,7 +29,7 @@ class HireController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('permission:hires.view', only: ['index', 'show', 'tracking']),
+            new Middleware('permission:hires.view', only: ['index', 'show', 'tracking', 'exportCsv']),
             new Middleware('permission:hires.create', only: ['store']),
             new Middleware('permission:hires.update', only: ['update']),
             new Middleware('permission:hires.delete', only: ['destroy']),
@@ -36,49 +39,16 @@ class HireController extends Controller implements HasMiddleware
     public function index(Request $request): View
     {
         $showUpcoming = $request->boolean('upcoming');
-        $dateFrom = $this->parseDate($request, 'date_from');
-        $dateTo = $this->parseDate($request, 'date_to');
 
         $upcomingScope = fn ($query) => $query->where('status', 'pending')
             ->whereNotNull('start_time')
             ->where('start_time', '>=', now());
 
-        $hires = Hire::query()
+        $hires = $this->filteredQuery($request)
             ->with([
                 'package', 'customer', 'driver', 'vehicle', 'trackingPoints', 'expenses', 'payments',
                 'locations.location', 'fromLocation.location', 'toLocation.location', 'stayLocations.location',
             ])
-            ->when($request->string('search')->toString(), function ($query, $search) {
-                $query->where(function ($query) use ($search) {
-                    $query->where('description', 'like', "%{$search}%")
-                        ->orWhereHas('customer', function ($query) use ($search) {
-                            $query->where('name', 'like', "%{$search}%")
-                                ->orWhere('phone', 'like', "%{$search}%");
-                        });
-                });
-            })
-            // Driver-wise / car-wise / customer-wise / payment-type filters —
-            // "All ..." in the view posts back as an empty string, so
-            // filled() (not present()) correctly treats those as no filter.
-            ->when($request->filled('driver_id'), fn ($query) => $query->where('driver_id', $request->integer('driver_id')))
-            ->when($request->filled('vehicle_id'), fn ($query) => $query->where('vehicle_id', $request->integer('vehicle_id')))
-            ->when($request->filled('customer_id'), fn ($query) => $query->where('customer_id', $request->integer('customer_id')))
-            // A deep link straight to one hire — from the driver/vehicle
-            // pages' own hire rows, since there is no separate hire detail
-            // page; this narrows the list to just it so its Edit modal (see
-            // the auto-open script below) is guaranteed to be on page one.
-            ->when($request->filled('hire_id'), fn ($query) => $query->where('id', $request->integer('hire_id')))
-            ->when(
-                in_array($request->string('payment_type')->toString(), array_keys(Hire::PAYMENT_TYPES), true),
-                fn ($query) => $query->where('payment_type', $request->string('payment_type')->toString()),
-            )
-            // Date range — by each hire's effective date (its scheduled
-            // start_time, or created_at for one never scheduled at all); see
-            // Hire::scopeInDateRange().
-            ->when($dateFrom || $dateTo, fn ($query) => $query->inDateRange($dateFrom, $dateTo))
-            ->when($showUpcoming, $upcomingScope)
-            // Upcoming hires read soonest-first; otherwise newest-created-first, as before.
-            ->when($showUpcoming, fn ($query) => $query->orderBy('start_time'), fn ($query) => $query->latest())
             ->paginate(10)
             ->withQueryString();
 
@@ -118,6 +88,75 @@ class HireController extends Controller implements HasMiddleware
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Every filter the index page's own search/driver/vehicle/customer/
+     * payment-type/date-range/upcoming/hire_id controls apply — shared with
+     * exportCsv() below so "Export CSV" always downloads exactly what's on
+     * screen, not the unfiltered list. Callers add their own eager-loads.
+     */
+    private function filteredQuery(Request $request): Builder
+    {
+        $showUpcoming = $request->boolean('upcoming');
+        $dateFrom = $this->parseDate($request, 'date_from');
+        $dateTo = $this->parseDate($request, 'date_to');
+
+        $upcomingScope = fn ($query) => $query->where('status', 'pending')
+            ->whereNotNull('start_time')
+            ->where('start_time', '>=', now());
+
+        return Hire::query()
+            ->when($request->string('search')->toString(), function ($query, $search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('description', 'like', "%{$search}%")
+                        ->orWhereHas('customer', function ($query) use ($search) {
+                            $query->where('name', 'like', "%{$search}%")
+                                ->orWhere('phone', 'like', "%{$search}%");
+                        });
+                });
+            })
+            // Driver-wise / car-wise / customer-wise / payment-type filters —
+            // "All ..." in the view posts back as an empty string, so
+            // filled() (not present()) correctly treats those as no filter.
+            ->when($request->filled('driver_id'), fn ($query) => $query->where('driver_id', $request->integer('driver_id')))
+            ->when($request->filled('vehicle_id'), fn ($query) => $query->where('vehicle_id', $request->integer('vehicle_id')))
+            ->when($request->filled('customer_id'), fn ($query) => $query->where('customer_id', $request->integer('customer_id')))
+            // A deep link straight to one hire — from the driver/vehicle
+            // pages' own hire rows, since there is no separate hire detail
+            // page; this narrows the list to just it so its Edit modal (see
+            // the auto-open script below) is guaranteed to be on page one.
+            ->when($request->filled('hire_id'), fn ($query) => $query->where('id', $request->integer('hire_id')))
+            ->when(
+                in_array($request->string('payment_type')->toString(), array_keys(Hire::PAYMENT_TYPES), true),
+                fn ($query) => $query->where('payment_type', $request->string('payment_type')->toString()),
+            )
+            // Date range — by each hire's effective date (its scheduled
+            // start_time, or created_at for one never scheduled at all); see
+            // Hire::scopeInDateRange().
+            ->when($dateFrom || $dateTo, fn ($query) => $query->inDateRange($dateFrom, $dateTo))
+            ->when($showUpcoming, $upcomingScope)
+            // Upcoming hires read soonest-first; otherwise newest-created-first, as before.
+            ->when($showUpcoming, fn ($query) => $query->orderBy('start_time'), fn ($query) => $query->latest());
+    }
+
+    /**
+     * "Export CSV" on the Hires page itself: every hire the current filters
+     * match — not just the page on screen, and (like a driver's own Hires
+     * tab) leaving out cancelled hires, which earned nothing to break down.
+     * Same columns as that per-driver export (see HireCsvExport), but
+     * Driver Payment, Deposit and Car Repair stay blank here: this one can
+     * span many drivers or an open-ended date range, so there's no single
+     * driver/month to compute those three for.
+     */
+    public function exportCsv(Request $request): StreamedResponse
+    {
+        $hires = $this->filteredQuery($request)
+            ->counted()
+            ->with(['fromLocation.location', 'toLocation.location', 'stayLocations.location', 'package', 'expenses'])
+            ->get();
+
+        return HireCsvExport::stream($hires, 'hires-'.now()->format('Y-m-d-His').'.csv');
     }
 
     public function store(Request $request): RedirectResponse

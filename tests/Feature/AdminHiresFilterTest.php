@@ -3,6 +3,7 @@
 use App\Models\Customer;
 use App\Models\Driver;
 use App\Models\Hire;
+use App\Models\HireExpense;
 use App\Models\User;
 use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -344,4 +345,47 @@ it('combines every new filter together', function () {
 
     $response->assertSee('Hire #'.$match->id);
     $response->assertDontSee('Hire #'.$wrongPaymentType->id);
+});
+
+describe('exporting the filtered list as CSV', function () {
+    it('needs hires.view', function () {
+        hiresAdmin([]);
+
+        $this->get('/admin/hires/export')->assertForbidden();
+    });
+
+    it('exports only what the current filters match, leaving cancelled hires out', function () {
+        hiresAdmin();
+        $nimal = filterDriver('ZZZ Nimal');
+        $kamal = filterDriver('ZZZ Kamal');
+        $hire = filterHire(['driver_id' => $nimal->id, 'hire_full_value' => 5000, 'our_hire_value' => 4000, 'payment_type' => 'cash']);
+        HireExpense::create(['hire_id' => $hire->id, 'category' => 'fuel', 'amount' => 300]);
+        filterHire(['driver_id' => $kamal->id, 'hire_full_value' => 9999]);
+        filterHire(['driver_id' => $nimal->id, 'hire_full_value' => 7777, 'status' => 'cancelled']);
+
+        $response = $this->get('/admin/hires/export?driver_id='.$nimal->id);
+
+        $response->assertOk();
+        $rows = array_map('str_getcsv', explode("\n", trim($response->streamedContent())));
+
+        expect($rows)->toHaveCount(3); // header + the one matching hire + Total
+        // Full 5,000, our 4,000, commission 1,000; cost 300; charges (4,000-300)*20%=740; full cost 1,040; saving 2,960.
+        expect($rows[1])->toBe([
+            $hire->effective_month_date->format('d/m/y'), '', '5000.00', '4000.00', '1000.00',
+            '300.00', '', '', '', '300.00', '740.00', '1040.00', '2960.00', '', '', '', '',
+        ]);
+        // Driver Payment, Deposit and Car Repair stay blank — no single driver/month here.
+        expect($rows[2])->toBe(['Total', '', '5000.00', '4000.00', '1000.00', '300.00', '0.00', '0.00', '0.00', '300.00', '740.00', '1040.00', '2960.00', '', '', '0.00', '']);
+    });
+
+    it('respects the Upcoming toggle too', function () {
+        hiresAdmin();
+        filterHire(['start_time' => now()->addDay(), 'status' => 'pending']);
+        filterHire(['start_time' => now()->subDay()]);
+
+        $response = $this->get('/admin/hires/export?upcoming=1');
+
+        $rows = array_map('str_getcsv', explode("\n", trim($response->streamedContent())));
+        expect($rows)->toHaveCount(3); // header + the future hire + Total (the past one is left out)
+    });
 });

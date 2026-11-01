@@ -54,6 +54,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::post('leasing/{leasing}/settlements', [VehicleLeasingSettlementController::class, 'store'])->name('leasing.settlements.store');
     Route::delete('leasing/{leasing}/settlements/{settlement}', [VehicleLeasingSettlementController::class, 'destroy'])->name('leasing.settlements.destroy');
     Route::resource('drivers', DriverController::class)->except(['create', 'edit']);
+    Route::get('drivers/{driver}/hires/export', [DriverController::class, 'exportHires'])->name('drivers.hires.export');
     Route::post('drivers/{driver}/payroll', [PayrollController::class, 'finalize'])->name('drivers.payroll.finalize');
     Route::post('drivers/{driver}/payroll/{payroll}/mark-paid', [PayrollController::class, 'markPaid'])->name('drivers.payroll.mark-paid');
     Route::delete('drivers/{driver}/payroll/{payroll}/revert', [PayrollController::class, 'revert'])->name('drivers.payroll.revert');
@@ -63,6 +64,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::resource('packages', PackageController::class)->except(['show', 'create', 'edit']);
     Route::resource('customers', CustomerController::class)->except(['show', 'create', 'edit']);
     Route::resource('hires', HireController::class)->except(['show', 'create', 'edit']);
+    Route::get('hires/export', [HireController::class, 'exportCsv'])->name('hires.export');
     Route::get('hires/{hire}/tracking', [HireController::class, 'tracking'])->name('hires.tracking');
     Route::post('hires/{hire}/payments', [HirePaymentController::class, 'store'])->name('hires.payments.store');
     Route::delete('hires/{hire}/payments/{payment}', [HirePaymentController::class, 'destroy'])->name('hires.payments.destroy');
