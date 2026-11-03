@@ -10,6 +10,8 @@ use App\Models\SalaryAdvanceRequest;
 use App\Models\Vehicle;
 use App\Services\DriverSalaryCalculator;
 use App\Services\ProfitCalculator;
+use App\Support\SelectedPeriod;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\View\View;
 
@@ -18,9 +20,14 @@ class DashboardController extends Controller
     /** How many trailing months (including the current one) the trend chart covers. */
     private const TREND_MONTHS = 6;
 
-    public function index(): View
+    public function index(Request $request): View
     {
-        $now = now();
+        // Defaults to the navbar's own period switcher (see SelectedPeriod)
+        // rather than always "this month" — every figure below, and the
+        // trend's trailing months, follow from whichever month this is.
+        $year = $request->filled('year') ? $request->integer('year') : SelectedPeriod::year();
+        $month = $request->filled('month') ? $request->integer('month') : SelectedPeriod::month();
+        $now = Carbon::create($year, $month, 1);
 
         $current = $this->metricsFor($now);
         $previous = $this->metricsFor($now->copy()->subMonthNoOverflow());
@@ -60,6 +67,8 @@ class DashboardController extends Controller
             'profitBreakdown' => $this->profitBreakdownFor($now),
             'vehicleCards' => $this->vehicleCardsFor($now),
             'driverDeposits' => $this->driverDepositsFor($now),
+            'selectedYear' => $year,
+            'selectedMonth' => $month,
         ]);
     }
 

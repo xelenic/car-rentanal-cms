@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\DriverSalaryCalculator;
 use App\Services\HireCsvExport;
 use App\Support\MonthlyPeriods;
+use App\Support\SelectedPeriod;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -57,13 +58,15 @@ class DriverController extends Controller implements HasMiddleware
         $availableYears = $periods['years'];
         $monthsByYear = $periods['months_by_year'];
 
+        // Defaults to the navbar's own period switcher (see SelectedPeriod)
+        // rather than always the most recent month with data.
         $selectedYear = $request->filled('year')
             ? $request->integer('year')
-            : ($availableYears[0] ?? (int) now()->format('Y'));
+            : SelectedPeriod::year($availableYears[0] ?? null);
 
         $selectedMonth = $request->filled('month')
             ? $request->integer('month')
-            : ($monthsByYear[$selectedYear][0] ?? (int) now()->format('n'));
+            : SelectedPeriod::month($monthsByYear[$selectedYear][0] ?? null);
 
         $salaries = $drivers->getCollection()->mapWithKeys(
             fn (Driver $driver) => [$driver->id => DriverSalaryCalculator::calculate($driver, $selectedYear, $selectedMonth)]
@@ -176,13 +179,15 @@ class DriverController extends Controller implements HasMiddleware
         $availableYears = $periods['years'];
         $monthsByYear = $periods['months_by_year'];
 
+        // Defaults to the navbar's own period switcher (see SelectedPeriod)
+        // rather than always the most recent month this driver has data in.
         $selectedYear = $request->filled('year')
             ? $request->integer('year')
-            : ($availableYears[0] ?? (int) $now->format('Y'));
+            : SelectedPeriod::year($availableYears[0] ?? null);
 
         $selectedMonth = $request->filled('month')
             ? $request->integer('month')
-            : ($monthsByYear[$selectedYear][0] ?? (int) $now->format('n'));
+            : SelectedPeriod::month($monthsByYear[$selectedYear][0] ?? null);
 
         $periodHires = $hires->filter(
             fn (Hire $hire) => $hire->effective_month_date?->year === $selectedYear

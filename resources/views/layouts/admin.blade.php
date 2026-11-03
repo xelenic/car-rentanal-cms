@@ -222,6 +222,21 @@
 
         .user-menu-btn:hover { background: var(--bg); }
 
+        /* The navbar's own period switcher — picking a month here is
+           remembered (see App\Support\SelectedPeriod) as the default for
+           every other page with a month concept, until that page's own
+           stepper is used instead. */
+        .topbar-period { display: flex; align-items: center; gap: .15rem; border: 1px solid var(--border-color); border-radius: .5rem; padding: .15rem; }
+        .topbar-period-btn { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: none; background: transparent; border-radius: .4rem; color: var(--text-muted); }
+        .topbar-period-btn:hover { background: var(--bg); color: var(--text-dark); }
+        .topbar-period-label { display: flex; align-items: center; gap: .4rem; border: none; background: transparent; padding: .3rem .6rem; border-radius: .4rem; font-size: .78rem; font-weight: 600; color: var(--text-dark); }
+        .topbar-period-label:hover { background: var(--bg); }
+        .topbar-period-label::after { display: none; }
+
+        @media (max-width: 575.98px) {
+            .topbar-period-label span { display: none; }
+        }
+
         .avatar-circle {
             border-radius: 50%;
             background: var(--primary-light);
@@ -585,9 +600,44 @@
                     </div>
                 </div>
 
-                <div class="dropdown">
-                    <button class="user-menu-btn dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                        <x-avatar :name="auth()->user()->name" :size="28" />
+                @php
+                    $navbarPeriodYear = \App\Support\SelectedPeriod::year();
+                    $navbarPeriodMonth = \App\Support\SelectedPeriod::month();
+                @endphp
+                <div class="d-flex align-items-center gap-2">
+                    <div class="topbar-period" id="topbar-period">
+                        <button type="button" class="topbar-period-btn" id="topbar-period-prev" aria-label="Previous month">
+                            <i class="bi bi-chevron-left"></i>
+                        </button>
+                        <div class="dropdown">
+                            <button class="topbar-period-label dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-calendar-event"></i>
+                                <span>{{ \Carbon\Carbon::create($navbarPeriodYear, $navbarPeriodMonth, 1)->format('F Y') }}</span>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end shadow-sm p-2" style="min-width: 220px;">
+                                <div class="d-flex gap-1 mb-2">
+                                    <select class="form-select form-select-sm" id="topbar-period-year">
+                                        @for ($y = now()->year + 1; $y >= now()->year - 6; $y--)
+                                            <option value="{{ $y }}" @selected($y === $navbarPeriodYear)>{{ $y }}</option>
+                                        @endfor
+                                    </select>
+                                    <select class="form-select form-select-sm" id="topbar-period-month">
+                                        @for ($m = 1; $m <= 12; $m++)
+                                            <option value="{{ $m }}" @selected($m === $navbarPeriodMonth)>{{ \Carbon\Carbon::create()->month($m)->format('F') }}</option>
+                                        @endfor
+                                    </select>
+                                </div>
+                                <button type="button" class="btn btn-primary btn-sm w-100" id="topbar-period-go">Go</button>
+                            </div>
+                        </div>
+                        <button type="button" class="topbar-period-btn" id="topbar-period-next" aria-label="Next month">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                    </div>
+
+                    <div class="dropdown">
+                        <button class="user-menu-btn dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <x-avatar :name="auth()->user()->name" :size="28" />
                         <span class="d-none d-sm-flex flex-column text-start lh-sm">
                             <span class="fw-semibold" style="font-size: .78rem;">{{ auth()->user()->name }}</span>
                             <span class="text-muted" style="font-size: .68rem;">{{ auth()->user()->roles->first()->name ?? 'No role' }}</span>
@@ -605,6 +655,7 @@
                             </form>
                         </li>
                     </ul>
+                    </div>
                 </div>
             </header>
 
@@ -700,6 +751,39 @@
             });
             window.addEventListener('resize', function () {
                 if (window.innerWidth >= 992) closeSidebar();
+            });
+        })();
+    </script>
+    <script>
+        // The navbar's period switcher — reloads the current page with
+        // ?year=&month= swapped in (every other query param, and any
+        // page-specific filters, stay as they are); SyncSelectedPeriod
+        // remembers the choice server-side for every other page to default to.
+        (function () {
+            var currentYear = {{ $navbarPeriodYear }};
+            var currentMonth = {{ $navbarPeriodMonth }};
+
+            function goToPeriod(year, month) {
+                var params = new URLSearchParams(window.location.search);
+                params.set('year', year);
+                params.set('month', month);
+                params.delete('page');
+                window.location.search = params.toString();
+            }
+
+            document.getElementById('topbar-period-prev')?.addEventListener('click', function () {
+                var d = new Date(currentYear, currentMonth - 2, 1);
+                goToPeriod(d.getFullYear(), d.getMonth() + 1);
+            });
+            document.getElementById('topbar-period-next')?.addEventListener('click', function () {
+                var d = new Date(currentYear, currentMonth, 1);
+                goToPeriod(d.getFullYear(), d.getMonth() + 1);
+            });
+            document.getElementById('topbar-period-go')?.addEventListener('click', function () {
+                goToPeriod(
+                    document.getElementById('topbar-period-year').value,
+                    document.getElementById('topbar-period-month').value
+                );
             });
         })();
     </script>

@@ -418,6 +418,25 @@ describe('the deposit (Deposit tab)', function () {
             ->assertJsonPath('arrears_loans', []);
     });
 
+    it('deducts an expense logged without a hire (the Options page) from the deposit, same as one tied to a hire', function () {
+        signedInForDrivers();
+        $driver = testDriver();
+        Hire::create([
+            'tour_type' => 'drop_pickup', 'hire_full_value' => 1000, 'our_hire_value' => 100,
+            'payment_type' => 'cash', 'start_time' => '2026-09-10 10:00:00', 'driver_id' => $driver->id,
+        ]);
+        $this->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        // No hire_id at all — exactly what the driver app's Options page
+        // sends when logging an expense that isn't tied to any specific hire.
+        HireExpense::create(['driver_id' => $driver->id, 'category' => 'fuel', 'amount' => 300]);
+
+        $response = $this->getJson("/api/admin/drivers/{$driver->id}/deposit?year=2026&month=9")->assertOk();
+
+        // 1,000 hire value − 300 fuel = 700.
+        $response->assertJsonPath('deposit.deposit_amount', 700)
+            ->assertJsonPath('deposit.balance', 700);
+    });
+
     it('deducts "Others" hire expenses and vehicle maintenance costs from the deposit, but never from salary', function () {
         signedInForDrivers();
         $driver = testDriver();
