@@ -29,72 +29,75 @@
         </div>
     </div>
 
-    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-5 g-2 mb-2">
-        <div class="col">
-            <div class="card border-0">
-                <div class="card-body d-flex align-items-center gap-2">
-                    <div class="stat-icon" style="background: #eff6ff; color: #2563eb;">
-                        <i class="bi bi-journal-check"></i>
-                    </div>
-                    <div>
-                        <div class="text-muted small">Total Hires (all time)</div>
-                        <div class="fs-5 fw-bold">{{ $summary['hire_count'] }}</div>
+    @php
+        // The month's own summary cards — whatever month the navbar's period
+        // switcher (or this page's own year/month dropdowns) picked.
+        $summaryCards = [
+            [
+                'label' => 'Total Full Hire Value', 'value' => $periodSummary['hire_full_value_total'],
+                'icon' => 'cash-coin', 'bg' => '#fef6e7', 'fg' => '#eda100',
+                'caption' => $periodSummary['hire_count'].' '.\Illuminate\Support\Str::plural('hire', $periodSummary['hire_count']),
+            ],
+            [
+                'label' => 'Our Hire Value', 'value' => $periodSummary['our_hire_value_total'],
+                'icon' => 'building', 'bg' => '#eff6ff', 'fg' => '#2563eb',
+                'caption' => 'Full value less commission',
+            ],
+            [
+                'label' => 'Total Commission', 'value' => $periodSummary['commission_total'],
+                'icon' => 'graph-up-arrow', 'bg' => '#eafbf3', 'fg' => '#1baf7a',
+                'caption' => null,
+            ],
+            [
+                'label' => 'Total Expenses', 'value' => $periodSummary['expenses_total'],
+                'icon' => 'receipt', 'bg' => '#fdeee7', 'fg' => '#c95a26',
+                'caption' => $periodSummary['expense_count'].' '.\Illuminate\Support\Str::plural('expense', $periodSummary['expense_count']).' logged',
+            ],
+            [
+                'label' => 'Driver Salary', 'value' => $periodSummary['salary_payable'],
+                'icon' => 'wallet2', 'bg' => '#fdeef3', 'fg' => '#e87ba4',
+                'caption' => ['paid' => 'Paid', 'finalized' => 'Finalized · awaiting payment'][$periodPayroll?->status] ?? 'Not finalized yet',
+            ],
+            [
+                'label' => 'Driver Deposit Amount', 'value' => $periodSummary['deposit_amount'],
+                'icon' => 'piggy-bank', 'bg' => '#f3effe', 'fg' => '#7c5cdb',
+                'caption' => 'Cash collected, less expenses',
+            ],
+            [
+                'label' => 'To Be Deposited', 'value' => $periodSummary['to_be_deposited'],
+                'icon' => 'hourglass-split', 'bg' => '#e7f7f9', 'fg' => '#1597a8',
+                'caption' => $periodSummary['deposit_transferred_total'] > 0
+                    ? 'Rs. '.number_format($periodSummary['deposit_transferred_total'], 2).' already transferred'
+                    : 'Nothing transferred yet',
+            ],
+        ];
+    @endphp
+
+    <div class="d-flex align-items-center gap-1 text-muted mb-1" style="font-size: .8rem;">
+        <i class="bi bi-calendar3"></i>
+        <span id="driver-summary-period">Summary &middot; {{ $periodLabel }}</span>
+    </div>
+
+    <div class="row g-2 mb-2" id="driver-summary-cards">
+        @foreach ($summaryCards as $index => $card)
+            {{-- Four hire figures across, then the three salary/deposit ones. --}}
+            <div class="{{ $index < 4 ? 'col-6 col-lg-3' : ($index === 6 ? 'col-12 col-md-4' : 'col-6 col-md-4') }}">
+                <div class="card border-0 h-100">
+                    <div class="card-body driver-stat-card-body">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <div class="stat-icon driver-stat-icon" style="background: {{ $card['bg'] }}; color: {{ $card['fg'] }};">
+                                <i class="bi bi-{{ $card['icon'] }}"></i>
+                            </div>
+                            <div class="text-muted driver-stat-label text-truncate">{{ $card['label'] }}</div>
+                        </div>
+                        <div class="driver-stat-value fw-bold {{ $card['value'] < 0 ? 'text-danger' : '' }}">
+                            {{ $card['value'] < 0 ? '-' : '' }}Rs. {{ number_format(abs($card['value']), 2) }}
+                        </div>
+                        <div class="text-muted driver-stat-caption text-truncate">{{ $card['caption'] }}</div>
                     </div>
                 </div>
             </div>
-        </div>
-        <div class="col">
-            <div class="card border-0">
-                <div class="card-body d-flex align-items-center gap-2">
-                    <div class="stat-icon" style="background: #fef6e7; color: #eda100;">
-                        <i class="bi bi-cash-coin"></i>
-                    </div>
-                    <div>
-                        <div class="text-muted small">Total Full Value</div>
-                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['hire_full_value_total'], 2) }}</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col">
-            <div class="card border-0">
-                <div class="card-body d-flex align-items-center gap-2">
-                    <div class="stat-icon" style="background: #eafbf3; color: #1baf7a;">
-                        <i class="bi bi-graph-up-arrow"></i>
-                    </div>
-                    <div>
-                        <div class="text-muted small">Total Commission</div>
-                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['commission_total'], 2) }}</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col">
-            <div class="card border-0">
-                <div class="card-body d-flex align-items-center gap-2">
-                    <div class="stat-icon" style="background: #fdeee7; color: #c95a26;">
-                        <i class="bi bi-receipt"></i>
-                    </div>
-                    <div>
-                        <div class="text-muted small">Total Expenses (all time)</div>
-                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['expenses_total'], 2) }}</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col">
-            <div class="card border-0">
-                <div class="card-body d-flex align-items-center gap-2">
-                    <div class="stat-icon" style="background: #fdeef3; color: #e87ba4;">
-                        <i class="bi bi-wallet2"></i>
-                    </div>
-                    <div>
-                        <div class="text-muted small">Total Salary Paid</div>
-                        <div class="fs-5 fw-bold">Rs. {{ number_format($summary['salary_paid_total'], 2) }}</div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        @endforeach
     </div>
 
     <div class="card border-0 mb-2">
@@ -111,11 +114,10 @@
 
         $arrearsLoanTotal = round((float) $arrearsLoans->sum('amount'), 2);
         // Balance: plain cash-flow figure — deposit owed minus what's
-        // physically been transferred so far. Floored at 0 for
-        // display: a driver who transferred more than they owed
-        // doesn't have a negative balance, there's just nothing left.
+        // physically been transferred so far. Displayed floored at 0 —
+        // the To Be Deposited card's figure (see DriverController::show()).
         $balance = round($periodSalary['deposit_amount'] - $transferredTotal, 2);
-        $balanceDisplay = max($balance, 0.0);
+        $balanceDisplay = $periodSummary['to_be_deposited'];
         $netPayableBase = $periodSalary['net_salary_payable'];
         $finalNetPayable = round($netPayableBase - $balance, 2);
         // The deficit still available to convert into a NEW arrears
@@ -755,6 +757,20 @@
 @push('styles')
     <style>
         .vehicle-trend-chart-container { position: relative; height: 300px; }
+
+        /* Summary cards: label (with its icon), value and caption one line
+           each — the Dashboard's arrangement, so figures never wrap even
+           two cards across on a phone. */
+        .driver-stat-card-body { padding: .8rem .9rem; }
+        .driver-stat-icon { width: 26px; height: 26px; font-size: .75rem; border-radius: .45rem; }
+        .driver-stat-label { font-size: .72rem; font-weight: 600; }
+        .driver-stat-value { font-size: 1.05rem; margin-bottom: .2rem; white-space: nowrap; }
+        .driver-stat-caption { font-size: .68rem; min-height: 1rem; }
+
+        @media (max-width: 767.98px) {
+            .driver-stat-card-body { padding: .6rem .7rem; }
+            .driver-stat-value { font-size: .9rem; }
+        }
 
         /* The tabs in the panel's own colours, not Bootstrap's default blue. */
         #driver-period-tabs .nav-link { color: var(--text-muted); font-weight: 500; }

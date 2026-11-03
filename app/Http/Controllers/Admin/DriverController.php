@@ -145,20 +145,6 @@ class DriverController extends Controller implements HasMiddleware
             ->sortByDesc(fn (Hire $hire) => $hire->effective_month_date)
             ->values();
 
-        $salaryPaidTotal = round(
-            (float) DriverPayroll::query()->where('driver_id', $driver->id)->where('status', 'paid')->sum('final_amount'),
-            2
-        );
-
-        $summary = [
-            'hire_count' => $hires->count(),
-            'hire_full_value_total' => round((float) $hires->sum('hire_full_value'), 2),
-            'our_hire_value_total' => round((float) $hires->sum('our_hire_value'), 2),
-            'commission_total' => round((float) $hires->sum('commission'), 2),
-            'salary_paid_total' => $salaryPaidTotal,
-            'expenses_total' => round((float) HireExpense::query()->where('driver_id', $driver->id)->sum('amount'), 2),
-        ];
-
         $now = now();
         $trend = collect(range(self::TREND_MONTHS - 1, 0))
             ->map(function (int $monthsAgo) use ($now, $hires) {
@@ -173,21 +159,20 @@ class DriverController extends Controller implements HasMiddleware
             })
             ->values();
 
-        // Earnings by month for this one driver — the dropdown only ever
-        // offers periods this driver actually has hires in.
-        $periods = MonthlyPeriods::fromTimestamps($hires->pluck('effective_month_date')->filter());
+        // Defaults to exactly the month the navbar's period switcher shows
+        // (see SelectedPeriod) — this real month until one's been picked —
+        // so the summary cards and the tabs always match the navbar.
+        $selectedYear = $request->filled('year') ? $request->integer('year') : SelectedPeriod::year();
+        $selectedMonth = $request->filled('month') ? $request->integer('month') : SelectedPeriod::month();
+
+        // The card's own year/month dropdowns offer the periods this driver
+        // has hires in, plus the one on screen — the navbar can pick a month
+        // they have none in, and the dropdowns must still show that month.
+        $periods = MonthlyPeriods::fromTimestamps(
+            $hires->pluck('effective_month_date')->filter()->push(now()->setDate($selectedYear, $selectedMonth, 1))
+        );
         $availableYears = $periods['years'];
         $monthsByYear = $periods['months_by_year'];
-
-        // Defaults to the navbar's own period switcher (see SelectedPeriod)
-        // rather than always the most recent month this driver has data in.
-        $selectedYear = $request->filled('year')
-            ? $request->integer('year')
-            : SelectedPeriod::year($availableYears[0] ?? null);
-
-        $selectedMonth = $request->filled('month')
-            ? $request->integer('month')
-            : SelectedPeriod::month($monthsByYear[$selectedYear][0] ?? null);
 
         $periodHires = $hires->filter(
             fn (Hire $hire) => $hire->effective_month_date?->year === $selectedYear
@@ -214,15 +199,6 @@ class DriverController extends Controller implements HasMiddleware
             ->latest()
             ->get();
 
-        $periodSummary = [
-            'hire_count' => $periodHires->count(),
-            'hire_full_value_total' => round((float) $periodHires->sum('hire_full_value'), 2),
-            'our_hire_value_total' => round((float) $periodHires->sum('our_hire_value'), 2),
-            'commission_total' => round((float) $periodHires->sum('commission'), 2),
-            'expenses_total' => round((float) $periodExpenses->sum('amount'), 2),
-            'salary_payable' => round((float) ($periodPayroll->final_amount ?? $periodSalary['net_salary_payable']), 2),
-        ];
-
         // The Salary tab's Deposit section and its "Change as Arrears Loan"
         // button need these same two inputs the index page's salary modal
         // uses — see DriverSalaryCalculator::deposit_amount and
@@ -233,6 +209,23 @@ class DriverController extends Controller implements HasMiddleware
             ->where('year', $selectedYear)
             ->where('month', $selectedMonth)
             ->sum('amount'), 2);
+
+        // The month's figures behind the summary cards (and the Hires tab's
+        // own summary row). to_be_deposited is the Deposit tab's Balance:
+        // what's still owed after transfers, floored at 0 — a driver who
+        // transferred more than they owed just has nothing left to deposit.
+        $periodSummary = [
+            'hire_count' => $periodHires->count(),
+            'hire_full_value_total' => round((float) $periodHires->sum('hire_full_value'), 2),
+            'our_hire_value_total' => round((float) $periodHires->sum('our_hire_value'), 2),
+            'commission_total' => round((float) $periodHires->sum('commission'), 2),
+            'expense_count' => $periodExpenses->count(),
+            'expenses_total' => round((float) $periodExpenses->sum('amount'), 2),
+            'salary_payable' => round((float) ($periodPayroll->final_amount ?? $periodSalary['net_salary_payable']), 2),
+            'deposit_amount' => $periodSalary['deposit_amount'],
+            'deposit_transferred_total' => $transferredTotal,
+            'to_be_deposited' => max(round($periodSalary['deposit_amount'] - $transferredTotal, 2), 0.0),
+        ];
 
         $arrearsLoans = DriverArrearsLoan::query()
             ->where('driver_id', $driver->id)
@@ -260,7 +253,6 @@ class DriverController extends Controller implements HasMiddleware
             'monthsByYear' => $monthsByYear,
             'selectedYear' => $selectedYear,
             'selectedMonth' => $selectedMonth,
-            'summary' => $summary,
             'trend' => $trend,
         ]);
     }

@@ -3,11 +3,14 @@
 use App\Models\Customer;
 use App\Models\Driver;
 use App\Models\DriverArrearsLoan;
+use App\Models\DriverDepositTransfer;
 use App\Models\DriverPayroll;
 use App\Models\Hire;
 use App\Models\HireExpense;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Models\VehicleMaintenanceRecord;
+use App\Support\SelectedPeriod;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Spatie\Permission\Models\Permission;
@@ -76,23 +79,94 @@ it('shows the driver\'s name, license and contact details', function () {
     $response->assertSee('zzz.sunil@example.com');
 });
 
-it('totals this driver\'s hires across all time for the summary cards, excluding cancelled ones', function () {
-    driverShowAdmin();
-    $driver = driverShowDriver();
-    $someoneElse = driverShowDriver('ZZZ Kamal');
+describe('the summary cards', function () {
+    it('total this driver\'s hires for the selected month only, excluding cancelled ones', function () {
+        driverShowAdmin();
+        $driver = driverShowDriver();
+        $someoneElse = driverShowDriver('ZZZ Kamal');
 
-    driverShowHire(['driver_id' => $driver->id, 'hire_full_value' => 5000, 'our_hire_value' => 3500]);
-    driverShowHire(['driver_id' => $driver->id, 'hire_full_value' => 3000, 'our_hire_value' => 2000]);
-    driverShowHire(['driver_id' => $driver->id, 'hire_full_value' => 9999, 'our_hire_value' => 9999, 'status' => 'cancelled']);
-    driverShowHire(['driver_id' => $someoneElse->id, 'hire_full_value' => 7777, 'our_hire_value' => 7777]);
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00', 'hire_full_value' => 5000, 'our_hire_value' => 3500]);
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-12 10:00:00', 'hire_full_value' => 3000, 'our_hire_value' => 2000]);
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-14 10:00:00', 'hire_full_value' => 9999, 'our_hire_value' => 9999, 'status' => 'cancelled']);
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-08-10 10:00:00', 'hire_full_value' => 6666, 'our_hire_value' => 6666]);
+        driverShowHire(['driver_id' => $someoneElse->id, 'start_time' => '2026-09-10 10:00:00', 'hire_full_value' => 7777, 'our_hire_value' => 7777]);
 
-    $response = $this->get('/admin/drivers/'.$driver->id);
+        $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9');
 
-    $response->assertOk();
-    $response->assertViewHas('summary', function (array $summary) {
-        return $summary['hire_count'] === 2
+        $response->assertOk();
+        $response->assertViewHas('periodSummary', fn (array $summary) => $summary['hire_count'] === 2
             && $summary['hire_full_value_total'] === 8000.0
-            && $summary['commission_total'] === 2500.0;
+            && $summary['our_hire_value_total'] === 5500.0
+            && $summary['commission_total'] === 2500.0);
+        $response->assertSeeInOrder([
+            'Summary &middot; September 2026',
+            'Total Full Hire Value', 'Rs. 8,000.00', '2 hires',
+            'Our Hire Value', 'Rs. 5,500.00',
+            'Total Commission', 'Rs. 2,500.00',
+        ], false);
+    });
+
+    it('show the month\'s driver salary, deposit amount and what\'s still to be deposited', function () {
+        driverShowAdmin();
+        $driver = driverShowDriver();
+
+        // Cash hire 5000 (our value 3500) less 1000 fuel: deposit 4000; salary 20% of (3500 - 1000) = 500.
+        $hire = driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00']);
+        HireExpense::create(['driver_id' => $driver->id, 'hire_id' => $hire->id, 'category' => 'fuel', 'amount' => 1000]);
+        DriverDepositTransfer::create(['driver_id' => $driver->id, 'year' => 2026, 'month' => 9, 'amount' => 1500, 'slip_path' => 'deposit-slips/zzz.jpg']);
+        DriverDepositTransfer::create(['driver_id' => $driver->id, 'year' => 2026, 'month' => 8, 'amount' => 9999, 'slip_path' => 'deposit-slips/zzz.jpg']);
+
+        $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9');
+
+        $response->assertViewHas('periodSummary', fn (array $summary) => $summary['salary_payable'] === 500.0
+            && $summary['deposit_amount'] === 4000.0
+            && $summary['deposit_transferred_total'] === 1500.0
+            && $summary['to_be_deposited'] === 2500.0);
+        $response->assertSeeInOrder([
+            'Driver Salary', 'Rs. 500.00', 'Not finalized yet',
+            'Driver Deposit Amount', 'Rs. 4,000.00',
+            'To Be Deposited', 'Rs. 2,500.00', 'Rs. 1,500.00 already transferred',
+        ]);
+    });
+
+    it('show nothing left to deposit, not a negative figure, once more than the deposit was transferred', function () {
+        driverShowAdmin();
+        $driver = driverShowDriver();
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00', 'hire_full_value' => 2000, 'our_hire_value' => 1500]);
+        DriverDepositTransfer::create(['driver_id' => $driver->id, 'year' => 2026, 'month' => 9, 'amount' => 2500, 'slip_path' => 'deposit-slips/zzz.jpg']);
+
+        $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9');
+
+        $response->assertViewHas('periodSummary', fn (array $summary) => $summary['to_be_deposited'] === 0.0);
+        $response->assertSeeInOrder(['To Be Deposited', 'Rs. 0.00', 'Rs. 2,500.00 already transferred']);
+    });
+
+    it('follow the month the navbar shows when the page is opened without one', function () {
+        driverShowAdmin();
+        $driver = driverShowDriver();
+        test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        // Only August has hires — but nothing's been picked, so the navbar shows this real month.
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-08-10 10:00:00', 'hire_full_value' => 6666]);
+
+        $response = $this->get('/admin/drivers/'.$driver->id);
+
+        $response->assertViewHas('selectedMonth', 9);
+        $response->assertViewHas('periodSummary', fn (array $summary) => $summary['hire_full_value_total'] === 0.0);
+        $response->assertSee('Summary &middot; September 2026', false);
+    });
+
+    it('follow a month the navbar picked, even one this driver has no hires in, and still offer it in the month dropdown', function () {
+        driverShowAdmin();
+        $driver = driverShowDriver();
+        driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-08-10 10:00:00', 'hire_full_value' => 6666]);
+        SelectedPeriod::remember(2026, 10);
+
+        $response = $this->get('/admin/drivers/'.$driver->id);
+
+        $response->assertSee('Summary &middot; October 2026', false);
+        $response->assertSee('<option value="10" selected>October</option>', false);
+        $response->assertSee('<option value="8" >August</option>', false);
+        $response->assertDontSee('Rs. 6,666.00');
     });
 });
 
@@ -192,8 +266,8 @@ describe('exporting the Hires tab as CSV', function () {
             'driver_id' => $driver->id, 'customer_id' => $customer->id, 'vehicle_id' => $vehicle->id,
             'start_time' => '2026-09-20 10:00:00', 'hire_full_value' => 4000, 'our_hire_value' => 4000, 'payment_type' => 'credit',
         ]);
-        \App\Models\DriverDepositTransfer::create(['driver_id' => $driver->id, 'year' => 2026, 'month' => 9, 'amount' => 3000, 'slip_path' => 'zzz.jpg']);
-        \App\Models\VehicleMaintenanceRecord::create([
+        DriverDepositTransfer::create(['driver_id' => $driver->id, 'year' => 2026, 'month' => 9, 'amount' => 3000, 'slip_path' => 'zzz.jpg']);
+        VehicleMaintenanceRecord::create([
             'vehicle_id' => $vehicle->id, 'driver_id' => $driver->id, 'type' => 'repair', 'cost' => 250, 'bill_path' => 'zzz.jpg',
         ]);
 
@@ -264,12 +338,12 @@ it('lists only the selected driver\'s expenses for the selected month, with cate
     $driver = driverShowDriver();
     $someoneElse = driverShowDriver('ZZZ Kamal');
 
-    test()->travelTo(\Illuminate\Support\Carbon::parse('2026-09-16 12:00:00'));
+    test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
     HireExpense::create(['driver_id' => $driver->id, 'category' => 'fuel', 'amount' => 1500]);
     HireExpense::create(['driver_id' => $driver->id, 'category' => 'parking', 'amount' => 250]);
     HireExpense::create(['driver_id' => $someoneElse->id, 'category' => 'fuel', 'amount' => 9999]);
 
-    test()->travelTo(\Illuminate\Support\Carbon::parse('2026-08-16 12:00:00'));
+    test()->travelTo(Carbon::parse('2026-08-16 12:00:00'));
     HireExpense::create(['driver_id' => $driver->id, 'category' => 'repair', 'amount' => 7777]);
 
     $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9&tab=expenses');
@@ -284,19 +358,24 @@ it('lists only the selected driver\'s expenses for the selected month, with cate
     $response->assertViewHas('periodSummary', fn (array $summary) => $summary['expenses_total'] === 1750.0);
 });
 
-it('totals this driver\'s expenses across all time for the summary card', function () {
+it('totals this driver\'s expenses for the selected month on the summary card', function () {
     driverShowAdmin();
     $driver = driverShowDriver();
     $someoneElse = driverShowDriver('ZZZ Kamal');
 
+    test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
     HireExpense::create(['driver_id' => $driver->id, 'category' => 'fuel', 'amount' => 1000]);
     HireExpense::create(['driver_id' => $driver->id, 'category' => 'repair', 'amount' => 2000]);
     HireExpense::create(['driver_id' => $someoneElse->id, 'category' => 'fuel', 'amount' => 9999]);
 
-    $response = $this->get('/admin/drivers/'.$driver->id);
+    test()->travelTo(Carbon::parse('2026-08-16 12:00:00'));
+    HireExpense::create(['driver_id' => $driver->id, 'category' => 'fuel', 'amount' => 7777]);
+
+    $response = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9');
 
     $response->assertOk();
-    $response->assertViewHas('summary', fn (array $summary) => $summary['expenses_total'] === 3000.0);
+    $response->assertViewHas('periodSummary', fn (array $summary) => $summary['expenses_total'] === 3000.0);
+    $response->assertSeeInOrder(['Total Expenses', 'Rs. 3,000.00', '2 expenses logged']);
 });
 
 it('links to the receipt when an expense has one, and shows a hire\'s tour type when tied to one', function () {
@@ -304,7 +383,7 @@ it('links to the receipt when an expense has one, and shows a hire\'s tour type 
     $driver = driverShowDriver();
     $hire = driverShowHire(['driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00']);
 
-    test()->travelTo(\Illuminate\Support\Carbon::parse('2026-09-16 12:00:00'));
+    test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
     HireExpense::create([
         'driver_id' => $driver->id, 'hire_id' => $hire->id, 'category' => 'fuel', 'amount' => 800,
         'receipt_path' => 'hire-expenses/'.$hire->id.'/receipt.jpg',
@@ -321,7 +400,7 @@ it('shows the month\'s salary calculation, with only salary-deductible expenses 
     driverShowAdmin();
     $driver = driverShowDriver();
 
-    test()->travelTo(\Illuminate\Support\Carbon::parse('2026-09-16 12:00:00'));
+    test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
     driverShowHire([
         'driver_id' => $driver->id, 'start_time' => '2026-09-10 10:00:00',
         'hire_full_value' => 1500, 'our_hire_value' => 1000,
@@ -359,7 +438,7 @@ it('defaults to the Earnings tab, and switches to Expenses only when asked', fun
     driverShowAdmin();
     $driver = driverShowDriver();
 
-    test()->travelTo(\Illuminate\Support\Carbon::parse('2026-09-16 12:00:00'));
+    test()->travelTo(Carbon::parse('2026-09-16 12:00:00'));
     HireExpense::create(['driver_id' => $driver->id, 'category' => 'fuel', 'amount' => 1234]);
 
     $default = $this->get('/admin/drivers/'.$driver->id.'?year=2026&month=9');
