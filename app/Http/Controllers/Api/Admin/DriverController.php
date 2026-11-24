@@ -105,6 +105,15 @@ class DriverController extends Controller
         $hireFullValueTotal = (float) $salary['hire_full_value_total'];
         $ourHireValueTotal = (float) $salary['our_hire_value_total'];
 
+        // Every expense category for this month, same scope as the web panel's
+        // driver page — not just the categories DriverSalaryCalculator deducts
+        // from salary (that total excludes "others"/repair/emergency costs).
+        $expensesTotal = (float) HireExpense::query()
+            ->where('driver_id', $driver->id)
+            ->whereYear('created_at', $year)
+            ->whereMonth('created_at', $month)
+            ->sum('amount');
+
         return response()->json([
             'year' => $year,
             'month' => $month,
@@ -114,7 +123,7 @@ class DriverController extends Controller
                 'hire_full_value_total' => round($hireFullValueTotal, 2),
                 'our_hire_value_total' => round($ourHireValueTotal, 2),
                 'commission_total' => round($hireFullValueTotal - $ourHireValueTotal, 2),
-                'expenses_total' => round((float) $salary['expenses_total'], 2),
+                'expenses_total' => round($expensesTotal, 2),
                 'salary_payable' => round((float) ($payroll->final_amount ?? $salary['net_salary_payable']), 2),
             ],
             'payroll_status' => $payroll?->status,

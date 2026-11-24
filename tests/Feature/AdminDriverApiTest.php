@@ -299,6 +299,27 @@ describe('the summary (Overview tab)', function () {
 
         $this->getJson('/api/admin/drivers/999/summary')->assertNotFound();
     });
+
+    it('counts every expense category, not just the ones deducted from salary', function () {
+        signedInForDrivers();
+        $driver = testDriver();
+        $hire = Hire::create([
+            'tour_type' => 'drop_pickup', 'hire_full_value' => 5000, 'our_hire_value' => 3500,
+            'payment_type' => 'cash', 'start_time' => '2026-09-10 10:00:00', 'driver_id' => $driver->id,
+        ]);
+        $this->travelTo(Carbon::parse('2026-09-16 12:00:00'));
+        // Deducted from salary (DriverSalaryCalculator::DEDUCTIBLE_CATEGORIES).
+        HireExpense::create(['driver_id' => $driver->id, 'hire_id' => $hire->id, 'category' => 'fuel', 'amount' => 300]);
+        // Deposit-only — never deducted from salary, but still a real expense
+        // the web panel's "Total Expenses" card counts.
+        HireExpense::create(['driver_id' => $driver->id, 'hire_id' => $hire->id, 'category' => 'others', 'amount' => 150]);
+
+        $response = $this->getJson("/api/admin/drivers/{$driver->id}/summary?year=2026&month=9")->assertOk();
+
+        // 300 fuel + 150 others = 450, matching the web panel's driver page,
+        // not just the 300 that DriverSalaryCalculator deducts from salary.
+        $response->assertJsonPath('summary.expenses_total', 450);
+    });
 });
 
 describe('the expenses (Expenses tab)', function () {

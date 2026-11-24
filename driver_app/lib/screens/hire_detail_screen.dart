@@ -103,6 +103,13 @@ class HireDetailScreen extends StatefulWidget {
 class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBindingObserver {
   late Hire _hire;
   Timer? _timer;
+
+  /// "Locked" (see _startLocked below) is only ever evaluated inside
+  /// build() — nothing else triggers a rebuild while the driver just waits
+  /// on this screen, so once the scheduled time actually arrives the UI
+  /// would otherwise stay stuck on "not startable yet" until something else
+  /// happens to rebuild it. This ticks just often enough to unlock it on time.
+  Timer? _scheduleCheckTimer;
   bool _busy = false;
   String? _trackingError;
   List<TrackPoint> _points = [];
@@ -153,6 +160,20 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
       _resumeTracking();
       _refreshAccess();
     }
+    if (_hire.isScheduledInFuture) {
+      _startScheduleCheckTimer();
+    }
+  }
+
+  void _startScheduleCheckTimer() {
+    _scheduleCheckTimer?.cancel();
+    _scheduleCheckTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      if (!_hire.isScheduledInFuture) {
+        _scheduleCheckTimer?.cancel();
+      }
+      setState(() {});
+    });
   }
 
   /// Coming back to the app — from Settings after changing a permission, or
@@ -370,6 +391,7 @@ class _HireDetailScreenState extends State<HireDetailScreen> with WidgetsBinding
     // the hire is stopped or completed.
     BackgroundTracking.removeListener(_onTrackingUpdate);
     _timer?.cancel();
+    _scheduleCheckTimer?.cancel();
     _positionSub?.cancel();
     super.dispose();
   }
